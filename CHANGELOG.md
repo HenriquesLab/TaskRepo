@@ -5,6 +5,50 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-10-21
+
+### Added
+
+#### CI/CD Infrastructure
+- **Comprehensive CI pipeline**: Automated testing across Python 3.10, 3.11, 3.12
+- **Lint and type checking**: ruff formatting, linting, and mypy type checking
+- **Coverage reporting**: pytest-cov integration with artifact upload
+- **Build verification**: Automated package building and validation
+- **Release automation**: Tag-based releases with PyPI OIDC trusted publishing
+- **GitHub Releases**: Automatic release creation with changelog extraction and build artifacts
+- **Dependabot**: Automated dependency updates for Python packages and GitHub Actions
+- **Pre-commit hooks**: Local code quality checks (ruff, trailing whitespace, YAML/TOML validation)
+- **CI badges**: Status badges in README for CI pipeline
+
+#### Enhanced Commands
+- **`taskrepo done` list view**: Running `taskrepo done` without arguments now displays all completed tasks
+- **Repository filtering**: Support `--repo` flag to show completed tasks from specific repository
+
+#### Claude Code Workflows
+- **Manual triggers**: Added `workflow_dispatch` for manual testing
+- **Concurrency control**: Prevent simultaneous workflow runs on same PR/issue
+- **Better git history**: Increased fetch-depth to 0 for improved context
+- **Label filtering**: Optional label-based trigger restrictions
+
+#### Developer Experience
+- **Comprehensive documentation**: Detailed CI/CD, release process, and pre-commit setup in README
+- **uv.lock committed**: Reproducible builds with locked dependencies
+- **Type stubs**: Added types-dateparser for better type coverage
+
+### Fixed
+- **Exception chaining**: Proper exception chaining with `from` clause (fixes B904 linting errors)
+- **Empty test directories**: CI now handles empty integration test directory gracefully
+
+### Changed
+- **Mypy as informational**: Type checking runs but doesn't block CI (pre-existing type errors)
+- **Code formatting**: Applied ruff formatting across entire codebase
+
+### Technical Details
+- GitHub Actions workflows: `ci.yml`, `release.yml`
+- Pre-commit configuration with ruff, mypy (optional), and file validators
+- Dependabot configuration for weekly updates
+- Concurrency groups to optimize CI runs
+
 ## [0.1.0] - 2025-10-21
 
 ### Added
@@ -76,4 +120,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.2.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.2.0
 [0.1.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.1.0
