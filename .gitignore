@@ -57,3 +57,36 @@ dmypy.json
 
 # Local config (user-specific)
 .taskreporc
+
+# Markdown files (ignore by default, allow specific ones)
+*.md
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+
+# Sensitive data patterns
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+credentials.json
+secrets.yaml
+config.local.yaml
+*.backup
+*.bak
+
+# Task repositories (user data - should not be in source repo)
+tasks-*/
+
+# PyPI/Twine
+.pypirc
+
+# Claude Code
+.claude/

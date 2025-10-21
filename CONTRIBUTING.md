@@ -7,8 +7,8 @@ Thank you for your interest in contributing to TaskRepo! This document provides 
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/taskrepo.git
-cd taskrepo
+git clone https://github.com/yourusername/TaskRepo.git
+cd TaskRepo
 ```
 
 2. **Install UV** (if not already installed)
@@ -167,7 +167,7 @@ We welcome contributions in these areas:
 - Accessibility enhancements
 
 ### Bug Fixes
-- Check the [Issues](https://github.com/paxcalpt/taskrepo/issues) page for open bugs
+- Check the [Issues](https://github.com/henriqueslab/TaskRepo/issues) page for open bugs
 - Reproduce and fix reported issues
 - Add tests to prevent regressions
 
