@@ -30,11 +30,13 @@ class DateValidator(Validator):
         try:
             import dateparser
 
-            result = dateparser.parse(text, settings={'PREFER_DATES_FROM': 'future'})
+            result = dateparser.parse(text, settings={"PREFER_DATES_FROM": "future"})
             if result is None:
                 raise ValueError("Could not parse date")
-        except Exception:
-            raise ValidationError(message="Invalid date format. Use YYYY-MM-DD or natural language like 'next friday'")
+        except Exception as e:
+            raise ValidationError(
+                message="Invalid date format. Use YYYY-MM-DD or natural language like 'next friday'"
+            ) from e
 
 
 def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
@@ -50,25 +52,39 @@ def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
         print("No repositories found. Create one first with: taskrepo create-repo <name>")
         return None
 
-    repo_names = [repo.name for repo in repositories]
-    completer = WordCompleter(repo_names, ignore_case=True)
+    # If only one repository, auto-select it
+    if len(repositories) == 1:
+        print(f"Repository: {repositories[0].name}")
+        return repositories[0]
+
+    # Display numbered list of repositories
+    print("\nAvailable repositories:")
+    for idx, repo in enumerate(repositories, start=1):
+        print(f"  {idx}. {repo.name}")
+    print()
+
+    # Validator for numeric choice
+    class ChoiceValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip()
+            if not text:
+                raise ValidationError(message="Please enter a number")
+            try:
+                choice = int(text)
+                if choice < 1 or choice > len(repositories):
+                    raise ValidationError(message=f"Please enter a number between 1 and {len(repositories)}")
+            except ValueError as e:
+                raise ValidationError(message="Please enter a valid number") from e
 
     try:
-        repo_name = prompt(
-            "Repository: ",
-            completer=completer,
-            complete_while_typing=True,
-            default=repo_names[0] if repo_names else "",
+        choice_str = prompt(
+            f"Select repository [1-{len(repositories)}]: ",
+            validator=ChoiceValidator(),
         )
+        choice = int(choice_str.strip())
+        return repositories[choice - 1]
     except (KeyboardInterrupt, EOFError):
         return None
-
-    # Find the selected repository
-    for repo in repositories:
-        if repo.name == repo_name:
-            return repo
-
-    return None
 
 
 def prompt_title() -> Optional[str]:
@@ -157,13 +173,45 @@ def prompt_priority(default: str = "M") -> str:
     Returns:
         Priority (H, M, or L)
     """
+    priorities = [
+        ("H", "High"),
+        ("M", "Medium"),
+        ("L", "Low"),
+    ]
+
+    # Display numbered list of priorities
+    print("\nPriority:")
+    for idx, (code, name) in enumerate(priorities, start=1):
+        marker = " (default)" if code == default else ""
+        print(f"  {idx}. {name} [{code}]{marker}")
+    print()
+
+    # Validator for numeric choice
+    class PriorityChoiceValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip()
+            if not text:
+                # Allow empty for default
+                return
+            try:
+                choice = int(text)
+                if choice < 1 or choice > len(priorities):
+                    raise ValidationError(message=f"Please enter a number between 1 and {len(priorities)}")
+            except ValueError as e:
+                raise ValidationError(message="Please enter a valid number") from e
+
     try:
-        priority = prompt(
-            "Priority [H/M/L]: ",
-            validator=PriorityValidator(),
-            default=default,
+        choice_str = prompt(
+            f"Select priority [1-{len(priorities)}] or press Enter for default: ",
+            validator=PriorityChoiceValidator(),
+            default="",
         )
-        return priority.upper()
+
+        if not choice_str.strip():
+            return default
+
+        choice = int(choice_str.strip())
+        return priorities[choice - 1][0]
     except (KeyboardInterrupt, EOFError):
         return default
 
@@ -213,7 +261,7 @@ def prompt_due_date() -> Optional[datetime]:
 
         import dateparser
 
-        return dateparser.parse(due_str, settings={'PREFER_DATES_FROM': 'future'})
+        return dateparser.parse(due_str, settings={"PREFER_DATES_FROM": "future"})
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -260,3 +308,89 @@ def prompt_status(default: str = "pending") -> str:
         return status.strip()
     except (KeyboardInterrupt, EOFError):
         return default
+
+
+def prompt_repo_name() -> Optional[str]:
+    """Prompt user for repository name.
+
+    Returns:
+        Repository name or None if cancelled
+    """
+
+    class RepoNameValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip()
+            if not text:
+                raise ValidationError(message="Repository name cannot be empty")
+            # Check for invalid characters
+            if not text.replace("-", "").replace("_", "").isalnum():
+                raise ValidationError(
+                    message="Repository name can only contain letters, numbers, hyphens, and underscores"
+                )
+
+    try:
+        name = prompt("Repository name: ", validator=RepoNameValidator())
+        return name.strip()
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
+def prompt_github_enabled() -> bool:
+    """Prompt user whether to create GitHub repository.
+
+    Returns:
+        True if GitHub should be enabled, False otherwise
+    """
+    try:
+        response = prompt("Create GitHub repository? [y/N]: ", default="N")
+        return response.strip().lower() in ("y", "yes")
+    except (KeyboardInterrupt, EOFError):
+        return False
+
+
+def prompt_github_org(default: Optional[str] = None) -> Optional[str]:
+    """Prompt user for GitHub organization/owner.
+
+    Args:
+        default: Default organization/owner to suggest
+
+    Returns:
+        Organization/owner name or None if cancelled
+    """
+
+    class OrgValidator(Validator):
+        def validate(self, document):
+            if not document.text.strip():
+                raise ValidationError(message="Organization/owner cannot be empty")
+
+    try:
+        prompt_text = "GitHub organization/owner"
+        if default:
+            prompt_text += f" [{default}]"
+        prompt_text += ": "
+
+        org = prompt(prompt_text, validator=OrgValidator(), default=default or "")
+        return org.strip() if org.strip() else (default if default else None)
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
+def prompt_visibility() -> str:
+    """Prompt user for repository visibility.
+
+    Returns:
+        Visibility setting ('public' or 'private')
+    """
+    visibilities = ["public", "private"]
+    completer = WordCompleter(visibilities, ignore_case=True)
+
+    try:
+        visibility = prompt(
+            "Repository visibility [private]: ",
+            completer=completer,
+            complete_while_typing=True,
+            default="private",
+        )
+        return visibility.strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        return "private"

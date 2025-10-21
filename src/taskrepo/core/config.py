@@ -17,6 +17,7 @@ class Config:
         "default_priority": "M",
         "default_status": "pending",
         "default_assignee": None,
+        "default_github_org": None,
         "default_editor": None,
         "sort_by": ["priority", "due"],
     }
@@ -149,6 +150,28 @@ class Config:
         self.save()
 
     @property
+    def default_github_org(self) -> Optional[str]:
+        """Get default GitHub organization/owner.
+
+        Returns:
+            Default GitHub organization/owner or None
+        """
+        return self._data.get("default_github_org")
+
+    @default_github_org.setter
+    def default_github_org(self, value: Optional[str]):
+        """Set default GitHub organization/owner.
+
+        Args:
+            value: Default GitHub organization/owner or None
+        """
+        if value is not None and value.strip():
+            self._data["default_github_org"] = value.strip()
+        else:
+            self._data["default_github_org"] = None
+        self.save()
+
+    @property
     def default_editor(self) -> Optional[str]:
         """Get default text editor.
 
@@ -189,8 +212,22 @@ class Config:
         Raises:
             ValueError: If invalid sort field provided
         """
-        valid_fields = {"priority", "due", "created", "modified", "status", "title", "project",
-                       "-priority", "-due", "-created", "-modified", "-status", "-title", "-project"}
+        valid_fields = {
+            "priority",
+            "due",
+            "created",
+            "modified",
+            "status",
+            "title",
+            "project",
+            "-priority",
+            "-due",
+            "-created",
+            "-modified",
+            "-status",
+            "-title",
+            "-project",
+        }
 
         for field in value:
             if field not in valid_fields:

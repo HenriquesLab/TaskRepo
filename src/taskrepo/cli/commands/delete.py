@@ -3,6 +3,7 @@
 import click
 
 from taskrepo.core.repository import RepositoryManager
+from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.helpers import normalize_task_id
 
 
@@ -57,6 +58,15 @@ def delete(ctx, task_id, repo, force):
     # Delete the task
     if repository.delete_task(task_id):
         click.secho(f"✓ Task deleted: {task}", fg="green")
+        click.echo()
+
+        # Display all tasks in the repository
+        all_tasks = repository.list_tasks()
+        # Filter out completed tasks (consistent with default list behavior)
+        active_tasks = [t for t in all_tasks if t.status != "completed"]
+
+        if active_tasks:
+            display_tasks_table(active_tasks, config)
     else:
         click.secho(f"Error: Failed to delete task '{task_id}'", fg="red", err=True)
         ctx.exit(1)

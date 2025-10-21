@@ -9,6 +9,7 @@ import click
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.core.task import Task
+from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.helpers import normalize_task_id
 
 
@@ -88,3 +89,12 @@ def edit(ctx, task_id, repo, editor):
     # Save modified task
     repository.save_task(modified_task)
     click.secho(f"✓ Task updated: {modified_task}", fg="green")
+    click.echo()
+
+    # Display all tasks in the repository
+    all_tasks = repository.list_tasks()
+    # Filter out completed tasks (consistent with default list behavior)
+    active_tasks = [t for t in all_tasks if t.status != "completed"]
+
+    if active_tasks:
+        display_tasks_table(active_tasks, config)

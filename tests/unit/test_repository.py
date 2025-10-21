@@ -73,21 +73,29 @@ def test_repository_list_tasks():
 
 def test_repository_next_task_id():
     """Test generating next task ID."""
+    import uuid
+
     with TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir) / "tasks-test"
         repo_path.mkdir()
 
         repo = Repository(repo_path)
 
-        # First task ID
-        assert repo.next_task_id() == "001"
+        # First task ID should be a valid UUID
+        task_id_1 = repo.next_task_id()
+        assert isinstance(task_id_1, str)
+        # Verify it's a valid UUID by trying to parse it
+        uuid.UUID(task_id_1)
 
         # Create a task
-        task = Task(id="001", title="Task 1", status="pending", priority="M")
+        task = Task(id=task_id_1, title="Task 1", status="pending", priority="M")
         repo.save_task(task)
 
-        # Next task ID
-        assert repo.next_task_id() == "002"
+        # Next task ID should also be a UUID and different from the first
+        task_id_2 = repo.next_task_id()
+        assert isinstance(task_id_2, str)
+        uuid.UUID(task_id_2)
+        assert task_id_1 != task_id_2
 
 
 def test_repository_get_projects():
@@ -137,6 +145,14 @@ def test_repository_manager_create():
         assert repo.name == "new-repo"
         assert repo.path.exists()
         assert repo.tasks_dir.exists()
+        # Check initial commit was created
+        assert not repo.git_repo.head.is_detached
+        # Check README was created
+        readme_path = repo.path / "README.md"
+        assert readme_path.exists()
+        # Check .gitkeep was created
+        gitkeep_path = repo.tasks_dir / ".gitkeep"
+        assert gitkeep_path.exists()
 
 
 def test_repository_manager_list_all_tasks():
@@ -272,3 +288,54 @@ def test_repository_generate_readme_no_active_tasks():
         # Check that it shows no active tasks message
         assert "No active tasks." in readme_content
         assert "# Tasks - test" in readme_content
+
+
+def test_repository_manager_create_github_validation():
+    """Test that GitHub parameters are validated properly."""
+    with TemporaryDirectory() as tmpdir:
+        parent_dir = Path(tmpdir)
+        manager = RepositoryManager(parent_dir)
+
+        # Test missing org parameter
+        with pytest.raises(ValueError, match="GitHub organization/owner is required"):
+            manager.create_repository("test-repo", github_enabled=True, visibility="private")
+
+        # Test missing visibility parameter
+        with pytest.raises(ValueError, match="Repository visibility is required"):
+            manager.create_repository("test-repo", github_enabled=True, github_org="testorg")
+
+        # Test invalid visibility
+        with pytest.raises(ValueError, match="Visibility must be"):
+            manager.create_repository("test-repo", github_enabled=True, github_org="testorg", visibility="invalid")
+
+
+def test_repository_manager_create_github_integration(monkeypatch):
+    """Test GitHub repository creation with mocked gh CLI."""
+    from unittest.mock import MagicMock
+
+    with TemporaryDirectory() as tmpdir:
+        parent_dir = Path(tmpdir)
+        manager = RepositoryManager(parent_dir)
+
+        # Mock GitHub utilities
+        mock_create_github_repo = MagicMock(return_value="https://github.com/testorg/tasks-test-repo")
+        mock_setup_git_remote = MagicMock()
+        mock_push_to_remote = MagicMock()
+
+        # Patch the functions in the utils.github module
+        monkeypatch.setattr("taskrepo.utils.github.create_github_repo", mock_create_github_repo)
+        monkeypatch.setattr("taskrepo.utils.github.setup_git_remote", mock_setup_git_remote)
+        monkeypatch.setattr("taskrepo.utils.github.push_to_remote", mock_push_to_remote)
+
+        # Create repository with GitHub
+        repo = manager.create_repository("test-repo", github_enabled=True, github_org="testorg", visibility="private")
+
+        # Verify local repository was created
+        assert repo.name == "test-repo"
+        assert repo.path.exists()
+        assert (repo.path / "README.md").exists()
+
+        # Verify GitHub functions were called
+        mock_create_github_repo.assert_called_once_with("testorg", "tasks-test-repo", "private")
+        mock_setup_git_remote.assert_called_once()
+        mock_push_to_remote.assert_called_once()

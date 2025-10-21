@@ -27,13 +27,14 @@ def config_cmd(ctx):
         click.echo("  5. Set default assignee")
         click.echo("  6. Configure task sorting")
         click.echo("  7. Set default editor")
-        click.echo("  8. Reset to defaults")
-        click.echo("  9. Exit")
+        click.echo("  8. Set default GitHub organization")
+        click.echo("  9. Reset to defaults")
+        click.echo(" 10. Exit")
 
         try:
             choice = prompt(
-                "\nEnter choice (1-9): ",
-                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
+                "\nEnter choice (1-10): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
             )
         except (KeyboardInterrupt, EOFError):
             click.echo("\nExiting configuration.")
@@ -52,6 +53,8 @@ def config_cmd(ctx):
             click.echo(f"  Default status: {config.default_status}")
             default_assignee = config.default_assignee if config.default_assignee else "(none)"
             click.echo(f"  Default assignee: {default_assignee}")
+            default_github_org = config.default_github_org if config.default_github_org else "(none)"
+            click.echo(f"  Default GitHub org: {default_github_org}")
             default_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
             click.echo(f"  Default editor: {default_editor}")
             sort_by = ", ".join(config.sort_by)
@@ -162,6 +165,22 @@ def config_cmd(ctx):
                 click.echo("\nCancelled.")
 
         elif choice == "8":
+            # Set default GitHub organization
+            current_org = config.default_github_org if config.default_github_org else "(none)"
+            click.echo(f"\nCurrent default GitHub organization: {current_org}")
+            try:
+                new_org = prompt("Enter default GitHub organization/owner (or leave empty for none): ")
+                new_org = new_org.strip()
+                if new_org:
+                    config.default_github_org = new_org
+                    click.secho(f"✓ Default GitHub organization updated to: {new_org}", fg="green")
+                else:
+                    config.default_github_org = None
+                    click.secho("✓ Default GitHub organization cleared", fg="green")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+
+        elif choice == "9":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -175,10 +194,10 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "9":
+        elif choice == "10":
             # Exit
             click.echo("\nExiting configuration.")
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-9.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-10.", fg="red")
