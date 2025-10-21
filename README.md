@@ -17,23 +17,38 @@ TaskRepo is a powerful command-line task management tool that combines the best 
 
 ## Installation
 
-### Using UV (recommended)
+### Using pipx (recommended for users)
 
 ```bash
-# Clone the repository
-git clone https://github.com/henriqueslab/TaskRepo.git
-cd TaskRepo
+# Install pipx if you haven't already
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
 
-# Install with UV
-uv sync
-uv pip install -e .
+# Install TaskRepo
+pipx install taskrepo
 ```
 
-### Using pip
+Benefits: Isolated environment, global CLI access, easy updates with `pipx upgrade taskrepo`
+
+### Using uv (recommended for developers)
+
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install TaskRepo
+uv tool install taskrepo
+```
+
+Benefits: Fast installation, automatic environment management, great for development workflows
+
+### Using pip (alternative)
 
 ```bash
 pip install taskrepo
 ```
+
+Note: May conflict with other packages. Consider using pipx or uv instead.
 
 ## Quick Start
 
