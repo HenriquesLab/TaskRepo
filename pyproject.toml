@@ -35,9 +35,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/paxcalpt/taskrepo"
-Repository = "https://github.com/paxcalpt/taskrepo"
-Issues = "https://github.com/paxcalpt/taskrepo/issues"
+Homepage = "https://github.com/henriqueslab/TaskRepo"
+Repository = "https://github.com/henriqueslab/TaskRepo"
+Issues = "https://github.com/henriqueslab/TaskRepo/issues"
 
 [project.optional-dependencies]
 dev = [
