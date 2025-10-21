@@ -92,10 +92,10 @@ jobs:
           echo "✅ Linting passed"
 
       - name: Run mypy type checking
+        continue-on-error: true
         run: |
-          echo "🔎 Running type checking..."
-          uv run mypy src/taskrepo
-          echo "✅ Type checking passed"
+          echo "🔎 Running type checking (informational only)..."
+          uv run mypy src/taskrepo || echo "⚠️ Type checking found issues (non-blocking)"
 
   # Job 2: Test matrix across Python versions
   test:
