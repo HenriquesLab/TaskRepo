@@ -160,3 +160,115 @@ def test_repository_manager_list_all_tasks():
 
         assert len(all_tasks) == 2
         assert {task.repo for task in all_tasks} == {"repo1", "repo2"}
+
+
+def test_repository_generate_readme():
+    """Test generating README with active tasks table."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.core.config import Config
+
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        repo = Repository(repo_path)
+
+        # Create config with default sorting
+        config_path = Path(tmpdir) / ".taskreporc"
+        config = Config(config_path)
+
+        # Create tasks with different statuses and due dates
+        Task(
+            id="001",
+            title="Pending task",
+            status="pending",
+            priority="H",
+            project="backend",
+            assignees=["@alice"],
+            tags=["bug"],
+            due=datetime.now() + timedelta(days=2),
+        ).save(repo_path)
+
+        Task(
+            id="002",
+            title="In progress task",
+            status="in_progress",
+            priority="M",
+            assignees=["@bob", "@charlie"],
+            due=datetime.now() + timedelta(days=60),
+        ).save(repo_path)
+
+        Task(
+            id="003",
+            title="Completed task",
+            status="completed",
+            priority="L",
+        ).save(repo_path)
+
+        # Generate README
+        readme_path = repo.generate_readme(config)
+
+        assert readme_path.exists()
+        readme_content = readme_path.read_text()
+
+        # Check header
+        assert "# Tasks - test" in readme_content
+        assert "## Active Tasks" in readme_content
+
+        # Check that active tasks are included
+        assert "Pending task" in readme_content
+        assert "In progress task" in readme_content
+
+        # Check that completed task is NOT included
+        assert "Completed task" not in readme_content
+
+        # Check table structure with Countdown column
+        assert "| ID | Title | Status | Priority | Assignees | Project | Tags | Due | Countdown |" in readme_content
+
+        # Check task details
+        assert "@alice" in readme_content
+        assert "@bob, @charlie" in readme_content
+        assert "backend" in readme_content
+        assert "bug" in readme_content
+
+        # Check emoji indicators
+        assert "🔴" in readme_content  # High priority emoji
+        assert "🟡" in readme_content  # Medium priority emoji
+        assert "⏳" in readme_content  # Pending status emoji
+        assert "🔄" in readme_content  # In progress status emoji
+
+        # Check countdown (could be "tomorrow" or "2 days" depending on exact time)
+        assert "⏰" in readme_content  # Urgent countdown emoji
+        assert "📅 1 month" in readme_content  # Future countdown
+
+        # Check footer
+        assert "_Last updated:" in readme_content
+
+
+def test_repository_generate_readme_no_active_tasks():
+    """Test generating README when there are no active tasks."""
+    from taskrepo.core.config import Config
+
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        repo = Repository(repo_path)
+
+        # Create config
+        config_path = Path(tmpdir) / ".taskreporc"
+        config = Config(config_path)
+
+        # Create only completed tasks
+        Task(id="001", title="Completed task", status="completed").save(repo_path)
+
+        # Generate README
+        readme_path = repo.generate_readme(config)
+
+        assert readme_path.exists()
+        readme_content = readme_path.read_text()
+
+        # Check that it shows no active tasks message
+        assert "No active tasks." in readme_content
+        assert "# Tasks - test" in readme_content

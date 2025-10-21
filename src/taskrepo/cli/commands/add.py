@@ -83,10 +83,12 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
         if due is None:
             due_date = prompts.prompt_due_date()
         else:
-            from dateutil import parser as date_parser
+            import dateparser
 
             try:
-                due_date = date_parser.parse(due)
+                due_date = dateparser.parse(due, settings={'PREFER_DATES_FROM': 'future'})
+                if due_date is None:
+                    raise ValueError("Could not parse date")
             except Exception as e:
                 click.secho(f"Error: Invalid due date: {e}", fg="red", err=True)
                 ctx.exit(1)
@@ -123,10 +125,12 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
         # Parse due date
         due_date = None
         if due:
-            from dateutil import parser as date_parser
+            import dateparser
 
             try:
-                due_date = date_parser.parse(due)
+                due_date = dateparser.parse(due, settings={'PREFER_DATES_FROM': 'future'})
+                if due_date is None:
+                    raise ValueError("Could not parse date")
             except Exception as e:
                 click.secho(f"Error: Invalid due date: {e}", fg="red", err=True)
                 ctx.exit(1)

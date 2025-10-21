@@ -1,4 +1,4 @@
-"""Done command for marking tasks as completed."""
+"""Delete command for removing tasks."""
 
 import click
 
@@ -6,14 +6,15 @@ from taskrepo.core.repository import RepositoryManager
 from taskrepo.utils.helpers import normalize_task_id
 
 
-@click.command()
+@click.command(name="delete")
 @click.argument("task_id")
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
-def done(ctx, task_id, repo):
-    """Mark a task as completed.
+def delete(ctx, task_id, repo, force):
+    """Delete a task permanently.
 
-    TASK_ID: Task ID to mark as done
+    TASK_ID: Task ID to delete
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -46,8 +47,16 @@ def done(ctx, task_id, repo):
             click.secho(f"Error: Task '{task_id}' not found", fg="red", err=True)
             ctx.exit(1)
 
-    # Mark as completed
-    task.status = "completed"
-    repository.save_task(task)
+    # Confirmation prompt (unless --force flag is used)
+    if not force:
+        click.echo(f"\nTask to delete: {task}")
+        if not click.confirm("Are you sure you want to delete this task? This cannot be undone.", default=False):
+            click.echo("Deletion cancelled.")
+            ctx.exit(0)
 
-    click.secho(f"✓ Task marked as completed: {task}", fg="green")
+    # Delete the task
+    if repository.delete_task(task_id):
+        click.secho(f"✓ Task deleted: {task}", fg="green")
+    else:
+        click.secho(f"Error: Failed to delete task '{task_id}'", fg="red", err=True)
+        ctx.exit(1)

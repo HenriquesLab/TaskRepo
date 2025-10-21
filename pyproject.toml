@@ -31,6 +31,7 @@ dependencies = [
     "PyYAML>=6.0.0",
     "rich>=13.0.0",
     "python-dateutil>=2.8.0",
+    "dateparser>=1.0.0",
 ]
 
 [project.urls]
@@ -130,3 +131,4 @@ include = [
 # Console scripts entry point
 [project.scripts]
 taskrepo = "taskrepo.cli.main:cli"
+tsk = "taskrepo.cli.main:cli"

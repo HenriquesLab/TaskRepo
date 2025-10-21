@@ -17,6 +17,7 @@ class Config:
         "default_priority": "M",
         "default_status": "pending",
         "default_assignee": None,
+        "sort_by": ["priority", "due"],
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -144,6 +145,35 @@ class Config:
             self._data["default_assignee"] = value
         else:
             self._data["default_assignee"] = None
+        self.save()
+
+    @property
+    def sort_by(self) -> list[str]:
+        """Get task sorting fields.
+
+        Returns:
+            List of sort field names
+        """
+        return self._data.get("sort_by", ["priority", "due"])
+
+    @sort_by.setter
+    def sort_by(self, value: list[str]):
+        """Set task sorting fields.
+
+        Args:
+            value: List of sort field names
+
+        Raises:
+            ValueError: If invalid sort field provided
+        """
+        valid_fields = {"priority", "due", "created", "modified", "status", "title", "project",
+                       "-priority", "-due", "-created", "-modified", "-status", "-title", "-project"}
+
+        for field in value:
+            if field not in valid_fields:
+                raise ValueError(f"Invalid sort field: {field}. Must be one of {valid_fields}")
+
+        self._data["sort_by"] = value
         self.save()
 
     def get(self, key: str, default=None):

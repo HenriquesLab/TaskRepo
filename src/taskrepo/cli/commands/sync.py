@@ -50,6 +50,17 @@ def sync(ctx, repo, push):
                 origin.pull()
                 click.secho("  ✓ Pulled from remote", fg="green")
 
+                # Generate README with active tasks
+                click.echo("  • Updating README...")
+                repository.generate_readme(config)
+                click.secho("  ✓ README updated", fg="green")
+
+                # Check if README was changed and commit it
+                if git_repo.is_dirty():
+                    git_repo.git.add("README.md")
+                    git_repo.index.commit("Auto-update: README with active tasks")
+                    click.secho("  ✓ README changes committed", fg="green")
+
                 # Push changes
                 if push:
                     click.echo("  • Pushing to remote...")
@@ -57,6 +68,17 @@ def sync(ctx, repo, push):
                     click.secho("  ✓ Pushed to remote", fg="green")
             else:
                 click.echo("  • No remote configured (local repository only)")
+
+                # Generate README for local repo
+                click.echo("  • Updating README...")
+                repository.generate_readme(config)
+                click.secho("  ✓ README updated", fg="green")
+
+                # Check if README was changed and commit it
+                if git_repo.is_dirty():
+                    git_repo.git.add("README.md")
+                    git_repo.index.commit("Auto-update: README with active tasks")
+                    click.secho("  ✓ README changes committed", fg="green")
 
         except GitCommandError as e:
             click.secho(f"  ✗ Git error: {e}", fg="red", err=True)

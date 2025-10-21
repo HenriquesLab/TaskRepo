@@ -1,5 +1,6 @@
 """Repository discovery and management."""
 
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -97,19 +98,29 @@ class Repository:
         task.repo = self.name
         return task.save(self.path)
 
-    def next_task_id(self) -> str:
-        """Generate the next available task ID.
+    def delete_task(self, task_id: str) -> bool:
+        """Delete a task from this repository.
+
+        Args:
+            task_id: Task ID to delete
 
         Returns:
-            Next task ID as a zero-padded string (e.g., '001', '002')
+            True if task was deleted, False if not found
         """
-        tasks = self.list_tasks()
-        if not tasks:
-            return "001"
+        task_file = self.tasks_dir / f"task-{task_id}.md"
+        if not task_file.exists():
+            return False
 
-        # Find the maximum ID
-        max_id = max(int(task.id) for task in tasks if task.id.isdigit())
-        return f"{max_id + 1:03d}"
+        task_file.unlink()
+        return True
+
+    def next_task_id(self) -> str:
+        """Generate the next available task ID using UUID4.
+
+        Returns:
+            UUID string
+        """
+        return str(uuid.uuid4())
 
     def get_projects(self) -> list[str]:
         """Get list of unique projects in this repository.
@@ -144,6 +155,198 @@ class Repository:
         for task in tasks:
             tags.update(task.tags)
         return sorted(tags)
+
+    def generate_readme(self, config) -> Path:
+        """Generate README.md with active tasks table.
+
+        Args:
+            config: Config object for sorting preferences
+
+        Returns:
+            Path to the generated README file
+        """
+        from datetime import datetime
+
+        def get_countdown_text(due_date: datetime) -> tuple[str, str]:
+            """Calculate countdown text and emoji from a due date.
+
+            Args:
+                due_date: The due date to calculate countdown for
+
+            Returns:
+                Tuple of (countdown_text, emoji)
+            """
+            now = datetime.now()
+            diff = due_date - now
+            days = diff.days
+            hours = diff.seconds // 3600
+
+            # Handle overdue
+            if days < 0:
+                abs_days = abs(days)
+                if abs_days == 1:
+                    text = "overdue by 1 day"
+                elif abs_days < 7:
+                    text = f"overdue by {abs_days} days"
+                elif abs_days < 14:
+                    text = "overdue by 1 week"
+                else:
+                    weeks = abs_days // 7
+                    text = f"overdue by {weeks} weeks"
+                return text, "⚠️"
+
+            # Handle today
+            if days == 0:
+                if hours < 1:
+                    text = "due now"
+                else:
+                    text = "today"
+                return text, "⏰"
+
+            # Handle tomorrow
+            if days == 1:
+                return "tomorrow", "⏰"
+
+            # Handle within 3 days (urgent)
+            if days <= 3:
+                return f"{days} days", "⏰"
+
+            # Handle within 2 weeks
+            if days < 14:
+                return f"{days} days", "📅"
+
+            # Handle weeks
+            weeks = days // 7
+            if weeks == 1:
+                return "1 week", "📅"
+            elif weeks < 4:
+                return f"{weeks} weeks", "📅"
+
+            # Handle months
+            months = days // 30
+            if months == 1:
+                return "1 month", "📅"
+            else:
+                return f"{months} months", "📅"
+
+        # Get active tasks (pending or in_progress)
+        all_tasks = self.list_tasks()
+        active_tasks = [task for task in all_tasks if task.status in ["pending", "in_progress"]]
+
+        # Sort using config sort order (same as list command)
+        def get_field_value(task, field):
+            """Get sortable value for a field."""
+            descending = field.startswith("-")
+            field_name = field[1:] if descending else field
+
+            if field_name == "priority":
+                priority_order = {"H": 0, "M": 1, "L": 2}
+                value = priority_order.get(task.priority, 3)
+            elif field_name == "due":
+                value = task.due.timestamp() if task.due else float("inf")
+            elif field_name == "created":
+                value = task.created.timestamp()
+            elif field_name == "modified":
+                value = task.modified.timestamp()
+            elif field_name == "status":
+                status_order = {"pending": 0, "in_progress": 1, "completed": 2, "cancelled": 3}
+                value = status_order.get(task.status, 4)
+            elif field_name == "title":
+                value = task.title.lower()
+            elif field_name == "project":
+                value = (task.project or "").lower()
+            else:
+                value = ""
+
+            if descending:
+                if isinstance(value, (int, float)):
+                    value = -value if value != float("inf") else float("-inf")
+                elif isinstance(value, str):
+                    return (True, value)
+
+            return (False, value) if not descending else (True, value)
+
+        def get_sort_key(task):
+            sort_fields = config.sort_by
+            key_parts = []
+            for field in sort_fields:
+                is_desc, value = get_field_value(task, field)
+                key_parts.append(value)
+            return tuple(key_parts)
+
+        active_tasks.sort(key=get_sort_key)
+
+        # Build README content
+        lines = [
+            f"# Tasks - {self.name}",
+            "",
+            "## Active Tasks",
+            "",
+        ]
+
+        if not active_tasks:
+            lines.append("No active tasks.")
+        else:
+            # Table header
+            lines.extend(
+                [
+                    "| ID | Title | Status | Priority | Assignees | Project | Tags | Due | Countdown |",
+                    "|---|---|---|---|---|---|---|---|---|",
+                ]
+            )
+
+            # Table rows
+            for task in active_tasks:
+                # Format fields with emojis
+                task_id = f"[{task.id[:8]}...](tasks/task-{task.id}.md)"
+                title = task.title
+
+                # Status with emoji
+                status_emoji = {
+                    "pending": "⏳",
+                    "in_progress": "🔄",
+                    "completed": "✅",
+                    "cancelled": "❌",
+                }.get(task.status, "")
+                status = f"{status_emoji} {task.status}"
+
+                # Priority with emoji
+                priority_emoji = {"H": "🔴", "M": "🟡", "L": "🟢"}.get(task.priority, "")
+                priority = f"{priority_emoji} {task.priority}"
+
+                assignees = ", ".join(task.assignees) if task.assignees else "-"
+                project = task.project if task.project else "-"
+                tags = ", ".join(task.tags) if task.tags else "-"
+                due_date = task.due.strftime("%Y-%m-%d") if task.due else "-"
+
+                # Countdown with emoji
+                if task.due:
+                    countdown_text, countdown_emoji = get_countdown_text(task.due)
+                    countdown = f"{countdown_emoji} {countdown_text}"
+                else:
+                    countdown = "-"
+
+                # Escape pipe characters
+                title = title.replace("|", "\\|")
+                project = project.replace("|", "\\|")
+
+                lines.append(
+                    f"| {task_id} | {title} | {status} | {priority} | {assignees} | {project} | {tags} | {due_date} | {countdown} |"
+                )
+
+        # Add footer
+        lines.extend(
+            [
+                "",
+                f"_Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_",
+            ]
+        )
+
+        # Write README
+        readme_path = self.path / "README.md"
+        readme_path.write_text("\n".join(lines) + "\n")
+
+        return readme_path
 
     def __str__(self) -> str:
         """String representation of the repository."""

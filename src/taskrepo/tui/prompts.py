@@ -28,11 +28,13 @@ class DateValidator(Validator):
             return  # Optional field
 
         try:
-            from dateutil import parser as date_parser
+            import dateparser
 
-            date_parser.parse(text)
+            result = dateparser.parse(text, settings={'PREFER_DATES_FROM': 'future'})
+            if result is None:
+                raise ValueError("Could not parse date")
         except Exception:
-            raise ValidationError(message="Invalid date format. Use YYYY-MM-DD or natural language")
+            raise ValidationError(message="Invalid date format. Use YYYY-MM-DD or natural language like 'next friday'")
 
 
 def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
@@ -209,9 +211,9 @@ def prompt_due_date() -> Optional[datetime]:
         if not due_str.strip():
             return None
 
-        from dateutil import parser as date_parser
+        import dateparser
 
-        return date_parser.parse(due_str)
+        return dateparser.parse(due_str, settings={'PREFER_DATES_FROM': 'future'})
     except (KeyboardInterrupt, EOFError):
         return None
 

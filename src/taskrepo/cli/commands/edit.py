@@ -8,6 +8,7 @@ import click
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.core.task import Task
+from taskrepo.utils.helpers import normalize_task_id
 
 
 @click.command()
@@ -22,6 +23,9 @@ def edit(ctx, task_id, repo, editor):
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Normalize task ID (convert "1" to "001", etc.)
+    task_id = normalize_task_id(task_id)
 
     # Find the task
     if repo:

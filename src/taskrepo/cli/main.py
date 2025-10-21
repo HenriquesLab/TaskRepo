@@ -4,6 +4,8 @@ import click
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
+from taskrepo.cli.commands.config import config_cmd
+from taskrepo.cli.commands.delete import delete
 from taskrepo.cli.commands.done import done
 from taskrepo.cli.commands.edit import edit
 from taskrepo.cli.commands.list import list_tasks
@@ -28,9 +30,11 @@ def cli(ctx):
 
 # Register commands
 cli.add_command(add)
+cli.add_command(config_cmd)
 cli.add_command(list_tasks)
 cli.add_command(edit)
 cli.add_command(done)
+cli.add_command(delete, name="del")  # Register only as "del"
 cli.add_command(sync)
 
 
@@ -108,6 +112,8 @@ def config_show(ctx):
     click.echo(f"  Default status: {config.default_status}")
     default_assignee = config.default_assignee if config.default_assignee else "(none)"
     click.echo(f"  Default assignee: {default_assignee}")
+    sort_by = ", ".join(config.sort_by)
+    click.echo(f"  Sort by: {sort_by}")
 
 
 if __name__ == "__main__":
