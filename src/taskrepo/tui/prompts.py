@@ -244,6 +244,42 @@ def prompt_tags(existing_tags: list[str]) -> list[str]:
         return []
 
 
+def prompt_links() -> list[str]:
+    """Prompt user for associated links/URLs (comma-separated).
+
+    Returns:
+        List of validated URLs
+    """
+    from taskrepo.core.task import Task
+
+    class LinksValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip()
+            if not text:
+                return  # Optional field
+
+            # Split by comma and validate each URL
+            urls = [url.strip() for url in text.split(",") if url.strip()]
+            for url in urls:
+                if not Task.validate_url(url):
+                    raise ValidationError(message=f"Invalid URL: {url}. URLs must start with http:// or https://")
+
+    try:
+        links_str = prompt(
+            "Links (comma-separated URLs, optional): ",
+            validator=LinksValidator(),
+        )
+
+        if not links_str.strip():
+            return []
+
+        # Parse and filter links
+        links = [link.strip() for link in links_str.split(",") if link.strip()]
+        return links
+    except (KeyboardInterrupt, EOFError):
+        return []
+
+
 def prompt_due_date() -> Optional[datetime]:
     """Prompt user for due date.
 
@@ -394,3 +430,58 @@ def prompt_visibility() -> str:
         return visibility.strip().lower()
     except (KeyboardInterrupt, EOFError):
         return "private"
+
+
+def prompt_parent_task(existing_tasks: list) -> Optional[str]:
+    """Prompt user for parent task (for creating subtasks).
+
+    Args:
+        existing_tasks: List of Task objects to choose from
+
+    Returns:
+        Parent task ID or None if no parent selected
+    """
+    if not existing_tasks:
+        return None
+
+    # Build completion list with task IDs and titles for easier selection
+    task_options = []
+    task_map = {}
+
+    for task in existing_tasks:
+        # Format: "ID: Title"
+        display_text = f"{task.id}: {task.title}"
+        task_options.append(display_text)
+        task_map[display_text] = task.id
+        # Also allow matching by just ID
+        task_map[task.id] = task.id
+
+    completer = FuzzyWordCompleter(task_options) if task_options else None
+
+    try:
+        parent_input = prompt(
+            "Parent task (optional, leave empty for top-level task): ",
+            completer=completer,
+            complete_while_typing=True,
+        )
+
+        if not parent_input.strip():
+            return None
+
+        # Try to find task ID from input
+        parent_input = parent_input.strip()
+
+        # Check if it matches a display text from completer
+        if parent_input in task_map:
+            return task_map[parent_input]
+
+        # Check if it's a direct task ID match
+        for task in existing_tasks:
+            if task.id == parent_input or task.id.startswith(parent_input):
+                return task.id
+
+        # If no match found, return None
+        return None
+
+    except (KeyboardInterrupt, EOFError):
+        return None

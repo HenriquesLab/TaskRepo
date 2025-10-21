@@ -32,3 +32,58 @@ def normalize_task_id(task_id: str) -> str:
 
     # Return as-is (could be UUID or not found in cache)
     return task_id
+
+
+def find_task_by_title_or_id(manager, task_identifier, repo=None):
+    """Find a task by ID or title.
+
+    Args:
+        manager: RepositoryManager instance
+        task_identifier: Task ID or title string
+        repo: Optional repository name to search in
+
+    Returns:
+        Tuple of (task, repository) or (None, None) if not found
+        If multiple matches, returns (list_of_tasks, list_of_repos)
+    """
+    # First, try to find by ID
+    normalized_id = normalize_task_id(task_identifier)
+
+    if repo:
+        repository = manager.get_repository(repo)
+        if repository:
+            task = repository.get_task(normalized_id)
+            if task:
+                return task, repository
+    else:
+        # Search all repos by ID
+        for r in manager.discover_repositories():
+            t = r.get_task(normalized_id)
+            if t:
+                return t, r
+
+    # If not found by ID, search by title
+    matching_tasks = []
+    matching_repos = []
+
+    if repo:
+        repository = manager.get_repository(repo)
+        if repository:
+            for task in repository.list_tasks():
+                if task.title.lower() == task_identifier.lower():
+                    matching_tasks.append(task)
+                    matching_repos.append(repository)
+    else:
+        for r in manager.discover_repositories():
+            for task in r.list_tasks():
+                if task.title.lower() == task_identifier.lower():
+                    matching_tasks.append(task)
+                    matching_repos.append(r)
+
+    if len(matching_tasks) == 0:
+        return None, None
+    elif len(matching_tasks) == 1:
+        return matching_tasks[0], matching_repos[0]
+    else:
+        # Multiple matches - return lists
+        return matching_tasks, matching_repos

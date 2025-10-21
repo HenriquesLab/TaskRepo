@@ -239,8 +239,11 @@ def test_repository_generate_readme():
         # Check that completed task is NOT included
         assert "Completed task" not in readme_content
 
-        # Check table structure with Countdown column
-        assert "| ID | Title | Status | Priority | Assignees | Project | Tags | Due | Countdown |" in readme_content
+        # Check table structure with Countdown and Links columns
+        assert (
+            "| ID | Title | Status | Priority | Assignees | Project | Tags | Links | Due | Countdown |"
+            in readme_content
+        )
 
         # Check task details
         assert "@alice" in readme_content

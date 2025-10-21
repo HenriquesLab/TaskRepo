@@ -156,6 +156,114 @@ class Repository:
             tags.update(task.tags)
         return sorted(tags)
 
+    def get_subtasks(self, task_id: str) -> list[Task]:
+        """Get all direct subtasks (children) of a given task.
+
+        Args:
+            task_id: Parent task ID
+
+        Returns:
+            List of Task objects that have this task as their parent
+        """
+        all_tasks = self.list_tasks()
+        return [task for task in all_tasks if task.parent == task_id]
+
+    def get_all_subtasks(self, task_id: str) -> list[Task]:
+        """Get all subtasks (descendants) of a given task recursively.
+
+        Args:
+            task_id: Parent task ID
+
+        Returns:
+            List of all descendant Task objects
+        """
+        all_tasks = self.list_tasks()
+        descendants = []
+
+        # Get direct children
+        direct_children = [task for task in all_tasks if task.parent == task_id]
+
+        for child in direct_children:
+            descendants.append(child)
+            # Recursively get children's children
+            descendants.extend(self.get_all_subtasks(child.id))
+
+        return descendants
+
+    def get_task_tree(self, task_id: str) -> dict:
+        """Build hierarchical tree structure for a task and its subtasks.
+
+        Args:
+            task_id: Root task ID
+
+        Returns:
+            Dictionary with task and nested subtasks structure:
+            {
+                'task': Task object,
+                'subtasks': [
+                    {'task': Task, 'subtasks': [...]},
+                    ...
+                ]
+            }
+        """
+        task = self.get_task(task_id)
+        if not task:
+            return {}
+
+        tree = {"task": task, "subtasks": []}
+
+        # Get direct children
+        direct_children = self.get_subtasks(task_id)
+
+        # Recursively build tree for each child
+        for child in direct_children:
+            child_tree = self.get_task_tree(child.id)
+            if child_tree:
+                tree["subtasks"].append(child_tree)
+
+        return tree
+
+    def validate_parent(self, task_id: str, parent_id: str) -> bool:
+        """Validate that a parent task exists and won't create circular reference.
+
+        Args:
+            task_id: ID of the task being created/modified
+            parent_id: ID of the proposed parent task
+
+        Returns:
+            True if parent is valid, False otherwise
+        """
+        # Check parent exists
+        parent_task = self.get_task(parent_id)
+        if not parent_task:
+            return False
+
+        # Check for circular reference: parent cannot be a descendant of task
+        all_tasks = self.list_tasks()
+
+        # Build chain from parent upwards
+        visited = set()
+        current_id = parent_id
+
+        while current_id:
+            if current_id == task_id:
+                # Circular reference detected
+                return False
+
+            if current_id in visited:
+                # Already visited, break to prevent infinite loop
+                break
+
+            visited.add(current_id)
+
+            current_task = next((t for t in all_tasks if t.id == current_id), None)
+            if current_task and current_task.parent:
+                current_id = current_task.parent
+            else:
+                break
+
+        return True
+
     def generate_readme(self, config) -> Path:
         """Generate README.md with active tasks table.
 
@@ -274,7 +382,72 @@ class Repository:
                 key_parts.append(value)
             return tuple(key_parts)
 
-        active_tasks.sort(key=get_sort_key)
+        # Build tree structure for active tasks
+        def build_tree_for_readme(tasks):
+            """Build tree structure and return tasks in display order."""
+            task_dict = {t.id: t for t in tasks}
+            children_map = {}
+
+            for t in tasks:
+                if t.parent and t.parent in task_dict:
+                    if t.parent not in children_map:
+                        children_map[t.parent] = []
+                    children_map[t.parent].append(t)
+
+            result = []
+
+            def add_tree_item(task, depth, is_last, ancestors):
+                result.append((task, depth, is_last, ancestors))
+                children = children_map.get(task.id, [])
+                for i, child in enumerate(children):
+                    child_is_last = i == len(children) - 1
+                    add_tree_item(child, depth + 1, child_is_last, ancestors + [is_last])
+
+            # Start with top-level tasks
+            top_level = [t for t in tasks if not t.parent or t.parent not in task_dict]
+            for task in top_level:
+                add_tree_item(task, 0, False, [])
+
+            return result
+
+        def format_tree_title_for_readme(title, depth, is_last, ancestors, subtask_count):
+            """Format title with tree indentation for README markdown."""
+            if depth == 0:
+                if subtask_count > 0:
+                    return f"{title} 📋 {subtask_count}"
+                return title
+
+            # For direct children (depth 1), only show branch without ancestor lines
+            if depth == 1:
+                branch = "└─ " if is_last else "├─ "
+                if subtask_count > 0:
+                    return f"{branch}{title} 📋 {subtask_count}"
+                return f"{branch}{title}"
+
+            # For deeper nesting, add ancestor lines
+            prefix = ""
+            # Skip the first ancestor (parent is top-level)
+            for is_ancestor_last in ancestors[1:]:
+                prefix += "&nbsp;&nbsp;&nbsp;" if is_ancestor_last else "│&nbsp;&nbsp;"
+
+            branch = "└─ " if is_last else "├─ "
+            if subtask_count > 0:
+                return f"{prefix}{branch}{title} 📋 {subtask_count}"
+            return f"{prefix}{branch}{title}"
+
+        def count_children(task_id, tasks):
+            return sum(1 for t in tasks if t.parent == task_id)
+
+        # Sort top-level tasks, keep subtasks with parents
+        top_level_tasks = [t for t in active_tasks if not t.parent]
+        top_level_tasks.sort(key=get_sort_key)
+
+        # Rebuild active_tasks list with all tasks (including subtasks)
+        all_task_ids = {t.id for t in active_tasks}
+        subtasks = [t for t in active_tasks if t.parent and t.parent in all_task_ids]
+        sorted_active = top_level_tasks + subtasks
+
+        tree_items = build_tree_for_readme(sorted_active)
 
         # Build README content
         lines = [
@@ -284,22 +457,25 @@ class Repository:
             "",
         ]
 
-        if not active_tasks:
+        if not tree_items:
             lines.append("No active tasks.")
         else:
             # Table header
             lines.extend(
                 [
-                    "| ID | Title | Status | Priority | Assignees | Project | Tags | Due | Countdown |",
-                    "|---|---|---|---|---|---|---|---|---|",
+                    "| ID | Title | Status | Priority | Assignees | Project | Tags | Links | Due | Countdown |",
+                    "|---|---|---|---|---|---|---|---|---|---|",
                 ]
             )
 
             # Table rows
-            for task in active_tasks:
+            for task, depth, is_last, ancestors in tree_items:
                 # Format fields with emojis
                 task_id = f"[{task.id[:8]}...](tasks/task-{task.id}.md)"
-                title = task.title
+
+                # Format title with tree structure and subtask count
+                subtask_count = count_children(task.id, sorted_active)
+                title = format_tree_title_for_readme(task.title, depth, is_last, ancestors, subtask_count)
 
                 # Status with emoji
                 status_emoji = {
@@ -317,6 +493,15 @@ class Repository:
                 assignees = ", ".join(task.assignees) if task.assignees else "-"
                 project = task.project if task.project else "-"
                 tags = ", ".join(task.tags) if task.tags else "-"
+
+                # Format links
+                if task.links:
+                    # Create markdown links with 🔗 emoji
+                    link_items = [f"[🔗]({link})" for link in task.links]
+                    links = " ".join(link_items)
+                else:
+                    links = "-"
+
                 due_date = task.due.strftime("%Y-%m-%d") if task.due else "-"
 
                 # Countdown with emoji
@@ -331,7 +516,7 @@ class Repository:
                 project = project.replace("|", "\\|")
 
                 lines.append(
-                    f"| {task_id} | {title} | {status} | {priority} | {assignees} | {project} | {tags} | {due_date} | {countdown} |"
+                    f"| {task_id} | {title} | {status} | {priority} | {assignees} | {project} | {tags} | {links} | {due_date} | {countdown} |"
                 )
 
         # Add footer
@@ -507,3 +692,65 @@ _Last updated: {self._get_timestamp()}_
         for repo in self.discover_repositories():
             tasks.extend(repo.list_tasks())
         return tasks
+
+    def get_all_assignees(self) -> list[str]:
+        """Get list of unique assignees across all repositories.
+
+        Returns:
+            Sorted list of all assignee handles (with @ prefix)
+        """
+        assignees = set()
+        for repo in self.discover_repositories():
+            assignees.update(repo.get_assignees())
+        return sorted(assignees)
+
+    def get_all_projects(self) -> list[str]:
+        """Get list of unique projects across all repositories.
+
+        Returns:
+            Sorted list of all project names
+        """
+        projects = set()
+        for repo in self.discover_repositories():
+            projects.update(repo.get_projects())
+        return sorted(projects)
+
+    def get_all_tags(self) -> list[str]:
+        """Get list of unique tags across all repositories.
+
+        Returns:
+            Sorted list of all tags
+        """
+        tags = set()
+        for repo in self.discover_repositories():
+            tags.update(repo.get_tags())
+        return sorted(tags)
+
+    def get_all_subtasks_cross_repo(self, task_id: str) -> list[tuple[Task, "Repository"]]:
+        """Get all subtasks (descendants) of a given task across all repositories.
+
+        Recursively finds all descendants regardless of which repository they're in.
+
+        Args:
+            task_id: Parent task ID
+
+        Returns:
+            List of tuples: (task, repository) for all descendants
+        """
+        all_repos = self.discover_repositories()
+        descendants = []
+
+        # Get direct children from all repositories
+        direct_children = []
+        for repo in all_repos:
+            for task in repo.list_tasks():
+                if task.parent == task_id:
+                    direct_children.append((task, repo))
+
+        # Add direct children and recursively get their descendants
+        for child_task, child_repo in direct_children:
+            descendants.append((child_task, child_repo))
+            # Recursively get children's children
+            descendants.extend(self.get_all_subtasks_cross_repo(child_task.id))
+
+        return descendants

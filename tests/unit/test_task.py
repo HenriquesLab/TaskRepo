@@ -138,3 +138,118 @@ def test_task_str():
     assert "[my-project]" in str_repr
     assert "@user1" in str_repr
     assert "(pending, H)" in str_repr
+
+
+def test_task_with_valid_links():
+    """Test creating task with valid HTTP/HTTPS links."""
+    task = Task(
+        id="001",
+        title="Test task",
+        status="pending",
+        priority="M",
+        links=[
+            "https://github.com/org/repo/issues/123",
+            "http://example.com/doc",
+            "https://mail.google.com/mail/u/0/#inbox/abc123",
+        ],
+    )
+
+    assert len(task.links) == 3
+    assert task.links[0] == "https://github.com/org/repo/issues/123"
+    assert task.links[1] == "http://example.com/doc"
+    assert task.links[2] == "https://mail.google.com/mail/u/0/#inbox/abc123"
+
+
+def test_task_with_invalid_link():
+    """Test that invalid URLs raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid URL"):
+        Task(
+            id="001",
+            title="Test task",
+            status="pending",
+            priority="M",
+            links=["not-a-url"],
+        )
+
+    with pytest.raises(ValueError, match="Invalid URL"):
+        Task(
+            id="001",
+            title="Test task",
+            status="pending",
+            priority="M",
+            links=["ftp://example.com"],  # Only HTTP/HTTPS allowed
+        )
+
+
+def test_task_links_to_markdown():
+    """Test that links are serialized to markdown correctly."""
+    task = Task(
+        id="001",
+        title="Test task",
+        status="pending",
+        priority="M",
+        links=["https://github.com/org/repo/issues/123", "https://example.com"],
+    )
+
+    markdown = task.to_markdown()
+
+    assert "links:" in markdown
+    assert "https://github.com/org/repo/issues/123" in markdown
+    assert "https://example.com" in markdown
+
+
+def test_task_links_from_markdown():
+    """Test parsing links from markdown."""
+    markdown = """---
+id: '001'
+title: Test task
+status: pending
+priority: M
+links:
+- https://github.com/org/repo/issues/123
+- https://example.com/doc
+created: '2025-01-01T10:00:00'
+modified: '2025-01-01T10:00:00'
+---
+
+Task description here.
+"""
+
+    task = Task.from_markdown(markdown, "001")
+
+    assert len(task.links) == 2
+    assert task.links[0] == "https://github.com/org/repo/issues/123"
+    assert task.links[1] == "https://example.com/doc"
+
+
+def test_task_links_backward_compatibility():
+    """Test that tasks without links field can still be parsed."""
+    markdown = """---
+id: '001'
+title: Test task
+status: pending
+priority: M
+created: '2025-01-01T10:00:00'
+modified: '2025-01-01T10:00:00'
+---
+
+Task without links field.
+"""
+
+    task = Task.from_markdown(markdown, "001")
+
+    assert task.links == []
+
+
+def test_task_validate_url():
+    """Test URL validation helper method."""
+    # Valid URLs
+    assert Task.validate_url("https://github.com/org/repo") is True
+    assert Task.validate_url("http://example.com") is True
+    assert Task.validate_url("https://mail.google.com/mail/u/0/#inbox/abc") is True
+
+    # Invalid URLs
+    assert Task.validate_url("not-a-url") is False
+    assert Task.validate_url("ftp://example.com") is False
+    assert Task.validate_url("github.com") is False
+    assert Task.validate_url("") is False

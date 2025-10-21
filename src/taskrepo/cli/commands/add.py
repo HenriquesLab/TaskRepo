@@ -15,11 +15,13 @@ from taskrepo.tui.display import display_tasks_table
 @click.option("--priority", type=click.Choice(["H", "M", "L"], case_sensitive=False), help="Task priority")
 @click.option("--assignees", "-a", help="Comma-separated list of assignees (e.g., @user1,@user2)")
 @click.option("--tags", help="Comma-separated list of tags")
+@click.option("--links", "-l", help="Comma-separated list of URLs (e.g., https://github.com/org/repo/issues/123)")
+@click.option("--parent", "-P", help="Parent task ID (for creating subtasks)")
 @click.option("--due", help="Due date (e.g., 2025-12-31)")
 @click.option("--description", "-d", help="Task description")
 @click.option("--interactive/--no-interactive", "-i/-I", default=True, help="Use interactive mode")
 @click.pass_context
-def add(ctx, repo, title, project, priority, assignees, tags, due, description, interactive):
+def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due, description, interactive):
     """Add a new task."""
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -51,7 +53,7 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
 
         # Get project
         if project is None:
-            existing_projects = selected_repo.get_projects()
+            existing_projects = manager.get_all_projects()
             project = prompts.prompt_project(existing_projects)
 
         # Get priority
@@ -60,7 +62,7 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
 
         # Get assignees
         if assignees is None:
-            existing_assignees = selected_repo.get_assignees()
+            existing_assignees = manager.get_all_assignees()
             # Add default assignee to existing list if configured
             if config.default_assignee and config.default_assignee not in existing_assignees:
                 existing_assignees = [config.default_assignee] + existing_assignees
@@ -75,10 +77,32 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
 
         # Get tags
         if tags is None:
-            existing_tags = selected_repo.get_tags()
+            existing_tags = manager.get_all_tags()
             tags_list = prompts.prompt_tags(existing_tags)
         else:
             tags_list = [t.strip() for t in tags.split(",")]
+
+        # Get links
+        if links is None:
+            links_list = prompts.prompt_links()
+        else:
+            links_list = [link.strip() for link in links.split(",") if link.strip()]
+
+        # Get parent task (for subtasks)
+        if parent is None:
+            existing_tasks = selected_repo.list_tasks()
+            parent_id = prompts.prompt_parent_task(existing_tasks)
+            if parent_id:
+                # Validate parent exists
+                if not selected_repo.get_task(parent_id):
+                    click.secho(f"Error: Parent task '{parent_id}' not found", fg="red", err=True)
+                    ctx.exit(1)
+        else:
+            parent_id = parent
+            # Validate parent exists
+            if not selected_repo.get_task(parent_id):
+                click.secho(f"Error: Parent task '{parent_id}' not found", fg="red", err=True)
+                ctx.exit(1)
 
         # Get due date
         if due is None:
@@ -123,6 +147,20 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
         if tags:
             tags_list = [t.strip() for t in tags.split(",")]
 
+        # Parse links
+        links_list = []
+        if links:
+            links_list = [link.strip() for link in links.split(",") if link.strip()]
+
+        # Validate parent task if provided
+        parent_id = None
+        if parent:
+            parent_task = selected_repo.get_task(parent)
+            if not parent_task:
+                click.secho(f"Error: Parent task '{parent}' not found", fg="red", err=True)
+                ctx.exit(1)
+            parent_id = parent
+
         # Parse due date
         due_date = None
         if due:
@@ -154,6 +192,8 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
         project=project,
         assignees=assignees_list,
         tags=tags_list,
+        links=links_list,
+        parent=parent_id,
         due=due_date,
         description=description,
         repo=selected_repo.name,

@@ -30,9 +30,14 @@ def sync(ctx, repo, push):
         return
 
     for repository in repositories:
-        click.echo(f"\nSyncing repository: {repository.name}")
-
         git_repo = repository.git_repo
+
+        # Display repository with URL or local path
+        if git_repo.remotes:
+            remote_url = git_repo.remotes.origin.url
+            click.echo(f"\nSyncing repository: {repository.name} ({remote_url})")
+        else:
+            click.echo(f"\nSyncing repository: {repository.name} (local: {repository.path})")
 
         try:
             # Check if there are uncommitted changes

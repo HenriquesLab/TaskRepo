@@ -14,6 +14,7 @@ TaskRepo is a powerful command-line task management tool that combines the best 
 - **Git-backed storage**: All tasks are stored as markdown files in git repositories
 - **TaskWarrior-inspired**: Familiar workflow with priorities, tags, dependencies, and due dates
 - **Rich metadata**: YAML frontmatter for structured task data
+- **Link associations**: Attach URLs to tasks (GitHub issues, PRs, emails, documentation, etc.)
 - **Interactive TUI**: User-friendly prompts with autocomplete and validation
 - **Multiple repositories**: Organize tasks across different projects or contexts
 - **GitHub integration**: Associate tasks with GitHub user handles
@@ -84,6 +85,9 @@ tsk add
 
 # Non-interactive mode
 tsk add -r work -t "Fix authentication bug" -p backend --priority H --assignees @alice,@bob --tags bug,security
+
+# With associated links (GitHub issues, emails, docs, etc.)
+tsk add -r work -t "Fix authentication bug" -p backend --links https://github.com/org/repo/issues/123,https://mail.google.com/mail/u/0/#inbox/abc
 ```
 
 ### 4. List tasks
@@ -134,6 +138,9 @@ assignees:
 tags:
 - bug
 - security
+links:
+- https://github.com/org/repo/issues/123
+- https://mail.google.com/mail/u/0/#inbox/abc123
 due: '2025-11-15T00:00:00'
 created: '2025-10-20T10:30:00'
 modified: '2025-10-20T14:22:00'
