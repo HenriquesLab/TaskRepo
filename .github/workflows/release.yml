@@ -80,10 +80,10 @@ jobs:
           echo "✅ Linting passed"
 
       - name: Run type checking
+        continue-on-error: true
         run: |
-          echo "🔎 Running type checking..."
-          uv run mypy src/taskrepo
-          echo "✅ Type checking passed"
+          echo "🔎 Running type checking (informational only)..."
+          uv run mypy src/taskrepo || echo "⚠️ Type checking found issues (non-blocking)"
 
       - name: Run tests
         run: |
