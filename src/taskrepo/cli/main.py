@@ -58,22 +58,80 @@ def init(ctx):
 
 
 @cli.command()
-@click.argument("name")
+@click.option("--name", "-n", help="Repository name (will be prefixed with 'tasks-')")
+@click.option("--github", is_flag=True, help="Create GitHub repository")
+@click.option("-o", "--org", help="GitHub organization/owner (required with --github)")
+@click.option("--interactive/--no-interactive", "-i/-I", default=True, help="Use interactive mode")
 @click.pass_context
-def create_repo(ctx, name):
-    """Create a new task repository.
-
-    NAME: Repository name (will be prefixed with 'tasks-')
-    """
+def create_repo(ctx, name, github, org, interactive):
+    """Create a new task repository."""
     from taskrepo.core.repository import RepositoryManager
+    from taskrepo.tui import prompts
 
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
+    # Interactive mode
+    if interactive:
+        click.echo("Creating a new task repository...\n")
+
+        # Get repository name
+        if not name:
+            name = prompts.prompt_repo_name()
+            if not name:
+                click.echo("Cancelled.")
+                ctx.exit(0)
+
+        # Ask about GitHub integration
+        if github is False:  # Only prompt if not explicitly set via flag
+            github = prompts.prompt_github_enabled()
+
+        # Handle GitHub integration
+        visibility = None
+        if github:
+            # Get organization if not provided
+            if not org:
+                # Use default from config if available
+                default_org = config.default_github_org
+                org = prompts.prompt_github_org(default=default_org)
+                if not org:
+                    click.echo("Cancelled.")
+                    ctx.exit(0)
+
+            # Get visibility
+            visibility = prompts.prompt_visibility()
+
+    else:
+        # Non-interactive mode - validate required fields
+        if not name:
+            click.secho("Error: --name is required in non-interactive mode", fg="red", err=True)
+            ctx.exit(1)
+
+        # Handle GitHub integration
+        visibility = None
+        if github:
+            # Use default GitHub org from config if not provided
+            if not org:
+                org = config.default_github_org
+                if not org:
+                    click.secho(
+                        "Error: --org is required when --github is specified (or set default_github_org in config)",
+                        fg="red",
+                        err=True,
+                    )
+                    ctx.exit(1)
+            visibility = "private"  # Default to private in non-interactive mode
+
     try:
-        repo = manager.create_repository(name)
+        repo = manager.create_repository(name, github_enabled=github, github_org=org, visibility=visibility)
+        click.echo()
         click.secho(f"✓ Created repository: {repo.name} at {repo.path}", fg="green")
+        if github:
+            click.secho(f"✓ GitHub repository created: https://github.com/{org}/tasks-{name}", fg="green")
     except ValueError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        ctx.exit(1)
+    except Exception as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         ctx.exit(1)
 
@@ -112,6 +170,8 @@ def config_show(ctx):
     click.echo(f"  Default status: {config.default_status}")
     default_assignee = config.default_assignee if config.default_assignee else "(none)"
     click.echo(f"  Default assignee: {default_assignee}")
+    default_github_org = config.default_github_org if config.default_github_org else "(none)"
+    click.echo(f"  Default GitHub org: {default_github_org}")
     sort_by = ", ".join(config.sort_by)
     click.echo(f"  Sort by: {sort_by}")
 

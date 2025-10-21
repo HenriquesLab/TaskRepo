@@ -5,6 +5,7 @@ import click
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.core.task import Task
 from taskrepo.tui import prompts
+from taskrepo.tui.display import display_tasks_table
 
 
 @click.command()
@@ -86,7 +87,7 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
             import dateparser
 
             try:
-                due_date = dateparser.parse(due, settings={'PREFER_DATES_FROM': 'future'})
+                due_date = dateparser.parse(due, settings={"PREFER_DATES_FROM": "future"})
                 if due_date is None:
                     raise ValueError("Could not parse date")
             except Exception as e:
@@ -128,7 +129,7 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
             import dateparser
 
             try:
-                due_date = dateparser.parse(due, settings={'PREFER_DATES_FROM': 'future'})
+                due_date = dateparser.parse(due, settings={"PREFER_DATES_FROM": "future"})
                 if due_date is None:
                     raise ValueError("Could not parse date")
             except Exception as e:
@@ -164,3 +165,12 @@ def add(ctx, repo, title, project, priority, assignees, tags, due, description, 
     click.echo()
     click.secho(f"✓ Task created: {task}", fg="green")
     click.echo(f"  File: {task_file}")
+    click.echo()
+
+    # Display all tasks in the repository
+    all_tasks = selected_repo.list_tasks()
+    # Filter out completed tasks (consistent with default list behavior)
+    active_tasks = [t for t in all_tasks if t.status != "completed"]
+
+    if active_tasks:
+        display_tasks_table(active_tasks, config)

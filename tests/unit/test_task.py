@@ -1,6 +1,5 @@
 """Unit tests for Task model."""
 
-from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 

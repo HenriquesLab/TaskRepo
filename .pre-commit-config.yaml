@@ -1,0 +1,73 @@
+repos:
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Run the formatter
+      - id: ruff-format
+        name: Format code with ruff
+        types_or: [python, pyi]
+
+      # Run the linter
+      - id: ruff
+        name: Lint code with ruff
+        types_or: [python, pyi]
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Mypy - Static type checker
+  # Note: Currently skipped in pre-commit due to pre-existing type errors
+  # CI will still run mypy to track type coverage
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.13.0
+  #   hooks:
+  #     - id: mypy
+  #       name: Type check with mypy
+  #       additional_dependencies:
+  #         - types-PyYAML
+  #         - types-python-dateutil
+  #         - types-dateparser
+  #       files: ^src/
+  #       args: [--config-file=pyproject.toml]
+
+  # General file cleanup
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: check-yaml
+        name: Check YAML files
+      - id: check-toml
+        name: Check TOML files
+      - id: check-added-large-files
+        name: Check for large files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: check-case-conflict
+        name: Check for case conflicts
+      - id: mixed-line-ending
+        name: Fix mixed line endings
+        args: [--fix=lf]
+
+  # Validate commit messages (optional - conventional commits)
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Check commit message format
+        stages: [commit-msg]
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
