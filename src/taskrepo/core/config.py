@@ -17,6 +17,7 @@ class Config:
         "default_priority": "M",
         "default_status": "pending",
         "default_assignee": None,
+        "default_editor": None,
         "sort_by": ["priority", "due"],
     }
 
@@ -145,6 +146,28 @@ class Config:
             self._data["default_assignee"] = value
         else:
             self._data["default_assignee"] = None
+        self.save()
+
+    @property
+    def default_editor(self) -> Optional[str]:
+        """Get default text editor.
+
+        Returns:
+            Default editor command or None
+        """
+        return self._data.get("default_editor")
+
+    @default_editor.setter
+    def default_editor(self, value: Optional[str]):
+        """Set default text editor.
+
+        Args:
+            value: Editor command (e.g., 'vim', 'nano', 'code') or None
+        """
+        if value is not None and value.strip():
+            self._data["default_editor"] = value.strip()
+        else:
+            self._data["default_editor"] = None
         self.save()
 
     @property

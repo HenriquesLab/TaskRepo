@@ -1,5 +1,6 @@
 """Edit command for modifying existing tasks."""
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -14,7 +15,7 @@ from taskrepo.utils.helpers import normalize_task_id
 @click.command()
 @click.argument("task_id")
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
-@click.option("--editor", "-e", envvar="EDITOR", default="vim", help="Editor to use (defaults to $EDITOR or vim)")
+@click.option("--editor", "-e", default=None, help="Editor to use (overrides $EDITOR and config)")
 @click.pass_context
 def edit(ctx, task_id, repo, editor):
     """Edit an existing task.
@@ -23,6 +24,10 @@ def edit(ctx, task_id, repo, editor):
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Determine editor with priority: CLI option > $EDITOR > config.default_editor > 'vim'
+    if not editor:
+        editor = os.environ.get("EDITOR") or config.default_editor or "vim"
 
     # Normalize task ID (convert "1" to "001", etc.)
     task_id = normalize_task_id(task_id)

@@ -26,11 +26,15 @@ def config_cmd(ctx):
         click.echo("  4. Set default status")
         click.echo("  5. Set default assignee")
         click.echo("  6. Configure task sorting")
-        click.echo("  7. Reset to defaults")
-        click.echo("  8. Exit")
+        click.echo("  7. Set default editor")
+        click.echo("  8. Reset to defaults")
+        click.echo("  9. Exit")
 
         try:
-            choice = prompt("\nEnter choice (1-8): ", completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8"]))
+            choice = prompt(
+                "\nEnter choice (1-9): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
+            )
         except (KeyboardInterrupt, EOFError):
             click.echo("\nExiting configuration.")
             break
@@ -48,6 +52,8 @@ def config_cmd(ctx):
             click.echo(f"  Default status: {config.default_status}")
             default_assignee = config.default_assignee if config.default_assignee else "(none)"
             click.echo(f"  Default assignee: {default_assignee}")
+            default_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
+            click.echo(f"  Default editor: {default_editor}")
             sort_by = ", ".join(config.sort_by)
             click.echo(f"  Sort by: {sort_by}")
             click.echo("-" * 50)
@@ -139,6 +145,23 @@ def config_cmd(ctx):
                 click.echo("\nCancelled.")
 
         elif choice == "7":
+            # Set default editor
+            current_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
+            click.echo(f"\nCurrent default editor: {current_editor}")
+            click.echo("\nCommon editors: vim, nano, emacs, code, subl, gedit")
+            try:
+                new_editor = prompt("Enter default editor command (or leave empty for none): ")
+                new_editor = new_editor.strip()
+                if new_editor:
+                    config.default_editor = new_editor
+                    click.secho(f"✓ Default editor updated to: {new_editor}", fg="green")
+                else:
+                    config.default_editor = None
+                    click.secho("✓ Default editor cleared (will use $EDITOR or vim)", fg="green")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+
+        elif choice == "8":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -152,10 +175,10 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "8":
+        elif choice == "9":
             # Exit
             click.echo("\nExiting configuration.")
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-8.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-9.", fg="red")
