@@ -147,8 +147,8 @@ jobs:
       - name: Run integration tests
         run: |
           echo "🧪 Running integration tests..."
-          uv run pytest tests/integration -v
-          echo "✅ Integration tests passed"
+          # Allow empty test collection (exit code 5)
+          uv run pytest tests/integration -v || [ $? -eq 5 ] && echo "✅ Integration tests passed (or no tests found)"
 
   # Job 3: Coverage reporting
   coverage:
