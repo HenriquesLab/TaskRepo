@@ -83,7 +83,7 @@ class Task:
         try:
             metadata = yaml.safe_load(frontmatter_str) or {}
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML frontmatter: {e}")
+            raise ValueError(f"Invalid YAML frontmatter: {e}") from e
 
         # Parse dates
         due = None

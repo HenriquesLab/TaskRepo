@@ -401,24 +401,101 @@ class RepositoryManager:
 
         return Repository(repo_path)
 
-    def create_repository(self, name: str) -> Repository:
+    def create_repository(
+        self,
+        name: str,
+        github_enabled: bool = False,
+        github_org: Optional[str] = None,
+        visibility: Optional[str] = None,
+    ) -> Repository:
         """Create a new task repository.
 
         Args:
             name: Repository name (without 'tasks-' prefix)
+            github_enabled: Whether to create GitHub repository
+            github_org: GitHub organization/owner (required if github_enabled)
+            visibility: Repository visibility ('public' or 'private', required if github_enabled)
 
         Returns:
             Repository object
 
         Raises:
-            ValueError: If repository already exists
+            ValueError: If repository already exists or invalid parameters
         """
+        from taskrepo.utils.github import (
+            GitHubError,
+            create_github_repo,
+            push_to_remote,
+            setup_git_remote,
+        )
+
         repo_path = self.parent_dir / f"tasks-{name}"
         if repo_path.exists():
             raise ValueError(f"Repository already exists: {name}")
 
+        # Validate GitHub parameters
+        if github_enabled:
+            if not github_org:
+                raise ValueError("GitHub organization/owner is required when --github is enabled")
+            if not visibility:
+                raise ValueError("Repository visibility is required when --github is enabled")
+            if visibility not in ["public", "private"]:
+                raise ValueError("Visibility must be 'public' or 'private'")
+
+        # Create local repository
         repo_path.mkdir(parents=True, exist_ok=True)
-        return Repository(repo_path)
+        repo = Repository(repo_path)
+
+        # Create initial commit with README
+        readme_content = f"""# Tasks - {name}
+
+## Active Tasks
+
+No active tasks.
+
+_Last updated: {self._get_timestamp()}_
+"""
+        readme_path = repo_path / "README.md"
+        readme_path.write_text(readme_content)
+
+        # Create .gitkeep in tasks directory
+        gitkeep_path = repo.tasks_dir / ".gitkeep"
+        gitkeep_path.touch()
+
+        # Commit initial structure
+        repo.git_repo.git.add(A=True)
+        repo.git_repo.index.commit("Initial commit: Repository structure")
+
+        # Create GitHub repository if requested
+        if github_enabled:
+            try:
+                # Create GitHub repository
+                github_url = create_github_repo(github_org, f"tasks-{name}", visibility)
+
+                # Setup remote
+                setup_git_remote(repo_path, github_url)
+
+                # Push to remote
+                push_to_remote(repo_path)
+
+            except GitHubError as e:
+                # Clean up local repository on GitHub error
+                import shutil
+
+                shutil.rmtree(repo_path)
+                raise ValueError(f"GitHub error: {e}") from e
+
+        return repo
+
+    def _get_timestamp(self) -> str:
+        """Get current timestamp for README.
+
+        Returns:
+            Formatted timestamp string
+        """
+        from datetime import datetime
+
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def list_all_tasks(self) -> list[Task]:
         """List all tasks across all repositories.
