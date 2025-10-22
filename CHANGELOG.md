@@ -5,6 +5,26 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-10-22
+
+### Added
+- **Automatic update checking**: TaskRepo now automatically checks PyPI for newer versions once per day
+- **Update notifications**: Non-intrusive notification displayed when a newer version is available
+- **Smart caching**: Update checks are cached for 24 hours to minimize network requests and CLI startup time
+
+### Improved
+- **User awareness**: Users stay informed about new releases without manual checking
+- **Graceful error handling**: Network failures and timeouts are handled silently without disrupting CLI usage
+- **Fast performance**: 2-second timeout ensures update checks don't slow down commands
+
+### Technical Details
+- New module: `src/taskrepo/utils/update_checker.py` for update checking logic
+- Uses PyPI JSON API (`https://pypi.org/pypi/taskrepo/json`) to fetch latest version
+- Added `packaging>=20.0` dependency for proper semantic version comparison
+- Cache stored in `~/.taskrepo-update-check` with timestamp
+- Integrated via `@cli.result_callback()` to run after each command execution
+- Comprehensive test coverage with 10 new tests
+
 ## [0.3.2] - 2025-10-22
 
 ### Changed

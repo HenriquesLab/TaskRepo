@@ -13,6 +13,7 @@ from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
 from taskrepo.cli.commands.sync import sync
 from taskrepo.core.config import Config
+from taskrepo.utils.update_checker import check_and_notify_updates
 
 
 @click.group()
@@ -28,6 +29,17 @@ def cli(ctx):
 
     # Load configuration
     ctx.obj["config"] = Config()
+
+
+@cli.result_callback()
+@click.pass_context
+def process_result(ctx, result, **kwargs):
+    """Process result after command execution.
+
+    This runs after any command completes and checks for updates.
+    """
+    # Check for updates after command completes
+    check_and_notify_updates()
 
 
 # Register commands
