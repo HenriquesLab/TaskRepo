@@ -616,7 +616,7 @@ class RepositoryManager:
 
         repo_path = self.parent_dir / f"tasks-{name}"
         if repo_path.exists():
-            raise ValueError(f"Repository already exists: {name}")
+            raise ValueError(f"Repository already exists: tasks-{name}")
 
         # Validate GitHub parameters
         if github_enabled:
