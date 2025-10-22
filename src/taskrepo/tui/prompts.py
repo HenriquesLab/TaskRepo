@@ -5,6 +5,7 @@ from typing import Optional
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import FuzzyWordCompleter, WordCompleter
+from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.validation import ValidationError, Validator
 
 from taskrepo.core.repository import Repository
@@ -346,11 +347,17 @@ def prompt_status(default: str = "pending") -> str:
         return default
 
 
-def prompt_repo_name(existing_names: list[str] | None = None) -> Optional[str]:
+def prompt_repo_name(
+    existing_names: list[str] | None = None,
+    input=None,
+    output=None,
+) -> Optional[str]:
     """Prompt user for repository name.
 
     Args:
         existing_names: List of existing repository names (without 'tasks-' prefix) to check for duplicates
+        input: Input object for testing (optional)
+        output: Output object for testing (optional)
 
     Returns:
         Repository name or None if cancelled
@@ -358,7 +365,12 @@ def prompt_repo_name(existing_names: list[str] | None = None) -> Optional[str]:
     if existing_names is None:
         existing_names = []
 
+    # Capture existing_names in closure by creating validator function
     class RepoNameValidator(Validator):
+        def __init__(self, existing_repo_names):
+            super().__init__()
+            self.existing_repo_names = existing_repo_names
+
         def validate(self, document):
             text = document.text.strip()
             if not text:
@@ -369,12 +381,39 @@ def prompt_repo_name(existing_names: list[str] | None = None) -> Optional[str]:
                     message="Repository name can only contain letters, numbers, hyphens, and underscores"
                 )
             # Check if repository already exists
-            if text in existing_names:
+            if text in self.existing_repo_names:
                 raise ValidationError(message=f"Repository 'tasks-{text}' already exists")
 
+    validator = RepoNameValidator(existing_names)
+
     try:
-        name = prompt("Repository name: ", validator=RepoNameValidator())
-        return name.strip()
+        # For testing with pipe input, handle validation manually to avoid hanging
+        if input is not None or output is not None:
+            from prompt_toolkit.document import Document
+
+            session = PromptSession(
+                message="Repository name: ",
+                input=input,
+                output=output,
+            )
+
+            while True:
+                name = session.prompt()
+                # Manually validate
+                try:
+                    validator.validate(Document(name))
+                    return name.strip()
+                except ValidationError:
+                    # With pipe input, if validation fails, read next line
+                    # If no more input, this will raise EOFError
+                    continue
+        else:
+            # For normal interactive use, use built-in validation
+            name = prompt(
+                "Repository name: ",
+                validator=validator,
+            )
+            return name.strip()
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -441,8 +480,12 @@ def prompt_github_org(default: Optional[str] = None, existing_orgs: list[str] | 
         return None
 
 
-def prompt_visibility() -> str:
+def prompt_visibility(input=None, output=None) -> str:
     """Prompt user for repository visibility.
+
+    Args:
+        input: Input object for testing (optional)
+        output: Output object for testing (optional)
 
     Returns:
         Visibility setting ('public' or 'private')
@@ -475,11 +518,22 @@ def prompt_visibility() -> str:
                 raise ValidationError(message="Please enter a valid number") from e
 
     try:
-        choice_str = prompt(
-            f"Select visibility [1-{len(visibilities)}] or press Enter for default: ",
-            validator=VisibilityChoiceValidator(),
-            default="",
-        )
+        # For testing with pipe input, use PromptSession
+        if input is not None or output is not None:
+            session = PromptSession(
+                message=f"Select visibility [1-{len(visibilities)}] or press Enter for default: ",
+                input=input,
+                output=output,
+            )
+            choice_str = session.prompt(default="")
+        else:
+            # For normal interactive use, set default to "1" (private) for better UX
+            # This ensures pressing Enter submits the form with the default value
+            choice_str = prompt(
+                f"Select visibility [1-{len(visibilities)}] or press Enter for default: ",
+                validator=VisibilityChoiceValidator(),
+                default="1",  # Default to option 1 (private)
+            )
 
         if not choice_str.strip():
             return default

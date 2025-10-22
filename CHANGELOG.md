@@ -5,6 +5,39 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-10-22
+
+### Added
+- **Search command (`tsk search`)**: Full-text search across tasks
+  - Case-insensitive search across title, description, project, and tags
+  - Supports all filter options from list command (--repo, --status, --priority, --assignee, --tag, --project)
+  - Excludes completed tasks by default (use --all to include)
+  - Example: `tsk search "Tatiana"` or `tsk search "bug" --priority H`
+- **Extend command (`tsk ext`)**: Extend task due dates by duration
+  - Supports multiple time units: days (d), weeks (w), months (m), years (y)
+  - Extend multiple tasks at once with comma-separated IDs
+  - Sets due date from today if task has no existing due date
+  - Shows old date, extension amount, and new date for each task
+  - Example: `tsk ext 4 1w` or `tsk ext 4,5,6 2d`
+- **Duration parsing utility**: New `utils/duration.py` module for parsing duration strings
+- **Visibility prompt enhancement**: Fixed default value handling in repository visibility prompt
+
+### Improved
+- **Task sorting**: Fixed task list to sort globally by priority and due date (not grouped by repository)
+  - Tasks now properly sorted H → M → L priority, then by due date within each priority
+  - Matches config settings and README generation behavior
+- **User experience**: Pressing Enter on visibility prompt now correctly accepts the default (private)
+- **Test coverage**: Added comprehensive tests for search and extend commands (21 new tests)
+
+### Technical Details
+- New command: `src/taskrepo/cli/commands/search.py` with text search across multiple fields
+- New command: `src/taskrepo/cli/commands/extend.py` for due date extensions
+- New utility: `src/taskrepo/utils/duration.py` for parsing duration strings (1w, 2d, 3m, 1y)
+- Fixed sorting in `display_tasks_table()` to remove hardcoded repository grouping
+- Enhanced `prompt_visibility()` to accept input/output parameters for testing
+- Set default to "1" for interactive visibility prompt for better UX
+- Comprehensive documentation updates in CLAUDE.md for new commands
+
 ## [0.5.0] - 2025-10-22
 
 ### Added
@@ -199,5 +232,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.6.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.6.0
+[0.5.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.5.0
+[0.4.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.4.0
+[0.3.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.3.2
+[0.3.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.3.1
 [0.2.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.2.0
 [0.1.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.1.0

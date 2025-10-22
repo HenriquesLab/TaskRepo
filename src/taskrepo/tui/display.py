@@ -242,7 +242,7 @@ def display_tasks_table(
 
     def get_sort_key(task):
         sort_fields = config.sort_by
-        key_parts = [task.repo or ""]  # Always group by repo first
+        key_parts = []
 
         for field in sort_fields:
             is_desc, value = get_field_value(task, field)

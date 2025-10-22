@@ -9,8 +9,10 @@ from taskrepo.cli.commands.config import config_cmd
 from taskrepo.cli.commands.delete import delete
 from taskrepo.cli.commands.done import done
 from taskrepo.cli.commands.edit import edit
+from taskrepo.cli.commands.extend import ext
 from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
+from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
 from taskrepo.core.config import Config
 from taskrepo.utils.update_checker import check_and_notify_updates
@@ -49,7 +51,9 @@ cli.add_command(list_tasks)
 cli.add_command(edit)
 cli.add_command(done)
 cli.add_command(delete, name="del")  # Register only as "del"
+cli.add_command(ext)
 cli.add_command(info)
+cli.add_command(search)
 cli.add_command(sync)
 
 
