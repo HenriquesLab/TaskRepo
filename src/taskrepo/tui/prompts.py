@@ -5,7 +5,6 @@ from typing import Optional
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import FuzzyWordCompleter, WordCompleter
-from prompt_toolkit.shortcuts import confirm
 from prompt_toolkit.validation import ValidationError, Validator
 
 from taskrepo.core.repository import Repository
@@ -378,8 +377,20 @@ def prompt_github_enabled() -> bool:
     Returns:
         True if GitHub should be enabled, False otherwise
     """
+
+    class YesNoValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip().lower()
+            if text and text not in {"y", "yes", "n", "no"}:
+                raise ValidationError(message="Please enter 'y' or 'n'")
+
     try:
-        return confirm("Create GitHub repository?", default=False)
+        answer = prompt(
+            "Create GitHub repository? [y/N]: ",
+            validator=YesNoValidator(),
+            default="n",
+        )
+        return answer.strip().lower() in {"y", "yes"}
     except (KeyboardInterrupt, EOFError):
         return False
 
