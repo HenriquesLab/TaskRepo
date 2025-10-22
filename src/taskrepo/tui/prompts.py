@@ -1,16 +1,13 @@
 """Interactive TUI prompts using prompt_toolkit."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import FuzzyWordCompleter, WordCompleter
 from prompt_toolkit.validation import ValidationError, Validator
 
 from taskrepo.core.repository import Repository
-
-if TYPE_CHECKING:
-    from taskrepo.core.repository import RepositoryManager
 
 
 class PriorityValidator(Validator):
@@ -349,47 +346,31 @@ def prompt_status(default: str = "pending") -> str:
         return default
 
 
-def prompt_repo_name(manager: Optional["RepositoryManager"] = None) -> Optional[str]:
+def prompt_repo_name(existing_names: list[str] | None = None) -> Optional[str]:
     """Prompt user for repository name.
 
     Args:
-        manager: RepositoryManager instance for validating repository doesn't already exist
+        existing_names: List of existing repository names (without 'tasks-' prefix) to check for duplicates
 
     Returns:
         Repository name or None if cancelled
     """
+    if existing_names is None:
+        existing_names = []
 
-    # Create validation function that captures manager in closure
-    def validate_repo_name(text: str) -> bool:
-        if not text:
-            return False
-        # Check for invalid characters
-        if not text.replace("-", "").replace("_", "").isalnum():
-            return False
-        # Check if repository already exists
-        if manager:
-            repo_path = manager.parent_dir / f"tasks-{text}"
-            if repo_path.exists():
-                return False
-        return True
-
-    def get_error_message(text: str) -> str:
-        if not text:
-            return "Repository name cannot be empty"
-        if not text.replace("-", "").replace("_", "").isalnum():
-            return "Repository name can only contain letters, numbers, hyphens, and underscores"
-        if manager:
-            repo_path = manager.parent_dir / f"tasks-{text}"
-            if repo_path.exists():
-                return f"Repository 'tasks-{text}' already exists"
-        return ""
-
-    # Use Validator.from_callable with custom error message logic
     class RepoNameValidator(Validator):
         def validate(self, document):
             text = document.text.strip()
-            if not validate_repo_name(text):
-                raise ValidationError(message=get_error_message(text))
+            if not text:
+                raise ValidationError(message="Repository name cannot be empty")
+            # Check for invalid characters
+            if not text.replace("-", "").replace("_", "").isalnum():
+                raise ValidationError(
+                    message="Repository name can only contain letters, numbers, hyphens, and underscores"
+                )
+            # Check if repository already exists
+            if text in existing_names:
+                raise ValidationError(message=f"Repository 'tasks-{text}' already exists")
 
     try:
         name = prompt("Repository name: ", validator=RepoNameValidator())
