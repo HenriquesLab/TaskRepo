@@ -439,19 +439,47 @@ def prompt_visibility() -> str:
     Returns:
         Visibility setting ('public' or 'private')
     """
-    visibilities = ["public", "private"]
-    completer = WordCompleter(visibilities, ignore_case=True)
+    visibilities = [
+        ("private", "Private"),
+        ("public", "Public"),
+    ]
+    default = "private"
+
+    # Display numbered list of visibilities
+    print("\nRepository visibility:")
+    for idx, (code, name) in enumerate(visibilities, start=1):
+        marker = " (default)" if code == default else ""
+        print(f"  {idx}. {name}{marker}")
+    print()
+
+    # Validator for numeric choice
+    class VisibilityChoiceValidator(Validator):
+        def validate(self, document):
+            text = document.text.strip()
+            if not text:
+                # Allow empty for default
+                return
+            try:
+                choice = int(text)
+                if choice < 1 or choice > len(visibilities):
+                    raise ValidationError(message=f"Please enter a number between 1 and {len(visibilities)}")
+            except ValueError as e:
+                raise ValidationError(message="Please enter a valid number") from e
 
     try:
-        visibility = prompt(
-            "Repository visibility [private]: ",
-            completer=completer,
-            complete_while_typing=True,
-            default="private",
+        choice_str = prompt(
+            f"Select visibility [1-{len(visibilities)}] or press Enter for default: ",
+            validator=VisibilityChoiceValidator(),
+            default="",
         )
-        return visibility.strip().lower()
+
+        if not choice_str.strip():
+            return default
+
+        choice = int(choice_str.strip())
+        return visibilities[choice - 1][0]
     except (KeyboardInterrupt, EOFError):
-        return "private"
+        return default
 
 
 def prompt_parent_task(existing_tasks: list) -> Optional[str]:
