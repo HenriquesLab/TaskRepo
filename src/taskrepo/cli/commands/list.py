@@ -30,6 +30,9 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, show_all):
     else:
         tasks = manager.list_all_tasks()
 
+    # Track if any filters are applied
+    has_filters = bool(repo or project or status or priority or assignee or tag or show_all)
+
     # Apply filters
     if not show_all:
         tasks = [t for t in tasks if t.status != "completed"]
@@ -57,4 +60,5 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, show_all):
         return
 
     # Display tasks using shared display function
-    display_tasks_table(tasks, config)
+    # Only save ID cache for unfiltered views to maintain consistent IDs
+    display_tasks_table(tasks, config, save_cache=not has_filters)

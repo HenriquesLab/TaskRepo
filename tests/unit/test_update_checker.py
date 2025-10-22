@@ -28,7 +28,8 @@ def mock_pypi_response():
 def temp_cache_file(tmp_path, monkeypatch):
     """Create a temporary cache file for testing."""
     cache_path = tmp_path / ".taskrepo-update-check"
-    monkeypatch.setattr("taskrepo.utils.update_checker.CACHE_FILE", cache_path)
+    # Mock get_cache_file to return our temp path
+    monkeypatch.setattr("taskrepo.utils.update_checker.get_cache_file", lambda: cache_path)
     return cache_path
 
 

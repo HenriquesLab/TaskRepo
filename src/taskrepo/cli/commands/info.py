@@ -71,6 +71,10 @@ def info(ctx, task_id, repo):
     # Repository
     details_table.add_row("Repository", task.repo or "-")
 
+    # File path
+    task_file_path = repository.tasks_dir / f"task-{task.id}.md"
+    details_table.add_row("File Path", f"[dim]{task_file_path}[/dim]")
+
     # Status
     status_color = {
         "pending": "yellow",

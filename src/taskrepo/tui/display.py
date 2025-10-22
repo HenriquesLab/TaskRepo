@@ -7,7 +7,7 @@ from rich.table import Table
 
 from taskrepo.core.config import Config
 from taskrepo.core.task import Task
-from taskrepo.utils.id_mapping import save_id_cache
+from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 
 
 def get_countdown_text(due_date: datetime) -> tuple[str, str]:
@@ -183,7 +183,14 @@ def format_tree_title(title: str, depth: int, is_last: bool, ancestor_positions:
     return f"{prefix}{title}"
 
 
-def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tree_view: bool = True) -> None:
+def display_tasks_table(
+    tasks: list[Task],
+    config: Config,
+    title: str = None,
+    tree_view: bool = True,
+    save_cache: bool = True,
+    id_offset: int = 0,
+) -> None:
     """Display tasks in a Rich formatted table.
 
     Args:
@@ -191,6 +198,8 @@ def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tr
         config: Configuration object for sorting preferences
         title: Optional custom title for the table
         tree_view: Whether to show hierarchical tree structure (default: True)
+        save_cache: Whether to save the ID mapping cache (default: True, set to False for filtered views)
+        id_offset: Offset to add to display IDs (used for showing completed tasks after active tasks)
     """
     if not tasks:
         return
@@ -261,8 +270,9 @@ def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tr
         display_tasks = sorted_tasks
         tree_items = [(task, 0, False, []) for task in sorted_tasks]
 
-    # Save display ID mapping
-    save_id_cache(display_tasks)
+    # Save display ID mapping (only for unfiltered views to maintain consistency)
+    if save_cache:
+        save_id_cache(display_tasks)
 
     # Create Rich table
     console = Console()
@@ -281,7 +291,7 @@ def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tr
     table.add_column("Due", style="red")
     table.add_column("Countdown", no_wrap=True)
 
-    for display_id, (task, depth, is_last, ancestors) in enumerate(
+    for idx, (task, depth, is_last, ancestors) in enumerate(
         zip(
             display_tasks,
             [item[1] for item in tree_items],
@@ -291,6 +301,19 @@ def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tr
         ),
         start=1,
     ):
+        # Get display ID
+        if id_offset > 0:
+            # Use offset-based sequential IDs (for completed tasks shown after active tasks)
+            display_id_str = str(id_offset + idx)
+        else:
+            # Get display ID from cache (or show UUID prefix if not in cache)
+            display_id = get_display_id_from_uuid(task.id)
+            if display_id is None:
+                # Task not in cache (e.g., newly added), show first 8 chars of UUID
+                display_id_str = f"{task.id[:8]}..."
+            else:
+                display_id_str = str(display_id)
+
         # Format title with tree structure
         if tree_view:
             subtask_count = count_subtasks(task, tasks)
@@ -331,7 +354,7 @@ def display_tasks_table(tasks: list[Task], config: Config, title: str = None, tr
         links_indicator = "🔗" if task.links else "-"
 
         table.add_row(
-            str(display_id),
+            display_id_str,
             links_indicator,
             formatted_title,
             task.repo or "-",

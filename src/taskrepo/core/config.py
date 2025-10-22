@@ -5,11 +5,14 @@ from typing import Optional
 
 import yaml
 
+from taskrepo.utils.paths import get_config_path, migrate_legacy_files
+
 
 class Config:
     """Manages TaskRepo configuration.
 
-    Configuration is stored in ~/.taskreporc as YAML.
+    Configuration is stored in ~/.TaskRepo/config as YAML.
+    Legacy config at ~/.taskreporc is automatically migrated.
     """
 
     DEFAULT_CONFIG = {
@@ -26,10 +29,13 @@ class Config:
         """Initialize Config.
 
         Args:
-            config_path: Path to config file (defaults to ~/.taskreporc)
+            config_path: Path to config file (defaults to ~/.TaskRepo/config)
         """
+        # Migrate legacy files on first access
+        migrate_legacy_files()
+
         if config_path is None:
-            config_path = Path.home() / ".taskreporc"
+            config_path = get_config_path()
 
         self.config_path = config_path
         self._data = self._load_config()

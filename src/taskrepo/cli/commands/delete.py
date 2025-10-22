@@ -6,6 +6,7 @@ from prompt_toolkit.shortcuts import confirm
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.helpers import find_task_by_title_or_id
+from taskrepo.utils.id_mapping import save_id_cache
 
 
 @click.command(name="delete")
@@ -60,13 +61,17 @@ def delete(ctx, task_id, repo, force):
         click.secho(f"✓ Task deleted: {task}", fg="green")
         click.echo()
 
-        # Display all tasks in the repository
-        all_tasks = repository.list_tasks()
-        # Filter out completed tasks (consistent with default list behavior)
-        active_tasks = [t for t in all_tasks if t.status != "completed"]
+        # Update cache with ALL active tasks across all repos
+        all_tasks_all_repos = manager.list_all_tasks()
+        active_tasks_all = [t for t in all_tasks_all_repos if t.status != "completed"]
+        save_id_cache(active_tasks_all)
 
-        if active_tasks:
-            display_tasks_table(active_tasks, config)
+        # Display tasks from this repository only (filtered view)
+        repo_tasks = repository.list_tasks()
+        active_tasks_repo = [t for t in repo_tasks if t.status != "completed"]
+
+        if active_tasks_repo:
+            display_tasks_table(active_tasks_repo, config, save_cache=False)
     else:
         click.secho(f"Error: Failed to delete task '{task_id}'", fg="red", err=True)
         ctx.exit(1)

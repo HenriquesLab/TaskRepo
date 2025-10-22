@@ -6,6 +6,7 @@ from prompt_toolkit.shortcuts import confirm
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.helpers import find_task_by_title_or_id
+from taskrepo.utils.id_mapping import get_cache_size, save_id_cache
 
 
 @click.command()
@@ -40,8 +41,17 @@ def done(ctx, task_id, repo):
             click.echo(f"No completed tasks found{repo_msg}.")
             return
 
-        # Display completed tasks
-        display_tasks_table(completed_tasks, config, title=f"Completed Tasks ({len(completed_tasks)} found)")
+        # Get the number of active tasks from cache to use as offset
+        active_task_count = get_cache_size()
+
+        # Display completed tasks with IDs starting after active tasks
+        display_tasks_table(
+            completed_tasks,
+            config,
+            title=f"Completed Tasks ({len(completed_tasks)} found)",
+            save_cache=False,
+            id_offset=active_task_count,
+        )
         return
 
     # Try to find task by ID or title
@@ -104,10 +114,14 @@ def done(ctx, task_id, repo):
     click.secho(f"✓ Task marked as completed: {task}", fg="green")
     click.echo()
 
-    # Display all tasks in the repository
-    all_tasks = repository.list_tasks()
-    # Filter out completed tasks (consistent with default list behavior)
-    active_tasks = [t for t in all_tasks if t.status != "completed"]
+    # Update cache with ALL active tasks across all repos
+    all_tasks_all_repos = manager.list_all_tasks()
+    active_tasks_all = [t for t in all_tasks_all_repos if t.status != "completed"]
+    save_id_cache(active_tasks_all)
 
-    if active_tasks:
-        display_tasks_table(active_tasks, config)
+    # Display tasks from this repository only (filtered view)
+    repo_tasks = repository.list_tasks()
+    active_tasks_repo = [t for t in repo_tasks if t.status != "completed"]
+
+    if active_tasks_repo:
+        display_tasks_table(active_tasks_repo, config, save_cache=False)

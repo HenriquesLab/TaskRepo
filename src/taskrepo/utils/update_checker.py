@@ -12,12 +12,22 @@ from typing import Optional
 from packaging import version
 
 from taskrepo.__version__ import __version__
+from taskrepo.utils.paths import get_update_check_cache_path, migrate_legacy_files
 
 # Check for updates once per day
 UPDATE_CHECK_INTERVAL = timedelta(hours=24)
-CACHE_FILE = Path.home() / ".taskrepo-update-check"
 PYPI_JSON_URL = "https://pypi.org/pypi/taskrepo/json"
 REQUEST_TIMEOUT = 2  # seconds
+
+
+def get_cache_file() -> Path:
+    """Get the update check cache file path.
+
+    Returns:
+        Path to update check cache file
+    """
+    migrate_legacy_files()
+    return get_update_check_cache_path()
 
 
 def check_for_updates() -> Optional[str]:
@@ -51,11 +61,12 @@ def should_check_for_updates() -> bool:
     Returns:
         True if update check should be performed, False otherwise
     """
-    if not CACHE_FILE.exists():
+    cache_file = get_cache_file()
+    if not cache_file.exists():
         return True
 
     try:
-        with open(CACHE_FILE) as f:
+        with open(cache_file) as f:
             cache_data = json.load(f)
 
         last_check = datetime.fromisoformat(cache_data["last_check"])
@@ -71,8 +82,10 @@ def should_check_for_updates() -> bool:
 def update_check_cache():
     """Update the cache file with current timestamp."""
     try:
+        cache_file = get_cache_file()
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_data = {"last_check": datetime.now().isoformat()}
-        with open(CACHE_FILE, "w") as f:
+        with open(cache_file, "w") as f:
             json.dump(cache_data, f)
     except Exception:
         # Silently fail if we can't write cache

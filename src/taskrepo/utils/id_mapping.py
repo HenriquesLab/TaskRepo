@@ -5,15 +5,18 @@ from pathlib import Path
 from typing import Optional
 
 from taskrepo.core.task import Task
+from taskrepo.utils.paths import get_id_cache_path, migrate_legacy_files
 
 
 def get_cache_path() -> Path:
     """Get the path to the ID mapping cache file.
 
     Returns:
-        Path to cache file
+        Path to cache file (~/.TaskRepo/id_cache.json)
     """
-    return Path.home() / ".taskrepo_id_cache.json"
+    # Ensure legacy files are migrated
+    migrate_legacy_files()
+    return get_id_cache_path()
 
 
 def save_id_cache(tasks: list[Task]) -> None:
@@ -31,6 +34,7 @@ def save_id_cache(tasks: list[Task]) -> None:
         }
 
     cache_path = get_cache_path()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w") as f:
         json.dump(cache, f, indent=2)
 
@@ -92,3 +96,21 @@ def get_display_id_from_uuid(uuid: str) -> Optional[int]:
         return None
 
     return None
+
+
+def get_cache_size() -> int:
+    """Get the number of tasks in the ID cache.
+
+    Returns:
+        Number of tasks in cache, or 0 if cache doesn't exist or is invalid
+    """
+    cache_path = get_cache_path()
+    if not cache_path.exists():
+        return 0
+
+    try:
+        with open(cache_path) as f:
+            cache = json.load(f)
+        return len(cache)
+    except (json.JSONDecodeError, KeyError):
+        return 0

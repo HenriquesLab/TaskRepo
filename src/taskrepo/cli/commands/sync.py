@@ -4,6 +4,7 @@ import click
 from git import GitCommandError
 
 from taskrepo.core.repository import RepositoryManager
+from taskrepo.tui.display import display_tasks_table
 
 
 @click.command()
@@ -94,3 +95,11 @@ def sync(ctx, repo, push):
 
     click.echo()
     click.secho("✓ Sync completed", fg="green")
+    click.echo()
+
+    # Display all active tasks to show current state after sync
+    all_tasks = manager.list_all_tasks()
+    active_tasks = [t for t in all_tasks if t.status != "completed"]
+
+    if active_tasks:
+        display_tasks_table(active_tasks, config, save_cache=True)
