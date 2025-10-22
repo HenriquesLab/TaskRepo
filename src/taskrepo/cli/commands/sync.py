@@ -40,8 +40,8 @@ def sync(ctx, repo, push):
             click.echo(f"\nSyncing repository: {repository.name} (local: {repository.path})")
 
         try:
-            # Check if there are uncommitted changes
-            if git_repo.is_dirty():
+            # Check if there are uncommitted changes (including untracked files)
+            if git_repo.is_dirty(untracked_files=True):
                 click.echo("  • Committing local changes...")
                 git_repo.git.add(A=True)
                 git_repo.index.commit("Auto-commit: TaskRepo sync")
@@ -61,7 +61,7 @@ def sync(ctx, repo, push):
                 click.secho("  ✓ README updated", fg="green")
 
                 # Check if README was changed and commit it
-                if git_repo.is_dirty():
+                if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
                     git_repo.index.commit("Auto-update: README with active tasks")
                     click.secho("  ✓ README changes committed", fg="green")
@@ -80,7 +80,7 @@ def sync(ctx, repo, push):
                 click.secho("  ✓ README updated", fg="green")
 
                 # Check if README was changed and commit it
-                if git_repo.is_dirty():
+                if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
                     git_repo.index.commit("Auto-update: README with active tasks")
                     click.secho("  ✓ README changes committed", fg="green")

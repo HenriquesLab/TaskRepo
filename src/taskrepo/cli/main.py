@@ -1,6 +1,7 @@
 """Main CLI entry point for TaskRepo."""
 
 import click
+from prompt_toolkit.shortcuts import confirm
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
@@ -50,7 +51,7 @@ def init(ctx):
     click.echo(f"Parent directory: {config.parent_dir}")
 
     if not config.parent_dir.exists():
-        if click.confirm(f"Create parent directory {config.parent_dir}?"):
+        if confirm(f"Create parent directory {config.parent_dir}?"):
             config.parent_dir.mkdir(parents=True, exist_ok=True)
             click.secho(f"✓ Created {config.parent_dir}", fg="green")
         else:

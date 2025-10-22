@@ -1,6 +1,7 @@
 """Delete command for removing tasks."""
 
 import click
+from prompt_toolkit.shortcuts import confirm
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
@@ -50,7 +51,7 @@ def delete(ctx, task_id, repo, force):
     # Confirmation prompt (unless --force flag is used)
     if not force:
         click.echo(f"\nTask to delete: {task}")
-        if not click.confirm("Are you sure you want to delete this task? This cannot be undone.", default=False):
+        if not confirm("Are you sure you want to delete this task? This cannot be undone."):
             click.echo("Deletion cancelled.")
             ctx.exit(0)
 

@@ -5,6 +5,21 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-10-22
+
+### Changed
+- **Confirmation prompts**: Replaced all `click.confirm()` calls with `prompt_toolkit.shortcuts.confirm()` for consistent validation across the codebase
+- **Better input validation**: All y/n prompts now use prompt_toolkit's built-in validation that only accepts y/n keypresses
+- **Removed custom validator**: Eliminated `YesNoValidator` class in favor of prompt_toolkit's native confirm function
+
+### Improved
+- **User experience**: Confirmation prompts now require explicit y/n input (no default ambiguity)
+- **Code consistency**: All interactive prompts use prompt_toolkit ecosystem throughout
+
+### Technical Details
+- Updated confirmation prompts in: `delete`, `done`, `config`, `init`, and `create-repo` commands
+- All confirmations now use `prompt_toolkit.shortcuts.confirm()` instead of `click.confirm()`
+
 ## [0.3.1] - 2025-10-22
 
 ### Fixed

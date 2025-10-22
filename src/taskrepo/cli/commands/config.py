@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.shortcuts import confirm
 
 from taskrepo.core.config import Config
 
@@ -184,8 +185,7 @@ def config_cmd(ctx):
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
-                confirm = prompt("Are you sure? (yes/no): ")
-                if confirm.strip().lower() in {"yes", "y"}:
+                if confirm("Are you sure? This will reset ALL configuration to defaults"):
                     config._data = Config.DEFAULT_CONFIG.copy()
                     config.save()
                     click.secho("✓ Configuration reset to defaults", fg="green")

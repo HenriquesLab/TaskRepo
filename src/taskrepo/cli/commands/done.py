@@ -1,6 +1,7 @@
 """Done command for marking tasks as completed."""
 
 import click
+from prompt_toolkit.shortcuts import confirm
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
@@ -84,7 +85,7 @@ def done(ctx, task_id, repo):
             click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
         # Prompt for confirmation
-        if click.confirm(f"\nMark all {count} {subtask_word} as completed too?", default=True):
+        if confirm(f"Mark all {count} {subtask_word} as completed too?"):
             # Mark all subtasks as completed
             completed_count = 0
             for subtask, subtask_repo in subtasks_with_repos:
