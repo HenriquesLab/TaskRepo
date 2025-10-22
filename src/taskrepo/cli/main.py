@@ -94,7 +94,7 @@ def create_repo(ctx, name, github, org, interactive):
 
         # Get repository name
         if not name:
-            name = prompts.prompt_repo_name()
+            name = prompts.prompt_repo_name(manager=manager)
             if not name:
                 click.echo("Cancelled.")
                 ctx.exit(0)

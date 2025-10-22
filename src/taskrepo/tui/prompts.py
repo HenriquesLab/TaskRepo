@@ -1,13 +1,16 @@
 """Interactive TUI prompts using prompt_toolkit."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import FuzzyWordCompleter, WordCompleter
 from prompt_toolkit.validation import ValidationError, Validator
 
 from taskrepo.core.repository import Repository
+
+if TYPE_CHECKING:
+    from taskrepo.core.repository import RepositoryManager
 
 
 class PriorityValidator(Validator):
@@ -346,8 +349,11 @@ def prompt_status(default: str = "pending") -> str:
         return default
 
 
-def prompt_repo_name() -> Optional[str]:
+def prompt_repo_name(manager: Optional["RepositoryManager"] = None) -> Optional[str]:
     """Prompt user for repository name.
+
+    Args:
+        manager: RepositoryManager instance for validating repository doesn't already exist
 
     Returns:
         Repository name or None if cancelled
@@ -363,6 +369,11 @@ def prompt_repo_name() -> Optional[str]:
                 raise ValidationError(
                     message="Repository name can only contain letters, numbers, hyphens, and underscores"
                 )
+            # Check if repository already exists
+            if manager:
+                repo_path = manager.parent_dir / f"tasks-{text}"
+                if repo_path.exists():
+                    raise ValidationError(message=f"Repository 'tasks-{text}' already exists")
 
     try:
         name = prompt("Repository name: ", validator=RepoNameValidator())
