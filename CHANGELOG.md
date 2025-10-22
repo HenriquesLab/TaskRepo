@@ -5,6 +5,42 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-10-22
+
+### Added
+- **Consistent task IDs across all views**: Display IDs (1, 2, 3...) now remain consistent whether you use filtered or unfiltered views
+  - Task 14 in `tsk list` is also task 14 in `tsk list --repo foo` or `tsk list --priority H`
+  - IDs are resolved through a cache mapping display IDs to task UUIDs
+- **Completed task IDs**: `tsk done` (without arguments) shows completed tasks with IDs continuing after active tasks
+  - If active tasks are 1-15, completed tasks show as 16, 17, 18, etc.
+  - Provides clear visual separation between active and completed tasks
+- **Task file path in info command**: `tsk info` now displays the full file path to the task markdown file
+- **Automatic cache refresh**: All mutating commands automatically update the ID cache in the background
+  - `tsk add`, `tsk edit`, `tsk done`, `tsk del` now update cache while showing focused repo views
+  - Newly added tasks get display IDs immediately without needing to run `tsk list`
+- **Task list after sync**: `tsk sync` now displays all active tasks after syncing, updating the cache
+- **Consolidated configuration**: All config and cache files now organized under `~/.TaskRepo/`
+  - `~/.TaskRepo/config` (main configuration)
+  - `~/.TaskRepo/id_cache.json` (display ID mappings)
+  - `~/.TaskRepo/update_check_cache.json` (update check timestamps)
+  - Automatic migration from legacy file locations
+
+### Improved
+- **User experience**: No need to manually run `tsk list` after adding/editing tasks to get consistent IDs
+- **Command output**: Mutating commands show focused repository view while keeping cache fresh
+- **File organization**: Cleaner home directory with all TaskRepo files in one location
+- **ID consistency**: All commands use the same ID resolution mechanism through `find_task_by_title_or_id()`
+
+### Technical Details
+- New module: `src/taskrepo/utils/paths.py` for centralized path management
+- New function: `get_cache_size()` in id_mapping.py to get active task count
+- New function: `get_display_id_from_uuid()` for reverse ID lookup
+- Cache management: `save_id_cache()` called by commands to maintain consistency
+- Display logic: `display_tasks_table()` supports `id_offset` parameter for completed tasks
+- Legacy file migration: Automatic one-time migration on first run
+- Updated all mutating commands to refresh cache before displaying filtered views
+- Comprehensive documentation updates in CLAUDE.md
+
 ## [0.4.0] - 2025-10-22
 
 ### Added
