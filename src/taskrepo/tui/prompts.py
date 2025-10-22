@@ -359,21 +359,37 @@ def prompt_repo_name(manager: Optional["RepositoryManager"] = None) -> Optional[
         Repository name or None if cancelled
     """
 
+    # Create validation function that captures manager in closure
+    def validate_repo_name(text: str) -> bool:
+        if not text:
+            return False
+        # Check for invalid characters
+        if not text.replace("-", "").replace("_", "").isalnum():
+            return False
+        # Check if repository already exists
+        if manager:
+            repo_path = manager.parent_dir / f"tasks-{text}"
+            if repo_path.exists():
+                return False
+        return True
+
+    def get_error_message(text: str) -> str:
+        if not text:
+            return "Repository name cannot be empty"
+        if not text.replace("-", "").replace("_", "").isalnum():
+            return "Repository name can only contain letters, numbers, hyphens, and underscores"
+        if manager:
+            repo_path = manager.parent_dir / f"tasks-{text}"
+            if repo_path.exists():
+                return f"Repository 'tasks-{text}' already exists"
+        return ""
+
+    # Use Validator.from_callable with custom error message logic
     class RepoNameValidator(Validator):
         def validate(self, document):
             text = document.text.strip()
-            if not text:
-                raise ValidationError(message="Repository name cannot be empty")
-            # Check for invalid characters
-            if not text.replace("-", "").replace("_", "").isalnum():
-                raise ValidationError(
-                    message="Repository name can only contain letters, numbers, hyphens, and underscores"
-                )
-            # Check if repository already exists
-            if manager:
-                repo_path = manager.parent_dir / f"tasks-{text}"
-                if repo_path.exists():
-                    raise ValidationError(message=f"Repository 'tasks-{text}' already exists")
+            if not validate_repo_name(text):
+                raise ValidationError(message=get_error_message(text))
 
     try:
         name = prompt("Repository name: ", validator=RepoNameValidator())
