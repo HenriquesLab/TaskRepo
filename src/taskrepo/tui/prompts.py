@@ -379,7 +379,7 @@ def prompt_github_enabled() -> bool:
         True if GitHub should be enabled, False otherwise
     """
     try:
-        return confirm("Create GitHub repository?")
+        return confirm("Create GitHub repository?", default=False)
     except (KeyboardInterrupt, EOFError):
         return False
 
