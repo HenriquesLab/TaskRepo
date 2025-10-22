@@ -89,6 +89,8 @@ def create_repo(ctx, name, github, org, interactive):
     # Interactive mode
     if interactive:
         click.echo("Creating a new task repository...\n")
+        click.echo("Note: Repository names will be automatically prefixed with 'tasks-'")
+        click.echo("(e.g., entering 'work' will create 'tasks-work')\n")
 
         # Get repository name
         if not name:
