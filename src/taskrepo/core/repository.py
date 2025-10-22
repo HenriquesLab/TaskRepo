@@ -586,6 +586,53 @@ class RepositoryManager:
 
         return Repository(repo_path)
 
+    def get_github_orgs(self) -> list[str]:
+        """Get list of GitHub organizations from existing repositories.
+
+        Extracts organization/owner names from GitHub remote URLs
+        in existing repositories.
+
+        Returns:
+            Sorted list of unique GitHub organizations
+        """
+        import re
+
+        orgs = set()
+        repos = self.discover_repositories()
+
+        for repo in repos:
+            try:
+                # Check if repo has a remote
+                if not repo.git_repo.remotes:
+                    continue
+
+                # Get origin remote (most common)
+                remote = repo.git_repo.remote("origin")
+                remote_url = next(remote.urls, None)
+
+                if not remote_url:
+                    continue
+
+                # Parse GitHub URL to extract org
+                # HTTPS format: https://github.com/org/repo.git
+                # SSH format: git@github.com:org/repo.git
+                github_patterns = [
+                    r"https://github\.com/([^/]+)/",
+                    r"git@github\.com:([^/]+)/",
+                ]
+
+                for pattern in github_patterns:
+                    match = re.match(pattern, remote_url)
+                    if match:
+                        orgs.add(match.group(1))
+                        break
+
+            except Exception:
+                # Skip repos without remotes or with invalid URLs
+                continue
+
+        return sorted(orgs)
+
     def create_repository(
         self,
         name: str,

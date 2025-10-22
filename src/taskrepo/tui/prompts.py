@@ -395,20 +395,25 @@ def prompt_github_enabled() -> bool:
         return False
 
 
-def prompt_github_org(default: Optional[str] = None) -> Optional[str]:
+def prompt_github_org(default: Optional[str] = None, existing_orgs: list[str] | None = None) -> Optional[str]:
     """Prompt user for GitHub organization/owner.
 
     Args:
         default: Default organization/owner to suggest
+        existing_orgs: List of existing organizations for autocomplete
 
     Returns:
         Organization/owner name or None if cancelled
     """
+    if existing_orgs is None:
+        existing_orgs = []
 
     class OrgValidator(Validator):
         def validate(self, document):
             if not document.text.strip():
                 raise ValidationError(message="Organization/owner cannot be empty")
+
+    completer = FuzzyWordCompleter(existing_orgs) if existing_orgs else None
 
     try:
         prompt_text = "GitHub organization/owner"
@@ -416,7 +421,13 @@ def prompt_github_org(default: Optional[str] = None) -> Optional[str]:
             prompt_text += f" [{default}]"
         prompt_text += ": "
 
-        org = prompt(prompt_text, validator=OrgValidator(), default=default or "")
+        org = prompt(
+            prompt_text,
+            validator=OrgValidator(),
+            default=default or "",
+            completer=completer,
+            complete_while_typing=True,
+        )
         return org.strip() if org.strip() else (default if default else None)
     except (KeyboardInterrupt, EOFError):
         return None

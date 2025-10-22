@@ -110,7 +110,9 @@ def create_repo(ctx, name, github, org, interactive):
             if not org:
                 # Use default from config if available
                 default_org = config.default_github_org
-                org = prompts.prompt_github_org(default=default_org)
+                # Get existing orgs from repos for autocomplete
+                existing_orgs = manager.get_github_orgs()
+                org = prompts.prompt_github_org(default=default_org, existing_orgs=existing_orgs)
                 if not org:
                     click.echo("Cancelled.")
                     ctx.exit(0)
