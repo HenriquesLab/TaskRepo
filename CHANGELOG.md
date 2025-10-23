@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-10-23
+
 ### Added
 
 - **Completed task archiving**: Completed tasks are now automatically moved to `tasks/done/` subfolder
@@ -26,6 +28,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Displays "Completed" date (when task was marked done) instead of countdown
   - Archive-focused header: "# Completed Tasks Archive"
   - Relative links to task files within done/ folder
+
+- **GitHub repository existence check**: `tsk create-repo` now checks if repo already exists on GitHub before creation
+  - Interactive mode: Warns if repo exists and offers to clone it or create local-only
+  - Non-interactive mode: Shows error and exits if repo already exists
+  - Prevents accidentally overwriting existing GitHub repositories
+  - New `check_github_repo_exists()` helper function in utils/github.py
+
+- **Clone existing GitHub repositories**: New `clone_github_repo()` function enables cloning
+  - Integrated into create-repo workflow when repo exists
+  - Preserves git history when cloning existing repos
+  - Helpful error messages if clone fails with fallback options
+
+- **Repository name preview toolbar**: Real-time preview of full repo name as you type
+  - Shows "Will create: tasks-{name}" dynamically in bottom toolbar
+  - Helps users understand the final directory name before creation
+  - Displays helpful message when input is empty
+
+- **Comma-separated autocomplete**: Autocomplete now works after commas in assignees and tags
+  - New `CommaDelimitedCompleter` class for intelligent comma-aware completion
+  - Fuzzy matching for each segment after a comma
+  - Example: typing "@alice,@bob" shows suggestions after the comma
+  - Works for both assignees and tags fields
 
 ### Changed
 
