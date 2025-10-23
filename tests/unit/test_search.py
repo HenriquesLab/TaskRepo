@@ -121,7 +121,7 @@ def search_tasks(tasks, query):
 
 def test_search_in_title(config, manager, test_repo):
     """Test searching for text in task title."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
     results = search_tasks(tasks, "Tatiana")
 
     # Should find 2 tasks (1 pending, 1 completed)
@@ -138,7 +138,7 @@ def test_search_in_title(config, manager, test_repo):
 
 def test_search_in_description(config, manager, test_repo):
     """Test searching for text in task description."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
     results = search_tasks(tasks, "critical")
 
     assert len(results) == 1
@@ -147,7 +147,7 @@ def test_search_in_description(config, manager, test_repo):
 
 def test_search_in_project(config, manager, test_repo):
     """Test searching for text in project name."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
     results = search_tasks(tasks, "henriques")
 
     assert len(results) == 1
@@ -156,7 +156,7 @@ def test_search_in_project(config, manager, test_repo):
 
 def test_search_in_tags(config, manager, test_repo):
     """Test searching for text in tags."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
     results = search_tasks(tasks, "admin")
 
     # Should find task with "admin" tag
@@ -166,7 +166,7 @@ def test_search_in_tags(config, manager, test_repo):
 
 def test_search_case_insensitive(config, manager, test_repo):
     """Test that search is case-insensitive."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
 
     # Try uppercase
     results_upper = search_tasks(tasks, "TATIANA")
@@ -187,7 +187,7 @@ def test_search_case_insensitive(config, manager, test_repo):
 
 def test_search_no_results(config, manager, test_repo):
     """Test search with no matching tasks."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
     results = search_tasks(tasks, "nonexistent")
 
     assert len(results) == 0
@@ -195,7 +195,7 @@ def test_search_no_results(config, manager, test_repo):
 
 def test_search_with_filters(config, manager, test_repo):
     """Test search combined with filters."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
 
     # Search for "bug" with high priority
     results = search_tasks(tasks, "bug")
@@ -216,7 +216,7 @@ def test_search_with_filters(config, manager, test_repo):
 
 def test_search_multiple_fields(config, manager, test_repo):
     """Test that a single task can be found via multiple fields."""
-    tasks = manager.list_all_tasks()
+    tasks = manager.list_all_tasks(include_completed=True)
 
     # The "Follow up Tatiana" task should match on title, description, and project
     results_title = search_tasks(tasks, "Tatiana")
