@@ -125,8 +125,8 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
                 value = (2, "")
             elif preferred_assignee and preferred_assignee in task.assignees:
                 # Task has the preferred assignee - sort first
-                first_assignee = task.assignees[0].lower()
-                value = (0, first_assignee)
+                # Use preferred assignee for secondary sort to treat all matching tasks equally
+                value = (0, preferred_assignee.lower())
             else:
                 # Task has assignees but not the preferred one (or no preference)
                 first_assignee = task.assignees[0].lower()

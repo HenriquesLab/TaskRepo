@@ -41,6 +41,7 @@ class Repository:
         self.name = dir_name[6:]  # Remove 'tasks-' prefix
         self.path = path
         self.tasks_dir = path / "tasks"
+        self.done_dir = self.tasks_dir / "done"
 
         # Initialize or open git repository
         try:
@@ -51,28 +52,44 @@ class Repository:
 
         # Ensure tasks directory exists
         self.tasks_dir.mkdir(exist_ok=True)
+        # Ensure done subdirectory exists inside tasks
+        self.done_dir.mkdir(exist_ok=True)
 
-    def list_tasks(self) -> list[Task]:
+    def list_tasks(self, include_completed: bool = False) -> list[Task]:
         """List all tasks in this repository.
+
+        Args:
+            include_completed: If True, also load tasks from done/ folder
 
         Returns:
             List of Task objects
         """
         tasks = []
-        if not self.tasks_dir.exists():
-            return tasks
 
-        for task_file in sorted(self.tasks_dir.glob("task-*.md")):
-            try:
-                task = Task.load(task_file, repo=self.name)
-                tasks.append(task)
-            except Exception as e:
-                print(f"Warning: Failed to load task {task_file}: {e}")
+        # Always load from tasks/ directory
+        if self.tasks_dir.exists():
+            for task_file in sorted(self.tasks_dir.glob("task-*.md")):
+                try:
+                    task = Task.load(task_file, repo=self.name)
+                    tasks.append(task)
+                except Exception as e:
+                    print(f"Warning: Failed to load task {task_file}: {e}")
+
+        # Optionally load from done/ directory
+        if include_completed and self.done_dir.exists():
+            for task_file in sorted(self.done_dir.glob("task-*.md")):
+                try:
+                    task = Task.load(task_file, repo=self.name)
+                    tasks.append(task)
+                except Exception as e:
+                    print(f"Warning: Failed to load task {task_file}: {e}")
 
         return tasks
 
     def get_task(self, task_id: str) -> Optional[Task]:
         """Get a specific task by ID.
+
+        Searches both tasks/ and done/ directories.
 
         Args:
             task_id: Task ID
@@ -80,14 +97,24 @@ class Repository:
         Returns:
             Task object or None if not found
         """
+        # Try tasks/ directory first
         task_file = self.tasks_dir / f"task-{task_id}.md"
-        if not task_file.exists():
-            return None
+        if task_file.exists():
+            return Task.load(task_file, repo=self.name)
 
-        return Task.load(task_file, repo=self.name)
+        # Try done/ directory
+        task_file = self.done_dir / f"task-{task_id}.md"
+        if task_file.exists():
+            return Task.load(task_file, repo=self.name)
+
+        return None
 
     def save_task(self, task: Task) -> Path:
         """Save a task to this repository.
+
+        Automatically moves task between tasks/ and tasks/done/ folders based on status.
+        - Completed tasks → tasks/done/ folder
+        - Non-completed tasks → tasks/ folder
 
         Args:
             task: Task object to save
@@ -96,10 +123,31 @@ class Repository:
             Path to the saved task file
         """
         task.repo = self.name
-        return task.save(self.path)
+
+        # Determine target folder based on status
+        if task.status == "completed":
+            target_folder = "tasks/done"
+        else:
+            target_folder = "tasks"
+
+        # Check if file exists in the other folder and delete it
+        old_tasks_file = self.tasks_dir / f"task-{task.id}.md"
+        old_done_file = self.done_dir / f"task-{task.id}.md"
+
+        if task.status == "completed" and old_tasks_file.exists():
+            # Moving from tasks/ to tasks/done/
+            old_tasks_file.unlink()
+        elif task.status != "completed" and old_done_file.exists():
+            # Moving from tasks/done/ back to tasks/
+            old_done_file.unlink()
+
+        # Save to target folder
+        return task.save(self.path, subfolder=target_folder)
 
     def delete_task(self, task_id: str) -> bool:
         """Delete a task from this repository.
+
+        Searches both tasks/ and tasks/done/ directories.
 
         Args:
             task_id: Task ID to delete
@@ -107,12 +155,19 @@ class Repository:
         Returns:
             True if task was deleted, False if not found
         """
+        # Try tasks/ directory first
         task_file = self.tasks_dir / f"task-{task_id}.md"
-        if not task_file.exists():
-            return False
+        if task_file.exists():
+            task_file.unlink()
+            return True
 
-        task_file.unlink()
-        return True
+        # Try tasks/done/ directory
+        task_file = self.done_dir / f"task-{task_id}.md"
+        if task_file.exists():
+            task_file.unlink()
+            return True
+
+        return False
 
     def next_task_id(self) -> str:
         """Generate the next available task ID using UUID4.
@@ -533,6 +588,96 @@ class Repository:
 
         return readme_path
 
+    def generate_done_readme(self, config) -> Path:
+        """Generate tasks/done/README.md with completed tasks archive table.
+
+        Args:
+            config: Config object for sorting preferences
+
+        Returns:
+            Path to the generated README file
+        """
+        from datetime import datetime
+
+        from taskrepo.utils.sorting import sort_tasks
+
+        # Get completed tasks only
+        all_tasks = self.list_tasks(include_completed=True)
+        completed_tasks = [task for task in all_tasks if task.status == "completed"]
+
+        # Sort using config sort order
+        sorted_completed = sort_tasks(completed_tasks, config)
+
+        # Build README content
+        lines = [
+            "# Completed Tasks Archive",
+            "",
+        ]
+
+        if not sorted_completed:
+            lines.append("No completed tasks.")
+        else:
+            # Table header - Note: "Completed" column instead of "Countdown"
+            lines.extend(
+                [
+                    "| ID | Title | Status | Priority | Assignees | Project | Tags | Links | Due | Completed |",
+                    "|---|---|---|---|---|---|---|---|---|---|",
+                ]
+            )
+
+            # Table rows
+            for task in sorted_completed:
+                # Format fields with emojis
+                task_id = f"[{task.id[:8]}...](task-{task.id}.md)"  # Relative link
+
+                title = task.title
+
+                # Status with emoji (always completed)
+                status = "✅ completed"
+
+                # Priority with emoji
+                priority_emoji = {"H": "🔴", "M": "🟡", "L": "🟢"}.get(task.priority, "")
+                priority = f"{priority_emoji} {task.priority}"
+
+                assignees = ", ".join(task.assignees) if task.assignees else "-"
+                project = task.project if task.project else "-"
+                tags = ", ".join(task.tags) if task.tags else "-"
+
+                # Format links
+                if task.links:
+                    # Create markdown links with 🔗 emoji
+                    link_items = [f"[🔗]({link})" for link in task.links]
+                    links = " ".join(link_items)
+                else:
+                    links = "-"
+
+                due_date = task.due.strftime("%Y-%m-%d") if task.due else "-"
+
+                # Completed date (modified timestamp)
+                completed_date = task.modified.strftime("%Y-%m-%d")
+
+                # Escape pipe characters
+                title = title.replace("|", "\\|")
+                project = project.replace("|", "\\|")
+
+                lines.append(
+                    f"| {task_id} | {title} | {status} | {priority} | {assignees} | {project} | {tags} | {links} | {due_date} | {completed_date} |"
+                )
+
+        # Add footer
+        lines.extend(
+            [
+                "",
+                f"_Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_",
+            ]
+        )
+
+        # Write README to done/ folder
+        readme_path = self.done_dir / "README.md"
+        readme_path.write_text("\n".join(lines) + "\n")
+
+        return readme_path
+
     def __str__(self) -> str:
         """String representation of the repository."""
         task_count = len(self.list_tasks())
@@ -694,6 +839,10 @@ _Last updated: {self._get_timestamp()}_
         gitkeep_path = repo.tasks_dir / ".gitkeep"
         gitkeep_path.touch()
 
+        # Create .gitkeep in done directory
+        done_gitkeep_path = repo.done_dir / ".gitkeep"
+        done_gitkeep_path.touch()
+
         # Commit initial structure
         repo.git_repo.git.add(A=True)
         repo.git_repo.index.commit("Initial commit: Repository structure")
@@ -729,15 +878,18 @@ _Last updated: {self._get_timestamp()}_
 
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def list_all_tasks(self) -> list[Task]:
+    def list_all_tasks(self, include_completed: bool = False) -> list[Task]:
         """List all tasks across all repositories.
+
+        Args:
+            include_completed: If True, also load tasks from done/ folders
 
         Returns:
             List of Task objects
         """
         tasks = []
         for repo in self.discover_repositories():
-            tasks.extend(repo.list_tasks())
+            tasks.extend(repo.list_tasks(include_completed=include_completed))
         return tasks
 
     def get_all_assignees(self) -> list[str]:

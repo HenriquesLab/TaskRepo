@@ -187,6 +187,7 @@ def display_tasks_table(
     tree_view: bool = True,
     save_cache: bool = True,
     id_offset: int = 0,
+    show_completed_date: bool = False,
 ) -> None:
     """Display tasks in a Rich formatted table.
 
@@ -197,6 +198,7 @@ def display_tasks_table(
         tree_view: Whether to show hierarchical tree structure (default: True)
         save_cache: Whether to save the ID mapping cache (default: True, set to False for filtered views)
         id_offset: Offset to add to display IDs (used for showing completed tasks after active tasks)
+        show_completed_date: If True, show "Completed" date instead of "Countdown" (for completed tasks)
     """
     if not tasks:
         return
@@ -240,7 +242,11 @@ def display_tasks_table(
     table.add_column("Assignees", style="green")
     table.add_column("Tags", style="dim")
     table.add_column("Due", style="red")
-    table.add_column("Countdown", no_wrap=True)
+    # Change column name based on show_completed_date flag
+    if show_completed_date:
+        table.add_column("Completed", no_wrap=True)
+    else:
+        table.add_column("Countdown", no_wrap=True)
 
     for idx, (task, depth, is_last, ancestors) in enumerate(
         zip(
@@ -289,12 +295,20 @@ def display_tasks_table(
         # Format due date
         due_str = task.due.strftime("%Y-%m-%d") if task.due else "-"
 
-        # Format countdown
-        if task.due:
-            countdown_text, countdown_color = get_countdown_text(task.due)
-            countdown_str = f"[{countdown_color}]{countdown_text}[/{countdown_color}]"
+        # Format countdown or completed date
+        if show_completed_date:
+            # Show when task was completed (modified date)
+            if task.status == "completed":
+                countdown_str = task.modified.strftime("%Y-%m-%d")
+            else:
+                countdown_str = "-"
         else:
-            countdown_str = "-"
+            # Show countdown (existing logic)
+            if task.due:
+                countdown_text, countdown_color = get_countdown_text(task.due)
+                countdown_str = f"[{countdown_color}]{countdown_text}[/{countdown_color}]"
+            else:
+                countdown_str = "-"
 
         # Format links indicator
         links_indicator = "🔗" if task.links else "-"

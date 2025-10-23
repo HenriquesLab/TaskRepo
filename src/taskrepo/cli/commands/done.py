@@ -25,14 +25,15 @@ def done(ctx, task_id, repo):
     # If no task_id provided, list completed tasks
     if task_id is None:
         # Get tasks from specified repo or all repos
+        # Load from both tasks/ and tasks/done/ folders
         if repo:
             repository = manager.get_repository(repo)
             if not repository:
                 click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
                 ctx.exit(1)
-            tasks = repository.list_tasks()
+            tasks = repository.list_tasks(include_completed=True)
         else:
-            tasks = manager.list_all_tasks()
+            tasks = manager.list_all_tasks(include_completed=True)
 
         # Filter to only completed tasks
         completed_tasks = [t for t in tasks if t.status == "completed"]
@@ -52,6 +53,7 @@ def done(ctx, task_id, repo):
             title=f"Completed Tasks ({len(completed_tasks)} found)",
             save_cache=False,
             id_offset=active_task_count,
+            show_completed_date=True,
         )
         return
 

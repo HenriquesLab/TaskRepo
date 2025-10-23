@@ -27,14 +27,15 @@ def search(ctx, query, repo, project, status, priority, assignee, tag, show_all)
     manager = RepositoryManager(config.parent_dir)
 
     # Get tasks from specified repo or all repos
+    # Always load from both tasks/ and tasks/done/ folders for search
     if repo:
         repository = manager.get_repository(repo)
         if not repository:
             click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
             ctx.exit(1)
-        tasks = repository.list_tasks()
+        tasks = repository.list_tasks(include_completed=True)
     else:
-        tasks = manager.list_all_tasks()
+        tasks = manager.list_all_tasks(include_completed=True)
 
     # Perform case-insensitive search across multiple fields
     query_lower = query.lower()

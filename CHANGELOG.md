@@ -5,6 +5,44 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Completed task archiving**: Completed tasks are now automatically moved to `tasks/done/` subfolder
+  - Tasks with `status=completed` are moved from `tasks/` to `tasks/done/` immediately when saved
+  - Tasks moved back to `tasks/` when status changes from completed to another state
+  - `tsk list` hides completed tasks by default (use `--all` to show them)
+  - `tsk list --status completed` automatically loads from done/ folder
+  - `tsk search` searches both active and completed tasks (use `--all` to include in results)
+  - `tsk done` (no args) lists completed tasks from done/ folder
+  - Git sync properly commits and pushes done/ folder changes
+  - New repositories automatically create `tasks/done/.gitkeep` file
+  - Backward compatible: existing completed tasks in `tasks/` continue to work
+
+- **Done folder README**: Automatically generates `tasks/done/README.md` with completed tasks archive
+  - Updated during sync command (alongside main README)
+  - Shows completed tasks in table format with tree structure
+  - Displays "Completed" date (when task was marked done) instead of countdown
+  - Archive-focused header: "# Completed Tasks Archive"
+  - Relative links to task files within done/ folder
+
+### Changed
+
+- **Week-based countdown display**: Countdown now shows "2 days", "1 week", "3 months" instead of abbreviated format
+- **Week-based clustering for sorting**: Due date clustering now uses one bucket per week instead of mixed time periods
+  - Provides more granular grouping while maintaining priority-based sorting within buckets
+- **`tsk done` display**: Now shows "Completed" date instead of countdown for completed tasks
+  - Displays when each task was marked as completed (using modified timestamp)
+  - Makes it easier to track when work was actually finished
+
+### Fixed
+
+- **Assignee sorting with preferred user**: Fixed bug where tasks with preferred assignee not listed first would be sorted incorrectly
+  - When using `sort_by: ["assignee:@username"]`, tasks with the preferred assignee are now treated equally regardless of assignee position
+  - Previously, tasks with preferred assignee as second or later in the list would sort before tasks with preferred assignee first
+  - Now all tasks with the preferred assignee sort together, with secondary sort fields (due, priority) taking precedence
+
 ## [0.7.0] - 2025-10-23
 
 ### Added

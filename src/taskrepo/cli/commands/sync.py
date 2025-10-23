@@ -61,10 +61,16 @@ def sync(ctx, repo, push):
                 repository.generate_readme(config)
                 click.secho("  ✓ README updated", fg="green")
 
+                # Generate done README with completed tasks
+                click.echo("  • Updating done archive README...")
+                repository.generate_done_readme(config)
+                click.secho("  ✓ Done README updated", fg="green")
+
                 # Check if README was changed and commit it
                 if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
-                    git_repo.index.commit("Auto-update: README with active tasks")
+                    git_repo.git.add("tasks/done/README.md")
+                    git_repo.index.commit("Auto-update: README with active and completed tasks")
                     click.secho("  ✓ README changes committed", fg="green")
 
                 # Push changes
@@ -80,10 +86,16 @@ def sync(ctx, repo, push):
                 repository.generate_readme(config)
                 click.secho("  ✓ README updated", fg="green")
 
+                # Generate done README with completed tasks
+                click.echo("  • Updating done archive README...")
+                repository.generate_done_readme(config)
+                click.secho("  ✓ Done README updated", fg="green")
+
                 # Check if README was changed and commit it
                 if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
-                    git_repo.index.commit("Auto-update: README with active tasks")
+                    git_repo.git.add("tasks/done/README.md")
+                    git_repo.index.commit("Auto-update: README with active and completed tasks")
                     click.secho("  ✓ README changes committed", fg="green")
 
         except GitCommandError as e:

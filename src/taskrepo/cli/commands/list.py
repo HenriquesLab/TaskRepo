@@ -20,21 +20,26 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, show_all):
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
+    # Determine if we need to load completed tasks
+    # Load from done/ folder if --all is set OR if filtering by completed status
+    include_completed = show_all or (status == "completed")
+
     # Get tasks
     if repo:
         repository = manager.get_repository(repo)
         if not repository:
             click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
             ctx.exit(1)
-        tasks = repository.list_tasks()
+        tasks = repository.list_tasks(include_completed=include_completed)
     else:
-        tasks = manager.list_all_tasks()
+        tasks = manager.list_all_tasks(include_completed=include_completed)
 
     # Track if any filters are applied
     has_filters = bool(repo or project or status or priority or assignee or tag or show_all)
 
     # Apply filters
-    if not show_all:
+    # If --all is not set and status is not explicitly "completed", filter out completed tasks
+    if not show_all and status != "completed":
         tasks = [t for t in tasks if t.status != "completed"]
 
     if project:

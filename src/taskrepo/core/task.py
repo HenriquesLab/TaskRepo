@@ -192,11 +192,12 @@ class Task:
         # Combine frontmatter and description
         return f"---\n{frontmatter}---\n\n{self.description}"
 
-    def save(self, base_path: Path) -> Path:
+    def save(self, base_path: Path, subfolder: str = "tasks") -> Path:
         """Save task to a markdown file.
 
         Args:
-            base_path: Base directory containing tasks/ subdirectory
+            base_path: Base directory containing tasks/ or done/ subdirectory
+            subfolder: Subdirectory name ("tasks" or "done"), defaults to "tasks"
 
         Returns:
             Path to the saved task file
@@ -204,12 +205,12 @@ class Task:
         # Update modification time
         self.modified = datetime.now()
 
-        # Ensure tasks directory exists
-        tasks_dir = base_path / "tasks"
-        tasks_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure target directory exists
+        target_dir = base_path / subfolder
+        target_dir.mkdir(parents=True, exist_ok=True)
 
         # Save task
-        task_file = tasks_dir / f"task-{self.id}.md"
+        task_file = target_dir / f"task-{self.id}.md"
         task_file.write_text(self.to_markdown())
 
         return task_file
