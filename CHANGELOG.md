@@ -5,6 +5,75 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-10-23
+
+### Added
+
+- **Direct field editing in `tsk edit`**: Edit task fields without opening an editor
+  - Single-value fields: `--title`, `--status`, `--priority`, `--project`, `--due`, `--description`, `--parent`
+  - List fields - Replace: `--assignees`, `--tags`, `--links`, `--depends`
+  - List fields - Add: `--add-assignees`, `--add-tags`, `--add-links`, `--add-depends`
+  - List fields - Remove: `--remove-assignees`, `--remove-tags`, `--remove-links`, `--remove-depends`
+  - Control: `--edit` flag to open editor after applying changes, `--editor-command` to specify editor
+  - Change summary displays old → new values for all modifications
+  - Smart defaults: auto-adds `@` prefix to assignees, validates URLs for links
+  - Examples:
+    ```bash
+    tsk edit 1 --priority L                        # Quick priority change
+    tsk edit 1 --status in_progress --add-tags urgent
+    tsk edit 1 --assignees @alice,@bob             # Replace assignees
+    tsk edit 1 --add-assignees @charlie            # Add assignee
+    tsk edit 1 --remove-tags old-tag               # Remove tag
+    tsk edit 1 --priority H --edit                 # Change then review
+    ```
+
+- **CLI command organization**: Commands now grouped by task lifecycle workflow
+  - Section 1: Setup & Configuration (init, create-repo, config, config-show)
+  - Section 2: Viewing Tasks (list, search, info)
+  - Section 3: Managing Tasks (add, edit, ext, done, del)
+  - Section 4: Repository Operations (repos, sync)
+  - Custom `OrderedGroup` class for organized help display
+  - More intuitive for new users following natural workflow
+
+- **Due date clustering**: Group tasks by countdown time buckets instead of exact timestamps
+  - New `cluster_due_dates` config option (default: false)
+  - Time buckets: overdue (2+ weeks, 1 week, 1-6 days), today, tomorrow, 2-3 days, 4-13 days, 1-3 weeks, 1 month, 2+ months, no due date
+  - When enabled, secondary sort fields (like priority) take precedence within each bucket
+  - Interactive toggle in `tsk config` (option 10) with detailed explanation
+  - Detailed clustering explanation shown in sorting configuration (option 9)
+  - Useful for users with many tasks with similar due dates
+  - Example: With `sort_by=['due', 'priority']` and clustering enabled, all "today" tasks are grouped together and sorted by priority
+  - Displayed in `config-show` command
+
+### Fixed
+
+- **Task display**: Removed duplicate `@@` prefix in task string representation
+  - Before: `@@paxcalpt`
+  - After: `@paxcalpt`
+  - Fixed in `Task.__str__()` method by removing redundant `@` prefix
+
+- **Pre-commit hooks**: Updated ruff version to v0.14.1 to match CI
+  - Prevents formatting inconsistencies between local pre-commit and CI
+  - Also updated pre-commit-hooks (v5.0.0 → v6.0.0) and conventional-pre-commit (v3.6.0 → v4.3.0)
+
+- **Type annotations**: Fixed `any` → `Any` in sorting.py for proper type hints
+
+### Changed
+
+- **Config display**: Added clustering status to `tsk config-show` and sorting configuration
+- **Editor option naming**: Renamed `--editor` to `--editor-command` in `tsk edit` for clarity (backward compatible with existing usage)
+
+### Technical Details
+
+- Added helper functions in `edit.py`: `parse_list_field()`, `add_to_list_field()`, `remove_from_list_field()`, `show_change_summary()`
+- Added `get_due_date_cluster()` in `utils/sorting.py` to convert dates to bucket numbers
+- Enhanced sorting logic to respect clustering when enabled for 'due' field
+- Added `cluster_due_dates` property to Config class with getter/setter
+- Custom `OrderedGroup` class in `cli/main.py` using Click's `formatter.section()`
+- Updated `config.py` command to include clustering toggle and explanation
+- Enhanced documentation in CLAUDE.md with clustering examples
+- All 87 tests passing
+
 ## [0.6.2] - 2025-10-23
 
 ### Added
