@@ -163,6 +163,15 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
             is_desc, value = get_field_value(task, field)
             key_parts.append(value)
 
+            # When clustering is enabled and this is the 'due' field,
+            # add exact timestamp as tiebreaker within same bucket
+            if config.cluster_due_dates and field.lstrip("-") == "due":
+                exact_timestamp = task.due.timestamp() if task.due else float("inf")
+                # If descending, negate the timestamp
+                if field.startswith("-"):
+                    exact_timestamp = -exact_timestamp if exact_timestamp != float("inf") else float("-inf")
+                key_parts.append(exact_timestamp)
+
         return tuple(key_parts)
 
     # Sort all tasks using the configured sort order
