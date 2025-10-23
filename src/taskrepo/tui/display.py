@@ -7,7 +7,9 @@ from rich.table import Table
 
 from taskrepo.core.config import Config
 from taskrepo.core.task import Task
+from taskrepo.utils.display_constants import PRIORITY_COLORS, STATUS_COLORS
 from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
+from taskrepo.utils.sorting import sort_tasks
 
 
 def get_countdown_text(due_date: datetime) -> tuple[str, str]:
@@ -204,60 +206,14 @@ def display_tasks_table(
     if not tasks:
         return
 
-    # Sort tasks using configured sort order
-    def get_field_value(task, field):
-        """Get sortable value for a field."""
-        # Handle descending order prefix
-        descending = field.startswith("-")
-        field_name = field[1:] if descending else field
-
-        if field_name == "priority":
-            priority_order = {"H": 0, "M": 1, "L": 2}
-            value = priority_order.get(task.priority, 3)
-        elif field_name == "due":
-            value = task.due.timestamp() if task.due else float("inf")
-        elif field_name == "created":
-            value = task.created.timestamp()
-        elif field_name == "modified":
-            value = task.modified.timestamp()
-        elif field_name == "status":
-            status_order = {"pending": 0, "in_progress": 1, "completed": 2, "cancelled": 3}
-            value = status_order.get(task.status, 4)
-        elif field_name == "title":
-            value = task.title.lower()
-        elif field_name == "project":
-            value = (task.project or "").lower()
-        else:
-            value = ""
-
-        # Reverse for descending order
-        if descending:
-            if isinstance(value, (int, float)):
-                value = -value if value != float("inf") else float("-inf")
-            elif isinstance(value, str):
-                # For strings, we'll reverse the sort later
-                return (True, value)  # Flag as descending
-
-        return (False, value) if not descending else (True, value)
-
-    def get_sort_key(task):
-        sort_fields = config.sort_by
-        key_parts = []
-
-        for field in sort_fields:
-            is_desc, value = get_field_value(task, field)
-            key_parts.append(value)
-
-        return tuple(key_parts)
-
     # Sort tasks (for tree view, only sort top-level tasks)
     if tree_view:
         # Separate top-level and subtasks
         top_level = [t for t in tasks if not t.parent]
         subtasks = [t for t in tasks if t.parent]
 
-        # Sort top-level tasks
-        sorted_top_level = sorted(top_level, key=get_sort_key)
+        # Sort top-level tasks using centralized sorting utility
+        sorted_top_level = sort_tasks(top_level, config)
 
         # Build tree structure
         tree_items = build_task_tree(sorted_top_level + subtasks)
@@ -265,8 +221,8 @@ def display_tasks_table(
         # Extract tasks in tree order for display
         display_tasks = [item[0] for item in tree_items]
     else:
-        # Flat view: sort all tasks normally
-        sorted_tasks = sorted(tasks, key=get_sort_key)
+        # Flat view: sort all tasks normally using centralized sorting utility
+        sorted_tasks = sort_tasks(tasks, config)
         display_tasks = sorted_tasks
         tree_items = [(task, 0, False, []) for task in sorted_tasks]
 
@@ -322,16 +278,11 @@ def display_tasks_table(
             formatted_title = task.title
 
         # Format priority with color
-        priority_color = {"H": "red", "M": "yellow", "L": "green"}.get(task.priority, "white")
+        priority_color = PRIORITY_COLORS.get(task.priority, "white")
         priority_str = f"[{priority_color}]{task.priority}[/{priority_color}]"
 
         # Format status with color
-        status_color = {
-            "pending": "yellow",
-            "in_progress": "blue",
-            "completed": "green",
-            "cancelled": "red",
-        }.get(task.status, "white")
+        status_color = STATUS_COLORS.get(task.status, "white")
         status_str = f"[{status_color}]{task.status}[/{status_color}]"
 
         # Format assignees

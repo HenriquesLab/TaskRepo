@@ -1,43 +1,53 @@
 """Extend command for extending task due dates."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import click
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
-from taskrepo.utils.duration import format_duration, parse_duration
+from taskrepo.utils.date_parser import format_date_input, parse_date_or_duration
 from taskrepo.utils.helpers import find_task_by_title_or_id
 
 
 @click.command(name="ext")
 @click.argument("task_ids")
-@click.argument("duration")
+@click.argument("date_or_duration")
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
 @click.pass_context
-def ext(ctx, task_ids, duration, repo):
-    """Extend task due dates by a specified duration.
+def ext(ctx, task_ids, date_or_duration, repo):
+    """Set task due dates to a specific date or extend by a duration.
 
-    Supports extending multiple tasks at once using comma-separated IDs.
-    If a task has no due date, sets it to today + duration.
+    Supports multiple tasks at once using comma-separated IDs.
 
-    TASK_IDS: Task ID(s) to extend (comma-separated for multiple, e.g., "4,5,6")
+    For durations (1w, 2d, etc.): Extends from current due date, or sets from today if no due date.
+    For dates (tomorrow, 2025-10-30, etc.): Sets due date to the specified date directly.
 
-    DURATION: Time to extend (e.g., "1w" for 1 week, "2d" for 2 days, "3m" for 3 months, "1y" for 1 year)
+    TASK_IDS: Task ID(s) to modify (comma-separated for multiple, e.g., "4,5,6")
+
+    DATE_OR_DURATION: Target date or duration
+        Durations: 1w, 2d, 3m, 1y
+        Keywords: today, tomorrow, yesterday, next week, next month, next year
+        ISO dates: 2025-10-30
+        Natural dates: "Oct 30", "October 30 2025"
 
     Examples:
-        tsk ext 4 1w          # Extend task 4 by 1 week
+        tsk ext 4 tomorrow    # Set task 4 due date to tomorrow
+
+        tsk ext 4 1w          # Extend task 4 by 1 week from current due date
 
         tsk ext 4,5,6 2d      # Extend tasks 4, 5, and 6 by 2 days
 
-        tsk ext 10 3m --repo work  # Extend task 10 by 3 months in work repo
+        tsk ext 10 "next week"  # Set task 10 due date to next week
+
+        tsk ext 7 2025-11-15  # Set task 7 due date to Nov 15, 2025
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
-    # Parse duration
+    # Parse date or duration
     try:
-        duration_delta = parse_duration(duration)
+        parsed_value, is_absolute_date = parse_date_or_duration(date_or_duration)
     except ValueError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         ctx.exit(1)
@@ -89,15 +99,20 @@ def ext(ctx, task_ids, duration, repo):
         old_due = task.due
         old_due_str = old_due.strftime("%Y-%m-%d") if old_due else "None"
 
-        # Calculate new due date
-        if task.due:
-            # Extend existing due date
-            new_due = task.due + duration_delta
-            was_set = False
+        # Calculate new due date based on whether it's absolute or relative
+        if is_absolute_date:
+            # Set to specific date (ignoring current due date)
+            assert isinstance(parsed_value, datetime)
+            new_due = parsed_value
         else:
-            # Set new due date from today
-            new_due = datetime.now() + duration_delta
-            was_set = True
+            # Extend by duration
+            assert isinstance(parsed_value, timedelta)
+            if task.due:
+                # Extend from existing due date
+                new_due = task.due + parsed_value
+            else:
+                # Extend from today
+                new_due = datetime.now() + parsed_value
 
         # Update task
         task.due = new_due
@@ -107,11 +122,16 @@ def ext(ctx, task_ids, duration, repo):
         repository.save_task(task)
 
         # Display result
-        click.secho(f"✓ Extended task: [{task.id[:8]}...] {task.title}", fg="green")
+        action_verb = "Set" if is_absolute_date else "Extended"
+        click.secho(f"✓ {action_verb} task: [{task.id[:8]}...] {task.title}", fg="green")
         click.echo(f"  Old due date: {old_due_str}")
-        click.echo(f"  Extension: {format_duration(duration)}")
-        new_due_suffix = " (set from today)" if was_set else ""
-        click.echo(f"  New due date: {new_due.strftime('%Y-%m-%d')}{new_due_suffix}")
+
+        if is_absolute_date:
+            click.echo(f"  Set to: {format_date_input(date_or_duration, parsed_value, is_absolute_date)}")
+        else:
+            click.echo(f"  Extension: {format_date_input(date_or_duration, parsed_value, is_absolute_date)}")
+
+        click.echo(f"  New due date: {new_due.strftime('%Y-%m-%d')}")
         click.echo()
 
         # Track for summary table
@@ -122,11 +142,12 @@ def ext(ctx, task_ids, duration, repo):
     if extended_tasks:
         total = len(task_id_list)
         success = len(extended_tasks)
+        action_verb = "Updated" if is_absolute_date else "Extended"
 
         if failed_count > 0:
-            click.secho(f"Extended {success} of {total} tasks ({failed_count} failed).", fg="yellow")
+            click.secho(f"{action_verb} {success} of {total} tasks ({failed_count} failed).", fg="yellow")
         else:
-            click.secho(f"Extended {success} task{'s' if success != 1 else ''} successfully.", fg="green")
+            click.secho(f"{action_verb} {success} task{'s' if success != 1 else ''} successfully.", fg="green")
 
         click.echo()
 
@@ -134,5 +155,5 @@ def ext(ctx, task_ids, duration, repo):
         display_tasks_table(extended_tasks, config, save_cache=False)
     else:
         # All failed
-        click.secho(f"Failed to extend any tasks ({failed_count} errors).", fg="red")
+        click.secho(f"Failed to update any tasks ({failed_count} errors).", fg="red")
         ctx.exit(1)

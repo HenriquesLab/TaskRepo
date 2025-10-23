@@ -21,6 +21,7 @@ class Config:
         "default_status": "pending",
         "default_assignee": None,
         "default_github_org": None,
+        "default_repo": None,
         "default_editor": None,
         "sort_by": ["due", "priority"],
     }
@@ -178,6 +179,28 @@ class Config:
         self.save()
 
     @property
+    def default_repo(self) -> Optional[str]:
+        """Get default repository name.
+
+        Returns:
+            Default repository name (without 'tasks-' prefix) or None
+        """
+        return self._data.get("default_repo")
+
+    @default_repo.setter
+    def default_repo(self, value: Optional[str]):
+        """Set default repository name.
+
+        Args:
+            value: Default repository name (without 'tasks-' prefix) or None
+        """
+        if value is not None and value.strip():
+            self._data["default_repo"] = value.strip()
+        else:
+            self._data["default_repo"] = None
+        self.save()
+
+    @property
     def default_editor(self) -> Optional[str]:
         """Get default text editor.
 
@@ -218,6 +241,8 @@ class Config:
         Raises:
             ValueError: If invalid sort field provided
         """
+        import re
+
         valid_fields = {
             "priority",
             "due",
@@ -226,6 +251,7 @@ class Config:
             "status",
             "title",
             "project",
+            "assignee",
             "-priority",
             "-due",
             "-created",
@@ -233,11 +259,25 @@ class Config:
             "-status",
             "-title",
             "-project",
+            "-assignee",
         }
 
+        # Pattern for assignee with preferred user: assignee:@username or -assignee:@username
+        assignee_pattern = re.compile(r"^-?assignee(?::@\w+)?$")
+
         for field in value:
-            if field not in valid_fields:
-                raise ValueError(f"Invalid sort field: {field}. Must be one of {valid_fields}")
+            # Check if it's a standard valid field
+            if field in valid_fields:
+                continue
+
+            # Check if it matches the assignee:@username pattern
+            if assignee_pattern.match(field):
+                continue
+
+            # If we get here, it's an invalid field
+            raise ValueError(
+                f"Invalid sort field: {field}. " f"Must be one of {valid_fields} or match pattern 'assignee:@username'"
+            )
 
         self._data["sort_by"] = value
         self.save()

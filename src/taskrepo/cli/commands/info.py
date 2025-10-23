@@ -7,7 +7,8 @@ from rich.table import Table
 from rich.text import Text
 
 from taskrepo.core.repository import RepositoryManager
-from taskrepo.utils.helpers import find_task_by_title_or_id
+from taskrepo.utils.display_constants import PRIORITY_COLORS, PRIORITY_EMOJIS, STATUS_COLORS, STATUS_EMOJIS
+from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_result
 
 
 @click.command()
@@ -24,30 +25,7 @@ def info(ctx, task_id, repo):
 
     # Try to find task by ID or title
     result = find_task_by_title_or_id(manager, task_id, repo)
-
-    if result[0] is None:
-        # Not found
-        click.secho(f"Error: No task found matching '{task_id}'", fg="red", err=True)
-        ctx.exit(1)
-    elif isinstance(result[0], list):
-        # Multiple matches - ask user to select
-        click.echo(f"\nMultiple tasks found matching '{task_id}':")
-        for idx, (t, r) in enumerate(zip(result[0], result[1], strict=False), start=1):
-            click.echo(f"  {idx}. [{t.id[:8]}...] {t.title} (repo: {r.name})")
-
-        try:
-            choice = click.prompt("\nSelect task number", type=int)
-            if choice < 1 or choice > len(result[0]):
-                click.secho("Invalid selection", fg="red", err=True)
-                ctx.exit(1)
-            task = result[0][choice - 1]
-            repository = result[1][choice - 1]
-        except (ValueError, click.Abort):
-            click.echo("Cancelled.")
-            ctx.exit(0)
-    else:
-        # Single match found
-        task, repository = result
+    task, repository = select_task_from_result(ctx, result, task_id)
 
     # Create Rich console
     console = Console()
@@ -76,23 +54,13 @@ def info(ctx, task_id, repo):
     details_table.add_row("File Path", f"[dim]{task_file_path}[/dim]")
 
     # Status
-    status_color = {
-        "pending": "yellow",
-        "in_progress": "blue",
-        "completed": "green",
-        "cancelled": "red",
-    }.get(task.status, "white")
-    status_emoji = {
-        "pending": "⏳",
-        "in_progress": "🔄",
-        "completed": "✅",
-        "cancelled": "❌",
-    }.get(task.status, "")
+    status_color = STATUS_COLORS.get(task.status, "white")
+    status_emoji = STATUS_EMOJIS.get(task.status, "")
     details_table.add_row("Status", f"[{status_color}]{status_emoji} {task.status}[/{status_color}]")
 
     # Priority
-    priority_color = {"H": "red", "M": "yellow", "L": "green"}.get(task.priority, "white")
-    priority_emoji = {"H": "🔴", "M": "🟡", "L": "🟢"}.get(task.priority, "")
+    priority_color = PRIORITY_COLORS.get(task.priority, "white")
+    priority_emoji = PRIORITY_EMOJIS.get(task.priority, "")
     details_table.add_row("Priority", f"[{priority_color}]{priority_emoji} {task.priority}[/{priority_color}]")
 
     # Project
@@ -161,12 +129,7 @@ def info(ctx, task_id, repo):
     if subtasks:
         for i, subtask in enumerate(subtasks):
             label = "Subtasks" if i == 0 else ""
-            status_icon = {
-                "pending": "⏳",
-                "in_progress": "🔄",
-                "completed": "✅",
-                "cancelled": "❌",
-            }.get(subtask.status, "")
+            status_icon = STATUS_EMOJIS.get(subtask.status, "")
             details_table.add_row(label, f"[cyan]{status_icon} {subtask.id[:8]}... - {subtask.title}[/cyan]")
 
     console.print(details_table)

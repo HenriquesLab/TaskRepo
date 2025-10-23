@@ -5,6 +5,44 @@ All notable changes to TaskRepo will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2025-10-23
+
+### Added
+- **Assignee sorting**: Sort tasks by assignee with optional preferred user
+  - Basic mode: `assignee` - Sort alphabetically by first assignee
+  - Preferred mode: `assignee:@username` - Show specified user's tasks first
+  - Descending mode: `-assignee:@username` - Reverse priority order
+  - Example config: `sort_by: ["assignee:@paxcalpt", "due", "priority"]`
+  - Tasks with preferred assignee appear first, then others alphabetically, then unassigned
+- **Personalized config examples**: `tsk config` now shows examples using your default_assignee if set
+  - Makes configuration more intuitive and immediately useful
+
+### Fixed
+- **ID consistency bug**: Fixed display ID mismatch between `tsk add` and `tsk list`
+  - Previously: `tsk add` showed ID 17, but `tsk list` showed same task as ID 12
+  - Root cause: `add` command saved unsorted tasks to cache, `list` saved sorted tasks
+  - Solution: Centralized sorting logic in `utils/sorting.py`, both commands now use same sorted order
+  - IDs are now consistent across all commands
+
+### Improved
+- **Code organization**: Major refactoring to reduce duplication and improve maintainability
+  - Added `utils/display_constants.py` for centralized status/priority display mappings
+  - Added `utils/helpers.py::select_task_from_result()` to centralize task selection logic
+  - Added `utils/helpers.py::update_cache_and_display_repo()` to standardize cache updates
+  - Removed ~140 lines of duplicate code across 5 command files
+  - All commands (add, done, edit, delete, info) now use shared helper functions
+  - Future updates to task selection or caching now require changes in only 1 place
+
+### Technical Details
+- New utility: `src/taskrepo/utils/sorting.py` - Centralized `sort_tasks()` function
+- New utility: `src/taskrepo/utils/display_constants.py` - Display constants for status/priority
+- Enhanced: `src/taskrepo/utils/helpers.py` - Added `select_task_from_result()` and `update_cache_and_display_repo()`
+- Updated: `src/taskrepo/core/config.py` - Validates `assignee`, `assignee:@username`, and descending variants
+- Updated: `src/taskrepo/cli/commands/config.py` - Shows personalized examples with default_assignee
+- Updated: All command files to use centralized helpers (add, done, edit, delete)
+- Added: 13 new unit tests for sorting functionality in `tests/unit/test_sorting.py`
+- Total tests: 87 passing
+
 ## [0.6.1] - 2025-10-22
 
 ### Changed
