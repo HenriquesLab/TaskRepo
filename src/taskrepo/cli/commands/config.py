@@ -17,25 +17,31 @@ def config_cmd(ctx):
     config = ctx.obj["config"]
 
     while True:
-        click.echo("\n" + "=" * 50)
-        click.echo("TaskRepo Configuration")
-        click.echo("=" * 50)
+        click.echo()
+        click.secho("=" * 50, fg="cyan")
+        click.secho("TaskRepo Configuration", fg="cyan", bold=True)
+        click.secho("=" * 50, fg="cyan")
         click.echo("\nWhat would you like to configure?\n")
         click.echo("  1. View current settings")
         click.echo("  2. Change parent directory")
+        click.echo()
+        click.secho("  Task Defaults:", fg="yellow", bold=True)
         click.echo("  3. Set default priority")
         click.echo("  4. Set default status")
         click.echo("  5. Set default assignee")
-        click.echo("  6. Configure task sorting")
-        click.echo("  7. Set default editor")
-        click.echo("  8. Set default GitHub organization")
-        click.echo("  9. Reset to defaults")
-        click.echo(" 10. Exit")
+        click.echo("  6. Set default repository")
+        click.echo()
+        click.secho("  Other Settings:", fg="yellow", bold=True)
+        click.echo("  7. Set default GitHub organization")
+        click.echo("  8. Set default editor")
+        click.echo("  9. Configure task sorting")
+        click.echo("\n 10. Reset to defaults")
+        click.echo(" 11. Exit")
 
         try:
             choice = prompt(
-                "\nEnter choice (1-10): ",
-                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
+                "\nEnter choice (1-11): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
             )
         except (KeyboardInterrupt, EOFError):
             click.echo("\nExiting configuration.")
@@ -45,22 +51,29 @@ def config_cmd(ctx):
 
         if choice == "1":
             # View current settings
-            click.echo("\n" + "-" * 50)
-            click.echo("Current Configuration:")
-            click.echo("-" * 50)
+            click.echo()
+            click.secho("-" * 50, fg="green")
+            click.secho("Current Configuration:", fg="green", bold=True)
+            click.secho("-" * 50, fg="green")
             click.echo(f"  Config file: {config.config_path}")
             click.echo(f"  Parent directory: {config.parent_dir}")
+            click.echo()
+            click.secho("  Task Defaults:", fg="yellow", bold=True)
             click.echo(f"  Default priority: {config.default_priority}")
             click.echo(f"  Default status: {config.default_status}")
             default_assignee = config.default_assignee if config.default_assignee else "(none)"
             click.echo(f"  Default assignee: {default_assignee}")
+            default_repo = config.default_repo if config.default_repo else "(none)"
+            click.echo(f"  Default repository: {default_repo}")
+            click.echo()
+            click.secho("  Other Settings:", fg="yellow", bold=True)
             default_github_org = config.default_github_org if config.default_github_org else "(none)"
             click.echo(f"  Default GitHub org: {default_github_org}")
             default_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
             click.echo(f"  Default editor: {default_editor}")
             sort_by = ", ".join(config.sort_by)
             click.echo(f"  Sort by: {sort_by}")
-            click.echo("-" * 50)
+            click.secho("-" * 50, fg="green")
 
         elif choice == "2":
             # Change parent directory
@@ -129,26 +142,71 @@ def config_cmd(ctx):
                 click.echo("\nCancelled.")
 
         elif choice == "6":
-            # Configure task sorting
-            click.echo(f"\nCurrent sort order: {', '.join(config.sort_by)}")
-            click.echo("\nAvailable sort fields:")
-            click.echo("  priority, due, created, modified, status, title, project")
-            click.echo("  (prefix with '-' for descending order, e.g., '-created')")
+            # Set default repository
+            from taskrepo.core.repository import RepositoryManager
+
+            manager = RepositoryManager(config.parent_dir)
+            repositories = manager.discover_repositories()
+
+            if not repositories:
+                click.secho("✗ No repositories found. Create one first with: tsk create-repo", fg="red")
+            else:
+                current_repo = config.default_repo if config.default_repo else "(none)"
+                click.echo(f"\nCurrent default repository: {current_repo}")
+                click.echo("\nAvailable repositories:")
+                for idx, repo in enumerate(repositories, start=1):
+                    marker = " (current default)" if repo.name == config.default_repo else ""
+                    click.echo(f"  {idx}. {repo.name}{marker}")
+
+                try:
+                    user_input = prompt(
+                        "\nEnter number or repository name (or leave empty to clear default): ",
+                        completer=WordCompleter([r.name for r in repositories]),
+                    )
+                    user_input = user_input.strip()
+
+                    if user_input:
+                        # Check if input is a number
+                        selected_repo = None
+                        try:
+                            choice_num = int(user_input)
+                            if 1 <= choice_num <= len(repositories):
+                                selected_repo = repositories[choice_num - 1].name
+                            else:
+                                click.secho(f"✗ Invalid number. Please enter 1-{len(repositories)}", fg="red")
+                        except ValueError:
+                            # Not a number, treat as repository name
+                            if manager.get_repository(user_input):
+                                selected_repo = user_input
+                            else:
+                                click.secho(f"✗ Repository '{user_input}' not found", fg="red")
+
+                        if selected_repo:
+                            config.default_repo = selected_repo
+                            click.secho(f"✓ Default repository updated to: {selected_repo}", fg="green")
+                    else:
+                        config.default_repo = None
+                        click.secho("✓ Default repository cleared", fg="green")
+                except (KeyboardInterrupt, EOFError):
+                    click.echo("\nCancelled.")
+
+        elif choice == "7":
+            # Set default GitHub organization
+            current_org = config.default_github_org if config.default_github_org else "(none)"
+            click.echo(f"\nCurrent default GitHub organization: {current_org}")
             try:
-                new_sort = prompt("Enter sort fields (comma-separated): ")
-                if new_sort.strip():
-                    sort_fields = [f.strip() for f in new_sort.split(",") if f.strip()]
-                    try:
-                        config.sort_by = sort_fields
-                        click.secho(f"✓ Sort order updated to: {', '.join(sort_fields)}", fg="green")
-                    except ValueError as e:
-                        click.secho(f"✗ Error: {e}", fg="red")
+                new_org = prompt("Enter default GitHub organization/owner (or leave empty for none): ")
+                new_org = new_org.strip()
+                if new_org:
+                    config.default_github_org = new_org
+                    click.secho(f"✓ Default GitHub organization updated to: {new_org}", fg="green")
                 else:
-                    click.echo("Cancelled.")
+                    config.default_github_org = None
+                    click.secho("✓ Default GitHub organization cleared", fg="green")
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "7":
+        elif choice == "8":
             # Set default editor
             current_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
             click.echo(f"\nCurrent default editor: {current_editor}")
@@ -165,23 +223,38 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "8":
-            # Set default GitHub organization
-            current_org = config.default_github_org if config.default_github_org else "(none)"
-            click.echo(f"\nCurrent default GitHub organization: {current_org}")
+        elif choice == "9":
+            # Configure task sorting
+            click.echo(f"\nCurrent sort order: {', '.join(config.sort_by)}")
+            click.echo("\nAvailable sort fields:")
+            click.echo("  priority, due, created, modified, status, title, project, assignee")
+            click.echo("\nSpecial assignee syntax:")
+            click.echo("  assignee                - Sort by first assignee alphabetically")
+            click.echo("  assignee:@username      - Tasks for @username appear first")
+            click.echo("  -assignee:@username     - Tasks NOT for @username appear first")
+            click.echo("\nGeneral options:")
+            click.echo("  Prefix with '-' for descending order (e.g., '-created', '-priority')")
+
+            # Use default assignee in examples if set, otherwise use generic placeholder
+            example_assignee = config.default_assignee if config.default_assignee else "@username"
+            click.echo("\nExamples:")
+            click.echo(f"  assignee:{example_assignee},due,priority    - Your tasks first, then by due date")
+            click.echo("  due,priority,-created              - Due date, priority, newest first")
             try:
-                new_org = prompt("Enter default GitHub organization/owner (or leave empty for none): ")
-                new_org = new_org.strip()
-                if new_org:
-                    config.default_github_org = new_org
-                    click.secho(f"✓ Default GitHub organization updated to: {new_org}", fg="green")
+                new_sort = prompt("Enter sort fields (comma-separated): ")
+                if new_sort.strip():
+                    sort_fields = [f.strip() for f in new_sort.split(",") if f.strip()]
+                    try:
+                        config.sort_by = sort_fields
+                        click.secho(f"✓ Sort order updated to: {', '.join(sort_fields)}", fg="green")
+                    except ValueError as e:
+                        click.secho(f"✗ Error: {e}", fg="red")
                 else:
-                    config.default_github_org = None
-                    click.secho("✓ Default GitHub organization cleared", fg="green")
+                    click.echo("Cancelled.")
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "9":
+        elif choice == "10":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -194,10 +267,10 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "10":
+        elif choice == "11":
             # Exit
             click.echo("\nExiting configuration.")
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-10.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-11.", fg="red")

@@ -40,11 +40,12 @@ class DateValidator(Validator):
             ) from e
 
 
-def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
+def prompt_repository(repositories: list[Repository], default: Optional[str] = None) -> Optional[Repository]:
     """Prompt user to select a repository.
 
     Args:
         repositories: List of available repositories
+        default: Default repository name (without 'tasks-' prefix) to preselect
 
     Returns:
         Selected Repository or None if cancelled
@@ -58,10 +59,19 @@ def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
         print(f"Repository: {repositories[0].name}")
         return repositories[0]
 
+    # Find the default repository's index
+    default_index = None
+    if default:
+        for idx, repo in enumerate(repositories):
+            if repo.name == default:
+                default_index = idx
+                break
+
     # Display numbered list of repositories
     print("\nAvailable repositories:")
     for idx, repo in enumerate(repositories, start=1):
-        print(f"  {idx}. {repo.name}")
+        marker = " (default)" if default and repo.name == default else ""
+        print(f"  {idx}. {repo.name}{marker}")
     print()
 
     # Validator for numeric choice
@@ -69,6 +79,9 @@ def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
         def validate(self, document):
             text = document.text.strip()
             if not text:
+                # Allow empty if there's a default
+                if default_index is not None:
+                    return
                 raise ValidationError(message="Please enter a number")
             try:
                 choice = int(text)
@@ -78,10 +91,21 @@ def prompt_repository(repositories: list[Repository]) -> Optional[Repository]:
                 raise ValidationError(message="Please enter a valid number") from e
 
     try:
-        choice_str = prompt(
-            f"Select repository [1-{len(repositories)}]: ",
-            validator=ChoiceValidator(),
-        )
+        # If there's a default, show it in the prompt and allow pressing Enter
+        if default_index is not None:
+            choice_str = prompt(
+                f"Select repository [1-{len(repositories)}] or press Enter for default: ",
+                validator=ChoiceValidator(),
+                default="",
+            )
+            if not choice_str.strip():
+                return repositories[default_index]
+        else:
+            choice_str = prompt(
+                f"Select repository [1-{len(repositories)}]: ",
+                validator=ChoiceValidator(),
+            )
+
         choice = int(choice_str.strip())
         return repositories[choice - 1]
     except (KeyboardInterrupt, EOFError):

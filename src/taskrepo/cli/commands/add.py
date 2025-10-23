@@ -5,8 +5,7 @@ import click
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.core.task import Task
 from taskrepo.tui import prompts
-from taskrepo.tui.display import display_tasks_table
-from taskrepo.utils.id_mapping import save_id_cache
+from taskrepo.utils.helpers import update_cache_and_display_repo
 
 
 @click.command()
@@ -35,7 +34,7 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
 
         # Select repository
         if not repo:
-            selected_repo = prompts.prompt_repository(repositories)
+            selected_repo = prompts.prompt_repository(repositories, default=config.default_repo)
             if not selected_repo:
                 click.echo("Cancelled.")
                 ctx.exit(0)
@@ -208,14 +207,5 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
     click.echo(f"  File: {task_file}")
     click.echo()
 
-    # Update cache with ALL active tasks across all repos
-    all_tasks_all_repos = manager.list_all_tasks()
-    active_tasks_all = [t for t in all_tasks_all_repos if t.status != "completed"]
-    save_id_cache(active_tasks_all)
-
-    # Display tasks from this repository only (filtered view)
-    repo_tasks = selected_repo.list_tasks()
-    active_tasks_repo = [t for t in repo_tasks if t.status != "completed"]
-
-    if active_tasks_repo:
-        display_tasks_table(active_tasks_repo, config, save_cache=False)
+    # Update cache and display repository tasks
+    update_cache_and_display_repo(manager, selected_repo, config)
