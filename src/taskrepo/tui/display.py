@@ -20,6 +20,7 @@ def get_countdown_text(due_date: datetime) -> tuple[str, str]:
 
     Returns:
         Tuple of (countdown_text, color_name)
+        Format: "2 days", "1 week", "3 months"
     """
     now = datetime.now()
     diff = due_date - now
@@ -30,49 +31,43 @@ def get_countdown_text(due_date: datetime) -> tuple[str, str]:
     if days < 0:
         abs_days = abs(days)
         if abs_days == 1:
-            text = "overdue by 1 day"
+            text = "overdue 1 day"
         elif abs_days < 7:
-            text = f"overdue by {abs_days} days"
-        elif abs_days < 14:
-            text = "overdue by 1 week"
+            text = f"overdue {abs_days} days"
         else:
             weeks = abs_days // 7
-            text = f"overdue by {weeks} weeks"
+            if weeks == 1:
+                text = "overdue 1 week"
+            else:
+                text = f"overdue {weeks} weeks"
         return text, "red"
 
     # Handle today
     if days == 0:
         if hours < 1:
-            text = "due now"
+            text = "now"
         else:
             text = "today"
         return text, "yellow"
 
-    # Handle tomorrow
-    if days == 1:
-        return "tomorrow", "yellow"
-
-    # Handle within 3 days (urgent)
-    if days <= 3:
+    # Handle 1-6 days (urgent)
+    if days < 7:
+        if days == 1:
+            return "1 day", "yellow"
         return f"{days} days", "yellow"
 
-    # Handle within 2 weeks
-    if days < 14:
-        return f"{days} days", "green"
-
-    # Handle weeks
-    weeks = days // 7
-    if weeks == 1:
-        return "1 week", "green"
-    elif weeks < 4:
+    # Handle weeks (up to ~4 weeks)
+    if days < 28:
+        weeks = days // 7
+        if weeks == 1:
+            return "1 week", "green"
         return f"{weeks} weeks", "green"
 
     # Handle months
     months = days // 30
     if months == 1:
         return "1 month", "green"
-    else:
-        return f"{months} months", "green"
+    return f"{months} months", "green"
 
 
 def build_task_tree(tasks: list[Task]) -> list[tuple[Task, int, bool, list[bool]]]:

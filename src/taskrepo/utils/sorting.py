@@ -10,29 +10,34 @@ from taskrepo.core.task import Task
 def get_due_date_cluster(due_date: Optional[datetime]) -> int:
     """Convert due date to cluster bucket for sorting.
 
-    Clusters tasks by countdown buckets (today, this week, this month, etc.)
-    instead of exact timestamps. This allows grouping similar due dates together
-    when sorting, so secondary sort fields (like priority) take precedence within each bucket.
+    Clusters tasks by week-based countdown buckets instead of exact timestamps.
+    This allows grouping similar due dates together when sorting, so secondary
+    sort fields (like priority) take precedence within each bucket.
 
     Args:
         due_date: Task due date
 
     Returns:
         Bucket number for clustering:
-        -2: Overdue by 2+ weeks
+        Overdue (negative):
+        -8: Overdue by 8+ weeks
+        -7: Overdue by 7 weeks
+        ... (one bucket per week)
         -1: Overdue by 1 week
          0: Overdue by 1-6 days
+
+        Future (positive):
          1: Today
-         2: Tomorrow
-         3: 2-3 days
-         4: 4-13 days
-         5: 1-3 weeks (7-27 days)
-         6: 1 month (28-59 days)
-         7: 2+ months (60+ days)
-         9: No due date
+         2: 1-6 days
+         3: 1 week (7-13 days)
+         4: 2 weeks (14-20 days)
+         5: 3 weeks (21-27 days)
+         ... (one bucket per week)
+         20: 18+ weeks (126+ days)
+         99: No due date
     """
     if not due_date:
-        return 9  # No due date - sort last
+        return 99  # No due date - sort last
 
     now = datetime.now()
     diff = due_date - now
@@ -43,25 +48,22 @@ def get_due_date_cluster(due_date: Optional[datetime]) -> int:
         abs_days = abs(days)
         if abs_days < 7:
             return 0  # Overdue by 1-6 days
-        elif abs_days < 14:
-            return -1  # Overdue by 1 week
         else:
-            return -2  # Overdue by 2+ weeks
+            # One bucket per week, capped at 8 weeks
+            weeks = min(abs_days // 7, 8)
+            return -weeks  # -1 to -8
 
-    # Future
+    # Today
     if days == 0:
-        return 1  # Today
-    if days == 1:
-        return 2  # Tomorrow
-    if days <= 3:
-        return 3  # 2-3 days
-    if days < 14:
-        return 4  # 4-13 days
-    if days < 28:
-        return 5  # 1-3 weeks
-    if days < 60:
-        return 6  # 1 month
-    return 7  # 2+ months
+        return 1
+
+    # Future: 1-6 days
+    if days < 7:
+        return 2  # 1-6 days
+
+    # Future: weeks (one bucket per week, capped at 18 weeks)
+    weeks = min(days // 7, 18)
+    return 2 + weeks  # 3 (1w) through 20 (18w+)
 
 
 def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
@@ -158,19 +160,26 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
         """
         sort_fields = config.sort_by
         key_parts = []
+        due_field_info = None  # Track due field for timestamp tiebreaker
 
         for field in sort_fields:
             is_desc, value = get_field_value(task, field)
             key_parts.append(value)
 
             # When clustering is enabled and this is the 'due' field,
-            # add exact timestamp as tiebreaker within same bucket
+            # remember it for adding timestamp tiebreaker at the end
             if config.cluster_due_dates and field.lstrip("-") == "due":
-                exact_timestamp = task.due.timestamp() if task.due else float("inf")
-                # If descending, negate the timestamp
-                if field.startswith("-"):
-                    exact_timestamp = -exact_timestamp if exact_timestamp != float("inf") else float("-inf")
-                key_parts.append(exact_timestamp)
+                due_field_info = (field, task.due)
+
+        # Add exact timestamp as final tiebreaker when clustering is enabled
+        # This ensures all configured sort fields take precedence within same bucket
+        if due_field_info:
+            field, due_date = due_field_info
+            exact_timestamp = due_date.timestamp() if due_date else float("inf")
+            # If descending, negate the timestamp
+            if field.startswith("-"):
+                exact_timestamp = -exact_timestamp if exact_timestamp != float("inf") else float("-inf")
+            key_parts.append(exact_timestamp)
 
         return tuple(key_parts)
 
