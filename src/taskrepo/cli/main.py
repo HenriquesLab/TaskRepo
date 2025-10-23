@@ -18,7 +18,54 @@ from taskrepo.core.config import Config
 from taskrepo.utils.update_checker import check_and_notify_updates
 
 
-@click.group()
+class OrderedGroup(click.Group):
+    """Custom Click Group that displays commands in sections."""
+
+    def format_commands(self, ctx, formatter):
+        """Format commands with section headers."""
+        # Define command sections in desired order
+        sections = [
+            (
+                "Setup & Configuration",
+                ["init", "create-repo", "config", "config-show"],
+            ),
+            (
+                "Viewing Tasks",
+                ["list", "search", "info"],
+            ),
+            (
+                "Managing Tasks",
+                ["add", "edit", "ext", "done", "del"],
+            ),
+            (
+                "Repository Operations",
+                ["repos", "sync"],
+            ),
+        ]
+
+        # Build command dict
+        commands = {}
+        for subcommand in self.list_commands(ctx):
+            cmd = self.get_command(ctx, subcommand)
+            if cmd is None:
+                continue
+            if cmd.hidden:
+                continue
+            commands[subcommand] = cmd
+
+        # Format each section
+        for section_name, command_names in sections:
+            # Filter commands that exist in this section
+            section_commands = [(name, commands[name]) for name in command_names if name in commands]
+
+            if section_commands:
+                with formatter.section(section_name):
+                    formatter.write_dl(
+                        [(name, cmd.get_short_help_str(limit=formatter.width)) for name, cmd in section_commands]
+                    )
+
+
+@click.group(cls=OrderedGroup)
 @click.version_option(version=__version__, prog_name="taskrepo")
 @click.pass_context
 def cli(ctx):
