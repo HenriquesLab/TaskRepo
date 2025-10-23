@@ -35,13 +35,14 @@ def config_cmd(ctx):
         click.echo("  7. Set default GitHub organization")
         click.echo("  8. Set default editor")
         click.echo("  9. Configure task sorting")
-        click.echo("\n 10. Reset to defaults")
-        click.echo(" 11. Exit")
+        click.echo(" 10. Toggle due date clustering")
+        click.echo("\n 11. Reset to defaults")
+        click.echo(" 12. Exit")
 
         try:
             choice = prompt(
-                "\nEnter choice (1-11): ",
-                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
+                "\nEnter choice (1-12): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]),
             )
         except (KeyboardInterrupt, EOFError):
             click.echo("\nExiting configuration.")
@@ -73,6 +74,8 @@ def config_cmd(ctx):
             click.echo(f"  Default editor: {default_editor}")
             sort_by = ", ".join(config.sort_by)
             click.echo(f"  Sort by: {sort_by}")
+            cluster_status = "enabled" if config.cluster_due_dates else "disabled"
+            click.echo(f"  Due date clustering: {cluster_status}")
             click.secho("-" * 50, fg="green")
 
         elif choice == "2":
@@ -255,6 +258,28 @@ def config_cmd(ctx):
                 click.echo("\nCancelled.")
 
         elif choice == "10":
+            # Toggle due date clustering
+            current_status = "enabled" if config.cluster_due_dates else "disabled"
+            click.echo(f"\nDue date clustering is currently: {current_status}")
+            click.echo("\nWhen enabled, tasks are grouped by countdown buckets (today, this week, this month)")
+            click.echo("instead of exact due dates. This allows secondary sort fields (like priority)")
+            click.echo("to take precedence within each time bucket.")
+            click.echo("\nExample with clustering enabled and sort_by=['due', 'priority']:")
+            click.echo("  Today:")
+            click.echo("    - High priority task")
+            click.echo("    - Medium priority task")
+            click.echo("  This week:")
+            click.echo("    - High priority task")
+            click.echo("    - Low priority task")
+            try:
+                new_value = confirm("\nEnable due date clustering?")
+                config.cluster_due_dates = new_value
+                new_status = "enabled" if new_value else "disabled"
+                click.secho(f"✓ Due date clustering {new_status}", fg="green")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+
+        elif choice == "11":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -267,10 +292,10 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "11":
+        elif choice == "12":
             # Exit
             click.echo("\nExiting configuration.")
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-11.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-12.", fg="red")

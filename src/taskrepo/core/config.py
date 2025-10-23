@@ -24,6 +24,7 @@ class Config:
         "default_repo": None,
         "default_editor": None,
         "sort_by": ["due", "priority"],
+        "cluster_due_dates": False,
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -280,6 +281,25 @@ class Config:
             )
 
         self._data["sort_by"] = value
+        self.save()
+
+    @property
+    def cluster_due_dates(self) -> bool:
+        """Get due date clustering setting.
+
+        Returns:
+            True if tasks should be clustered by countdown buckets instead of exact timestamps
+        """
+        return self._data.get("cluster_due_dates", False)
+
+    @cluster_due_dates.setter
+    def cluster_due_dates(self, value: bool):
+        """Set due date clustering.
+
+        Args:
+            value: True to cluster tasks by countdown buckets (today, this week, etc.)
+        """
+        self._data["cluster_due_dates"] = bool(value)
         self.save()
 
     def get(self, key: str, default=None):

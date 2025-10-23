@@ -247,6 +247,8 @@ def config_show(ctx):
     click.echo(f"  Default GitHub org: {default_github_org}")
     sort_by = ", ".join(config.sort_by)
     click.echo(f"  Sort by: {sort_by}")
+    cluster_status = "enabled" if config.cluster_due_dates else "disabled"
+    click.echo(f"  Due date clustering: {cluster_status}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,67 @@
 """Sorting utilities for tasks."""
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Optional
 
 from taskrepo.core.config import Config
 from taskrepo.core.task import Task
+
+
+def get_due_date_cluster(due_date: Optional[datetime]) -> int:
+    """Convert due date to cluster bucket for sorting.
+
+    Clusters tasks by countdown buckets (today, this week, this month, etc.)
+    instead of exact timestamps. This allows grouping similar due dates together
+    when sorting, so secondary sort fields (like priority) take precedence within each bucket.
+
+    Args:
+        due_date: Task due date
+
+    Returns:
+        Bucket number for clustering:
+        -2: Overdue by 2+ weeks
+        -1: Overdue by 1 week
+         0: Overdue by 1-6 days
+         1: Today
+         2: Tomorrow
+         3: 2-3 days
+         4: 4-13 days
+         5: 1-3 weeks (7-27 days)
+         6: 1 month (28-59 days)
+         7: 2+ months (60+ days)
+         9: No due date
+    """
+    if not due_date:
+        return 9  # No due date - sort last
+
+    now = datetime.now()
+    diff = due_date - now
+    days = diff.days
+
+    # Overdue
+    if days < 0:
+        abs_days = abs(days)
+        if abs_days < 7:
+            return 0  # Overdue by 1-6 days
+        elif abs_days < 14:
+            return -1  # Overdue by 1 week
+        else:
+            return -2  # Overdue by 2+ weeks
+
+    # Future
+    if days == 0:
+        return 1  # Today
+    if days == 1:
+        return 2  # Tomorrow
+    if days <= 3:
+        return 3  # 2-3 days
+    if days < 14:
+        return 4  # 4-13 days
+    if days < 28:
+        return 5  # 1-3 weeks
+    if days < 60:
+        return 6  # 1 month
+    return 7  # 2+ months
 
 
 def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
@@ -35,7 +93,12 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
             priority_order = {"H": 0, "M": 1, "L": 2}
             value = priority_order.get(task.priority, 3)
         elif field_name == "due":
-            value = task.due.timestamp() if task.due else float("inf")
+            if config.cluster_due_dates:
+                # Use cluster bucket instead of exact timestamp
+                value = get_due_date_cluster(task.due)
+            else:
+                # Use exact timestamp
+                value = task.due.timestamp() if task.due else float("inf")
         elif field_name == "created":
             value = task.created.timestamp()
         elif field_name == "modified":
