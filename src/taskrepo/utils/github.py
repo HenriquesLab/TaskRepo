@@ -33,6 +33,40 @@ def check_gh_auth() -> bool:
         return False
 
 
+def check_github_repo_exists(org: str, repo_name: str) -> bool:
+    """Check if a GitHub repository exists.
+
+    Args:
+        org: GitHub organization or username
+        repo_name: Repository name
+
+    Returns:
+        True if repository exists, False otherwise
+    """
+    # Check prerequisites
+    if not check_gh_cli_installed():
+        return False
+
+    if not check_gh_auth():
+        return False
+
+    # Build the repository identifier
+    full_repo_name = f"{org}/{repo_name}"
+
+    try:
+        # Use gh repo view to check if repo exists
+        # If it exists, command returns 0; if not, returns non-zero
+        result = subprocess.run(
+            ["gh", "repo", "view", full_repo_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def create_github_repo(org: str, repo_name: str, visibility: str = "private") -> str:
     """Create a GitHub repository using gh CLI.
 
@@ -91,6 +125,40 @@ def setup_git_remote(repo_path: Path, remote_url: str, remote_name: str = "origi
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else str(e)
         raise GitHubError(f"Failed to add git remote: {error_msg}") from e
+
+
+def clone_github_repo(org: str, repo_name: str, target_path: Path):
+    """Clone a GitHub repository to a local path.
+
+    Args:
+        org: GitHub organization or username
+        repo_name: Repository name
+        target_path: Path where the repository should be cloned
+
+    Raises:
+        GitHubError: If clone fails or prerequisites not met
+    """
+    # Check prerequisites
+    if not check_gh_cli_installed():
+        raise GitHubError("GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/")
+
+    if not check_gh_auth():
+        raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
+
+    # Build the repository identifier
+    full_repo_name = f"{org}/{repo_name}"
+
+    # Ensure parent directory exists
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Use gh repo clone to clone the repository
+        cmd = ["gh", "repo", "clone", full_repo_name, str(target_path)]
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        raise GitHubError(f"Failed to clone GitHub repository: {error_msg}") from e
 
 
 def push_to_remote(repo_path: Path, branch: str = "main", remote_name: str = "origin"):

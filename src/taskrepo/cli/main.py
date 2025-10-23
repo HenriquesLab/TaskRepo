@@ -131,8 +131,9 @@ def init(ctx):
 @click.pass_context
 def create_repo(ctx, name, github, org, interactive):
     """Create a new task repository."""
-    from taskrepo.core.repository import RepositoryManager
+    from taskrepo.core.repository import Repository, RepositoryManager
     from taskrepo.tui import prompts
+    from taskrepo.utils.github import GitHubError, check_github_repo_exists, clone_github_repo
 
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -174,6 +175,53 @@ def create_repo(ctx, name, github, org, interactive):
             # Get visibility
             visibility = prompts.prompt_visibility()
 
+            # Check if GitHub repo already exists
+            if check_github_repo_exists(org, f"tasks-{name}"):
+                click.echo()
+                click.secho(f"⚠️  Repository tasks-{name} already exists on GitHub!", fg="yellow", bold=True)
+                click.echo(f"    URL: https://github.com/{org}/tasks-{name}")
+                click.echo()
+
+                # Ask if user wants to clone it
+                from prompt_toolkit.shortcuts import confirm
+
+                try:
+                    if confirm("Would you like to clone it instead?"):
+                        # Clone the repository
+                        repo_path = config.parent_dir / f"tasks-{name}"
+                        click.echo("\nCloning repository from GitHub...")
+
+                        try:
+                            clone_github_repo(org, f"tasks-{name}", repo_path)
+                            repo = Repository(repo_path)
+                            click.echo()
+                            click.secho(f"✓ Cloned repository: {repo.name} at {repo.path}", fg="green")
+                            click.secho(f"✓ GitHub repository: https://github.com/{org}/tasks-{name}", fg="green")
+                            ctx.exit(0)
+                        except GitHubError as e:
+                            click.secho(f"\n✗ Failed to clone repository: {e}", fg="red", err=True)
+                            # Ask if they want to create local-only instead
+                            if confirm("\nCreate local-only repository instead (without GitHub)?"):
+                                github = False
+                                click.echo("\nProceeding with local-only repository...")
+                            else:
+                                click.echo("Cancelled.")
+                                ctx.exit(0)
+                        except Exception as e:
+                            click.secho(f"\n✗ Error initializing repository: {e}", fg="red", err=True)
+                            ctx.exit(1)
+                    else:
+                        # User doesn't want to clone, ask if they want local-only
+                        if confirm("\nCreate local-only repository instead (without GitHub)?"):
+                            github = False
+                            click.echo("\nProceeding with local-only repository...")
+                        else:
+                            click.echo("Cancelled.")
+                            ctx.exit(0)
+                except (KeyboardInterrupt, EOFError):
+                    click.echo("\nCancelled.")
+                    ctx.exit(0)
+
     else:
         # Non-interactive mode - validate required fields
         if not name:
@@ -194,6 +242,16 @@ def create_repo(ctx, name, github, org, interactive):
                     )
                     ctx.exit(1)
             visibility = "private"  # Default to private in non-interactive mode
+
+            # Check if GitHub repo already exists
+            if check_github_repo_exists(org, f"tasks-{name}"):
+                click.secho(
+                    f"Error: Repository tasks-{name} already exists on GitHub at https://github.com/{org}/tasks-{name}",
+                    fg="red",
+                    err=True,
+                )
+                click.secho("       Use a different name or clone it manually with: gh repo clone", fg="red", err=True)
+                ctx.exit(1)
 
     try:
         repo = manager.create_repository(name, github_enabled=github, github_org=org, visibility=visibility)
