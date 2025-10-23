@@ -1,5 +1,7 @@
 """Sorting utilities for tasks."""
 
+from typing import Any
+
 from taskrepo.core.config import Config
 from taskrepo.core.task import Task
 
@@ -15,7 +17,7 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
         Sorted list of tasks
     """
 
-    def get_field_value(task: Task, field: str) -> tuple[bool, any]:
+    def get_field_value(task: Task, field: str) -> tuple[bool, Any]:
         """Get sortable value for a field.
 
         Args:
