@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - After: `@paxcalpt`
   - Fixed in `Task.__str__()` method by removing redundant `@` prefix
 
+- **Clustering tiebreaker**: Added exact timestamp tiebreaker when clustering is enabled
+  - Tasks in same bucket with same priority now sorted by exact due date
+  - Before: Tasks with same priority maintained arbitrary order within bucket
+  - After: Sorted by exact timestamp (earliest first) within bucket+priority
+  - Example: 4 days → 6 days (10am) → 6 days (2pm) → 7 days → 8 days
+
 - **Pre-commit hooks**: Updated ruff version to v0.14.1 to match CI
   - Prevents formatting inconsistencies between local pre-commit and CI
   - Also updated pre-commit-hooks (v5.0.0 → v6.0.0) and conventional-pre-commit (v3.6.0 → v4.3.0)
