@@ -22,7 +22,7 @@ class Config:
         "default_assignee": None,
         "default_github_org": None,
         "default_editor": None,
-        "sort_by": ["priority", "due"],
+        "sort_by": ["due", "priority"],
     }
 
     def __init__(self, config_path: Optional[Path] = None):
