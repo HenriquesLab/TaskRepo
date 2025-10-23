@@ -276,7 +276,7 @@ class Config:
 
             # If we get here, it's an invalid field
             raise ValueError(
-                f"Invalid sort field: {field}. " f"Must be one of {valid_fields} or match pattern 'assignee:@username'"
+                f"Invalid sort field: {field}. Must be one of {valid_fields} or match pattern 'assignee:@username'"
             )
 
         self._data["sort_by"] = value
