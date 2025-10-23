@@ -229,6 +229,8 @@ def config_cmd(ctx):
         elif choice == "9":
             # Configure task sorting
             click.echo(f"\nCurrent sort order: {', '.join(config.sort_by)}")
+            cluster_status = "enabled" if config.cluster_due_dates else "disabled"
+            click.echo(f"Due date clustering: {cluster_status}")
             click.echo("\nAvailable sort fields:")
             click.echo("  priority, due, created, modified, status, title, project, assignee")
             click.echo("\nSpecial assignee syntax:")
@@ -243,6 +245,28 @@ def config_cmd(ctx):
             click.echo("\nExamples:")
             click.echo(f"  assignee:{example_assignee},due,priority    - Your tasks first, then by due date")
             click.echo("  due,priority,-created              - Due date, priority, newest first")
+
+            click.echo("\n" + "─" * 60)
+            click.secho("About Due Date Clustering", fg="cyan", bold=True)
+            click.echo("─" * 60)
+            if config.cluster_due_dates:
+                click.secho("Currently: ENABLED", fg="green")
+            else:
+                click.secho("Currently: DISABLED", fg="yellow")
+            click.echo("\nWhen enabled, tasks are grouped by countdown time buckets:")
+            click.echo("  • Overdue (2+ weeks, 1 week, 1-6 days)")
+            click.echo("  • Today, Tomorrow, 2-3 days, 4-13 days")
+            click.echo("  • 1-3 weeks, 1 month, 2+ months")
+            click.echo("\nWithout clustering (default):")
+            click.echo("  Tasks sorted by exact due date timestamps")
+            click.echo("  Example: Task A (due 11:59 PM) before Task B (due 12:01 AM next day)")
+            click.echo("\nWith clustering:")
+            click.echo("  Tasks in same bucket sorted by next field (e.g., priority)")
+            click.echo("  Example: All 'today' tasks grouped, high priority before low")
+            click.echo("\nUseful when: You have many tasks with similar due dates and want")
+            click.echo("             secondary fields (like priority) to matter within each bucket")
+            click.echo("\nToggle clustering: Choose option 10 from main menu")
+            click.echo("─" * 60)
             try:
                 new_sort = prompt("Enter sort fields (comma-separated): ")
                 if new_sort.strip():
