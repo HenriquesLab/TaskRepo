@@ -4,11 +4,92 @@ from datetime import datetime
 from typing import Optional
 
 from prompt_toolkit import prompt
-from prompt_toolkit.completion import FuzzyWordCompleter, WordCompleter
+from prompt_toolkit.completion import Completer, Completion, FuzzyWordCompleter, WordCompleter
+from prompt_toolkit.document import Document
 from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.validation import ValidationError, Validator
 
 from taskrepo.core.repository import Repository
+
+
+class CommaDelimitedCompleter(Completer):
+    """Completer for comma-separated values.
+
+    Provides fuzzy completion for each value after a comma, allowing
+    autocomplete to work for multiple comma-separated items.
+    """
+
+    def __init__(self, values: list[str]):
+        """Initialize with list of possible values.
+
+        Args:
+            values: List of possible completion values
+        """
+        self.values = sorted(values) if values else []
+
+    def get_completions(self, document: Document, complete_event):
+        """Get completions for the current segment (after last comma).
+
+        Args:
+            document: The current document
+            complete_event: The completion event
+
+        Yields:
+            Completion objects for matching values
+        """
+        # Get text before cursor
+        text_before_cursor = document.text_before_cursor
+
+        # Split by comma and get the last segment
+        segments = text_before_cursor.split(",")
+        current_segment = segments[-1].lstrip()  # Remove leading spaces
+
+        # Calculate start position for replacement
+        # We want to replace from where the current segment starts
+        start_position = -len(segments[-1])
+
+        # Fuzzy match current segment against values
+        current_lower = current_segment.lower()
+
+        for value in self.values:
+            # Fuzzy matching: check if all characters appear in order
+            if self._fuzzy_match(current_lower, value.lower()):
+                # For segments after the first, add a leading space
+                if len(segments) > 1:
+                    replacement = f" {value}"
+                else:
+                    replacement = value
+
+                yield Completion(
+                    replacement,
+                    start_position=start_position,
+                    display=value,
+                )
+
+    def _fuzzy_match(self, pattern: str, text: str) -> bool:
+        """Check if pattern fuzzy-matches text.
+
+        All characters of pattern must appear in text in order
+        (but not necessarily consecutively).
+
+        Args:
+            pattern: The pattern to match (lowercased)
+            text: The text to search in (lowercased)
+
+        Returns:
+            True if pattern fuzzy-matches text
+        """
+        if not pattern:
+            return True
+
+        pattern_idx = 0
+        for char in text:
+            if char == pattern[pattern_idx]:
+                pattern_idx += 1
+                if pattern_idx == len(pattern):
+                    return True
+
+        return pattern_idx == len(pattern)
 
 
 class PriorityValidator(Validator):
@@ -162,7 +243,7 @@ def prompt_assignees(existing_assignees: list[str]) -> list[str]:
     Returns:
         List of assignee handles
     """
-    completer = FuzzyWordCompleter(existing_assignees) if existing_assignees else None
+    completer = CommaDelimitedCompleter(existing_assignees) if existing_assignees else None
 
     try:
         assignees_str = prompt(
@@ -250,7 +331,7 @@ def prompt_tags(existing_tags: list[str]) -> list[str]:
     Returns:
         List of tags
     """
-    completer = FuzzyWordCompleter(existing_tags) if existing_tags else None
+    completer = CommaDelimitedCompleter(existing_tags) if existing_tags else None
 
     try:
         tags_str = prompt(
