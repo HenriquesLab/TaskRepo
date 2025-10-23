@@ -4,8 +4,10 @@ from datetime import datetime
 from typing import Optional
 
 from prompt_toolkit import prompt
+from prompt_toolkit.application import get_app
 from prompt_toolkit.completion import Completer, Completion, FuzzyWordCompleter, WordCompleter
 from prompt_toolkit.document import Document
+from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.validation import ValidationError, Validator
 
@@ -452,6 +454,26 @@ def prompt_status(default: str = "pending") -> str:
         return default
 
 
+def get_repo_name_toolbar():
+    """Get bottom toolbar text showing the full repository name with tasks- prefix.
+
+    Returns:
+        Formatted HTML text for the bottom toolbar
+    """
+    try:
+        # Get the current application and buffer text
+        app = get_app()
+        current_text = app.current_buffer.text.strip()
+
+        if current_text:
+            return HTML(f"Will create: <b>tasks-{current_text}</b>")
+        else:
+            return HTML("Repository names are automatically prefixed with <b>tasks-</b>")
+    except Exception:
+        # Fallback if we can't access the app (e.g., during testing)
+        return HTML("Repository names are automatically prefixed with <b>tasks-</b>")
+
+
 def prompt_repo_name(
     existing_names: list[str] | None = None,
     input=None,
@@ -500,6 +522,7 @@ def prompt_repo_name(
                 message="Repository name: ",
                 input=input,
                 output=output,
+                bottom_toolbar=get_repo_name_toolbar,
             )
 
             while True:
@@ -517,6 +540,7 @@ def prompt_repo_name(
             name = prompt(
                 "Repository name: ",
                 validator=validator,
+                bottom_toolbar=get_repo_name_toolbar,
             )
             return name.strip()
     except (KeyboardInterrupt, EOFError):
