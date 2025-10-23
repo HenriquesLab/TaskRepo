@@ -1,7 +1,6 @@
 """Main CLI entry point for TaskRepo."""
 
 import click
-from prompt_toolkit.shortcuts import confirm
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
@@ -12,6 +11,7 @@ from taskrepo.cli.commands.edit import edit
 from taskrepo.cli.commands.extend import ext
 from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
+from taskrepo.cli.commands.repos_search import repos_search
 from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
 from taskrepo.core.config import Config
@@ -39,7 +39,7 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Repository Operations",
-                ["repos", "sync"],
+                ["repos", "repos-search", "sync"],
             ),
         ]
 
@@ -100,27 +100,160 @@ cli.add_command(done)
 cli.add_command(delete, name="del")  # Register only as "del"
 cli.add_command(ext)
 cli.add_command(info)
+cli.add_command(repos_search)
 cli.add_command(search)
 cli.add_command(sync)
 
 
 @cli.command()
+@click.option("--reconfigure", is_flag=True, help="Reconfigure even if already initialized")
 @click.pass_context
-def init(ctx):
+def init(ctx, reconfigure):
     """Initialize TaskRepo configuration."""
+    from pathlib import Path
+
+    from prompt_toolkit import prompt
+    from prompt_toolkit.shortcuts import confirm
+
+    from taskrepo.core.repository import RepositoryManager
+
     config = ctx.obj["config"]
 
-    click.echo(f"TaskRepo configuration file: {config.config_path}")
-    click.echo(f"Parent directory: {config.parent_dir}")
+    click.secho("TaskRepo Initialization", fg="cyan", bold=True)
+    click.echo()
 
-    if not config.parent_dir.exists():
-        if confirm(f"Create parent directory {config.parent_dir}?"):
-            config.parent_dir.mkdir(parents=True, exist_ok=True)
-            click.secho(f"✓ Created {config.parent_dir}", fg="green")
-        else:
-            click.echo("Skipped directory creation")
+    # Check if already configured
+    config_exists = config.config_path.exists()
+    if config_exists and not reconfigure:
+        click.echo(f"Configuration file: {config.config_path}")
+        click.echo(f"Parent directory: {config.parent_dir}")
+        click.echo()
 
-    click.secho("✓ TaskRepo initialized", fg="green")
+        if not confirm("Reconfigure TaskRepo?", default=False):
+            # Just verify setup
+            manager = RepositoryManager(config.parent_dir)
+            repos = manager.discover_repositories()
+
+            if repos:
+                click.echo()
+                click.secho(f"✓ Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:", fg="green")
+                for repo in repos:
+                    task_count = len(repo.list_tasks())
+                    click.echo(f"  - {repo.name} ({task_count} tasks)")
+            else:
+                click.echo()
+                click.secho("⚠ No repositories found.", fg="yellow")
+                click.echo("  Create one with: tsk create-repo")
+
+            return
+
+        click.echo()
+
+    # Scan for existing repositories
+    click.echo("Scanning for existing task repositories...")
+    current_dir = Path.cwd()
+
+    # Scan current directory and parent
+    scan_locations = [current_dir]
+    if current_dir.parent != current_dir:  # Not at root
+        scan_locations.append(current_dir.parent)
+
+    # Also scan common code directories
+    home = Path.home()
+    for common_dir in ["Code", "GitHub", "Projects", "Documents", "src"]:
+        potential_path = home / common_dir
+        if potential_path.exists() and potential_path not in scan_locations:
+            scan_locations.append(potential_path)
+
+    # Find all locations with task repositories
+    found_locations = {}
+    for location in scan_locations:
+        repos_dict = RepositoryManager.scan_for_task_repositories(location, max_depth=2)
+        found_locations.update(repos_dict)
+
+    # Present options to user
+    parent_dir = None
+
+    if found_locations:
+        click.secho(f"✓ Found task repositories in {len(found_locations)} location(s):", fg="green")
+        click.echo()
+
+        # Sort by number of repos (descending)
+        sorted_locations = sorted(found_locations.items(), key=lambda x: len(x[1]), reverse=True)
+
+        for idx, (location, repos) in enumerate(sorted_locations, 1):
+            click.echo(f"  {idx}. {location}")
+            for repo_name in repos:
+                click.echo(f"     - tasks-{repo_name}")
+        click.echo()
+
+        # If current directory has repos, offer it as default
+        if current_dir in found_locations:
+            if confirm(f"Use current directory ({current_dir}) as parent?", default=True):
+                parent_dir = current_dir
+        elif found_locations:
+            # Ask user to choose
+            try:
+                choice = prompt(f"Select location [1-{len(sorted_locations)}] or press Enter to specify custom path: ")
+                choice = choice.strip()
+
+                if choice:
+                    try:
+                        choice_idx = int(choice)
+                        if 1 <= choice_idx <= len(sorted_locations):
+                            parent_dir = sorted_locations[choice_idx - 1][0]
+                    except ValueError:
+                        click.secho("Invalid choice. Please specify custom path.", fg="yellow")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+                ctx.exit(0)
+
+    # If no parent_dir selected yet, ask for custom path
+    if parent_dir is None:
+        if not found_locations:
+            click.echo("No existing task repositories found.")
+            click.echo()
+
+        default_path = str(current_dir) if not config_exists else str(config.parent_dir)
+
+        try:
+            custom_path = prompt(f"Enter parent directory path [{default_path}]: ", default=default_path)
+            parent_dir = Path(custom_path.strip()).expanduser()
+        except (KeyboardInterrupt, EOFError):
+            click.echo("\nCancelled.")
+            ctx.exit(0)
+
+    # Save configuration
+    config.parent_dir = parent_dir
+
+    click.echo()
+    click.secho(f"✓ Configuration saved to {config.config_path}", fg="green")
+    click.secho(f"✓ Parent directory: {parent_dir}", fg="green")
+
+    # Create directory if needed
+    if not parent_dir.exists():
+        if confirm(f"\nCreate directory {parent_dir}?", default=True):
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            click.secho(f"✓ Created {parent_dir}", fg="green")
+
+    # Verify setup by discovering repositories
+    manager = RepositoryManager(parent_dir)
+    repos = manager.discover_repositories()
+
+    click.echo()
+    if repos:
+        click.secho(f"Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:", fg="green")
+        for repo in repos:
+            task_count = len(repo.list_tasks())
+            click.echo(f"  - {repo.name} ({task_count} tasks)")
+        click.echo()
+        click.secho("✓ Ready to use! Try: tsk list", fg="green", bold=True)
+    else:
+        click.secho("No repositories found in parent directory.", fg="yellow")
+        click.echo()
+        click.echo("Get started with:")
+        click.echo("  • Create a new repository: tsk create-repo")
+        click.echo("  • Clone existing repository: gh repo clone <org/repo> <local-path>")
 
 
 @cli.command()

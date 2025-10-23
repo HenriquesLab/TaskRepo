@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-10-23
+
+### Added
+
+- **GitHub repository search**: New `tsk repos-search` command to discover TaskRepo repositories on GitHub
+  - Searches for repositories matching `tasks-*` pattern in a GitHub organization or user
+  - Shows which repositories are already cloned locally vs remote-only
+  - Interactive multi-select interface to clone multiple repositories at once
+  - Uses default_github_org from config if organization not specified
+  - Rich table display with color-coded status indicators (✓ cloned / ✗ remote)
+  - Includes `--list-only` flag to list without prompting to clone
+  - New `list_github_repos()` function in utils/github.py with pattern filtering
+  - Helpful error messages for missing GitHub CLI or authentication issues
+
 ## [0.7.1] - 2025-10-23
 
 ### Added

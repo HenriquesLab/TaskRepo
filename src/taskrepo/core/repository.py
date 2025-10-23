@@ -696,6 +696,53 @@ class RepositoryManager:
         self.parent_dir = parent_dir
         self.parent_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def scan_for_task_repositories(search_path: Path, max_depth: int = 3) -> dict[Path, list[str]]:
+        """Scan a directory tree for task repositories (tasks-* directories).
+
+        Args:
+            search_path: Starting directory to scan
+            max_depth: Maximum directory depth to search (default: 3)
+
+        Returns:
+            Dictionary mapping parent directories to lists of repository names found within them
+            Example: {Path('/home/user/Code'): ['work', 'personal']}
+        """
+        if not search_path.exists() or not search_path.is_dir():
+            return {}
+
+        found_repos = {}
+
+        def scan_directory(path: Path, current_depth: int):
+            """Recursively scan directory for tasks-* folders."""
+            if current_depth > max_depth:
+                return
+
+            try:
+                # Check if this directory contains any tasks-* subdirectories
+                tasks_dirs = []
+                for item in path.iterdir():
+                    if item.is_dir() and item.name.startswith("tasks-"):
+                        # Extract repo name (remove tasks- prefix)
+                        repo_name = item.name[6:]
+                        tasks_dirs.append(repo_name)
+
+                # If we found any task repos in this directory, record it
+                if tasks_dirs:
+                    found_repos[path] = sorted(tasks_dirs)
+
+                # Continue scanning subdirectories (but not into tasks-* dirs themselves)
+                for item in path.iterdir():
+                    if item.is_dir() and not item.name.startswith("tasks-") and not item.name.startswith("."):
+                        scan_directory(item, current_depth + 1)
+
+            except (PermissionError, OSError):
+                # Skip directories we can't access
+                pass
+
+        scan_directory(search_path, 0)
+        return found_repos
+
     def discover_repositories(self) -> list[Repository]:
         """Discover all task repositories in parent directory.
 

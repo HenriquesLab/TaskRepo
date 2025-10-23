@@ -179,3 +179,53 @@ def push_to_remote(repo_path: Path, branch: str = "main", remote_name: str = "or
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else str(e)
         raise GitHubError(f"Failed to push to remote: {error_msg}") from e
+
+
+def list_github_repos(org: str, pattern: str | None = None) -> list[dict]:
+    """List repositories from a GitHub organization/user.
+
+    Args:
+        org: GitHub organization or username
+        pattern: Optional pattern to filter repository names (e.g., 'tasks-*')
+
+    Returns:
+        List of repository dictionaries with 'name' and 'url' keys
+
+    Raises:
+        GitHubError: If listing fails or prerequisites not met
+    """
+    import json
+
+    # Check prerequisites
+    if not check_gh_cli_installed():
+        raise GitHubError("GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/")
+
+    if not check_gh_auth():
+        raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
+
+    try:
+        # Use gh repo list to fetch repositories
+        cmd = ["gh", "repo", "list", org, "--json", "name,url", "--limit", "1000"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        # Parse JSON output
+        repos = json.loads(result.stdout)
+
+        # Filter by pattern if provided
+        if pattern:
+            # Convert shell-style glob pattern to simple prefix match
+            # For now, we'll handle 'tasks-*' as 'starts with tasks-'
+            if pattern.endswith("*"):
+                prefix = pattern[:-1]
+                repos = [r for r in repos if r["name"].startswith(prefix)]
+            else:
+                # Exact match
+                repos = [r for r in repos if r["name"] == pattern]
+
+        return repos
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        raise GitHubError(f"Failed to list GitHub repositories: {error_msg}") from e
+    except json.JSONDecodeError as e:
+        raise GitHubError(f"Failed to parse GitHub response: {e}") from e
