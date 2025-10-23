@@ -281,6 +281,6 @@ class Task:
 
     def __str__(self) -> str:
         """String representation of the task."""
-        assignees_str = f" @{', @'.join(self.assignees)}" if self.assignees else ""
+        assignees_str = f" {', '.join(self.assignees)}" if self.assignees else ""
         project_str = f" [{self.project}]" if self.project else ""
         return f"[{self.id}] {self.title}{project_str}{assignees_str} ({self.status}, {self.priority})"
