@@ -685,16 +685,30 @@ def prompt_parent_task(existing_tasks: list) -> Optional[str]:
     if not existing_tasks:
         return None
 
-    # Build completion list with task IDs and titles for easier selection
+    # Build completion list with display IDs and titles for easier selection
+    from taskrepo.utils.id_mapping import get_display_id_from_uuid
+
     task_options = []
     task_map = {}
 
     for task in existing_tasks:
-        # Format: "ID: Title"
-        display_text = f"{task.id}: {task.title}"
-        task_options.append(display_text)
-        task_map[display_text] = task.id
-        # Also allow matching by just ID
+        # Try to get display ID for this task
+        display_id = get_display_id_from_uuid(task.id)
+
+        if display_id:
+            # Format: "DisplayID: Title"
+            display_text = f"{display_id}: {task.title}"
+            task_options.append(display_text)
+            task_map[display_text] = task.id
+            # Also allow matching by just display ID
+            task_map[str(display_id)] = task.id
+        else:
+            # Fallback to UUID if no display ID found
+            display_text = f"{task.id}: {task.title}"
+            task_options.append(display_text)
+            task_map[display_text] = task.id
+
+        # Also allow matching by UUID
         task_map[task.id] = task.id
 
     completer = FuzzyWordCompleter(task_options) if task_options else None
