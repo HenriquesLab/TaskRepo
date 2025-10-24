@@ -262,6 +262,9 @@ def display_tasks_table(
         if id_offset > 0:
             # Use offset-based sequential IDs (for completed tasks shown after active tasks)
             display_id_str = str(id_offset + idx)
+        elif not save_cache:
+            # For filtered views, use sequential IDs starting from 1
+            display_id_str = str(idx)
         else:
             # Get display ID from cache (or show UUID prefix if not in cache)
             display_id = get_display_id_from_uuid(task.id)
