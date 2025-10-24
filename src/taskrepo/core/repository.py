@@ -392,9 +392,9 @@ class Repository:
             else:
                 return f"{months} months", "📅"
 
-        # Get active tasks (pending or in_progress)
+        # Get active tasks (pending or in-progress)
         all_tasks = self.list_tasks()
-        active_tasks = [task for task in all_tasks if task.status in ["pending", "in_progress"]]
+        active_tasks = [task for task in all_tasks if task.status in ["pending", "in-progress"]]
 
         # Sort using config sort order (same as list command)
         def get_field_value(task, field):
@@ -412,7 +412,7 @@ class Repository:
             elif field_name == "modified":
                 value = task.modified.timestamp()
             elif field_name == "status":
-                status_order = {"pending": 0, "in_progress": 1, "completed": 2, "cancelled": 3}
+                status_order = {"pending": 0, "in-progress": 1, "completed": 2, "cancelled": 3}
                 value = status_order.get(task.status, 4)
             elif field_name == "title":
                 value = task.title.lower()
@@ -535,7 +535,7 @@ class Repository:
                 # Status with emoji
                 status_emoji = {
                     "pending": "⏳",
-                    "in_progress": "🔄",
+                    "in-progress": "🔄",
                     "completed": "✅",
                     "cancelled": "❌",
                 }.get(task.status, "")

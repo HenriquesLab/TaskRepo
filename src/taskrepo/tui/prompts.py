@@ -439,7 +439,7 @@ def prompt_status(default: str = "pending") -> str:
     Returns:
         Task status
     """
-    statuses = ["pending", "in_progress", "completed", "cancelled"]
+    statuses = ["pending", "in-progress", "completed", "cancelled"]
     completer = WordCompleter(statuses, ignore_case=True)
 
     try:

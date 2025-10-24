@@ -106,7 +106,7 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
         elif field_name == "modified":
             value = task.modified.timestamp()
         elif field_name == "status":
-            status_order = {"pending": 0, "in_progress": 1, "completed": 2, "cancelled": 3}
+            status_order = {"pending": 0, "in-progress": 1, "completed": 2, "cancelled": 3}
             value = status_order.get(task.status, 4)
         elif field_name == "title":
             value = task.title.lower()

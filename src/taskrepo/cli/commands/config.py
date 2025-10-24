@@ -111,7 +111,7 @@ def config_cmd(ctx):
         elif choice == "4":
             # Set default status
             click.echo(f"\nCurrent default status: {config.default_status}")
-            statuses = ["pending", "in_progress", "completed", "cancelled"]
+            statuses = ["pending", "in-progress", "completed", "cancelled"]
             try:
                 new_status = prompt(
                     "Enter default status: ",

@@ -4,11 +4,13 @@ import click
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
+from taskrepo.cli.commands.cancelled import cancelled
 from taskrepo.cli.commands.config import config_cmd
 from taskrepo.cli.commands.delete import delete
 from taskrepo.cli.commands.done import done
 from taskrepo.cli.commands.edit import edit
 from taskrepo.cli.commands.extend import ext
+from taskrepo.cli.commands.in_progress import in_progress
 from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
 from taskrepo.cli.commands.repos_search import repos_search
@@ -35,7 +37,7 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Managing Tasks",
-                ["add", "edit", "ext", "done", "del"],
+                ["add", "edit", "ext", "in-progress", "done", "cancelled", "del"],
             ),
             (
                 "Repository Operations",
@@ -93,12 +95,14 @@ def process_result(ctx, result, **kwargs):
 
 # Register commands
 cli.add_command(add)
+cli.add_command(cancelled)
 cli.add_command(config_cmd)
 cli.add_command(list_tasks)
 cli.add_command(edit)
 cli.add_command(done)
 cli.add_command(delete, name="del")  # Register only as "del"
 cli.add_command(ext)
+cli.add_command(in_progress)
 cli.add_command(info)
 cli.add_command(repos_search)
 cli.add_command(search)

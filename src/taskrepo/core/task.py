@@ -18,7 +18,7 @@ class Task:
     Attributes:
         id: Unique task identifier
         title: Task title
-        status: Task status (pending, in_progress, completed, cancelled)
+        status: Task status (pending, in-progress, completed, cancelled)
         priority: Task priority (H=High, M=Medium, L=Low)
         project: Project name this task belongs to
         assignees: List of GitHub user handles (e.g., ['@user1', '@user2'])
@@ -49,7 +49,7 @@ class Task:
     description: str = ""
     repo: Optional[str] = None
 
-    VALID_STATUSES = {"pending", "in_progress", "completed", "cancelled"}
+    VALID_STATUSES = {"pending", "in-progress", "completed", "cancelled"}
     VALID_PRIORITIES = {"H", "M", "L"}
 
     @staticmethod

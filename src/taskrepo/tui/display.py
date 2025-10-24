@@ -56,14 +56,14 @@ def get_countdown_text(due_date: datetime) -> tuple[str, str]:
             return "1 day", "yellow"
         return f"{days} days", "yellow"
 
-    # Handle weeks (up to ~4 weeks)
-    if days < 28:
+    # Handle weeks (up to ~6 weeks)
+    if days < 45:
         weeks = days // 7
         if weeks == 1:
             return "1 week", "green"
         return f"{weeks} weeks", "green"
 
-    # Handle months
+    # Handle months (45+ days)
     months = days // 30
     if months == 1:
         return "1 month", "green"

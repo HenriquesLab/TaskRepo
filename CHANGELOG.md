@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-10-25
+
+### Added
+
+- **Status change commands**: New `tsk in-progress` and `tsk cancelled` commands
+  - `tsk in-progress TASK_IDS` - Mark one or more tasks as in progress
+  - `tsk cancelled TASK_IDS` - Mark one or more tasks as cancelled
+  - Both commands support comma-separated task IDs for batch operations
+  - Follow same pattern as `tsk done` command with error handling and summaries
+  - Registered in CLI help menu under "Managing Tasks" section
+
+- **Merge conflict handling**: Intelligent detection and resolution of git merge conflicts
+  - **Conflict detection**: Checks for conflicts before pulling by fetching and comparing local vs remote
+  - **Smart merging**: Timestamp-based automatic resolution
+    - Simple fields (status, priority): Uses value from task with newer `modified` timestamp
+    - List fields (assignees, tags, links, depends): Creates union of both versions, deduplicated
+    - Description conflicts: Requires manual resolution (cannot auto-merge)
+  - **Interactive conflict resolver**: Rich TUI for manual resolution
+    - Side-by-side comparison of local vs remote versions
+    - Highlighted conflicting fields with "← CONFLICT" markers
+    - Multiple resolution strategies: Keep [L]ocal, [R]emote, [N]ewer, [M]anual merge, [E]dit
+    - Field-by-field manual merge for granular control
+    - Text editor integration for complex conflicts
+  - **Sync command enhancements**:
+    - `--auto-merge/--no-auto-merge` flag (default: True)
+    - `--strategy` option: `auto`, `local`, `remote`, `interactive`
+    - Conflict resolution happens before pull to prevent git conflicts
+    - Resolved conflicts automatically committed before sync continues
+  - New modules: `src/taskrepo/utils/merge.py`, `src/taskrepo/tui/conflict_resolver.py`
+  - Comprehensive test suite: `tests/unit/test_merge.py`
+
+- **Claude Code skill**: Added comprehensive TaskRepo skill for AI assistant
+  - Created `.claude/skills/taskrepo/SKILL.md` with full command documentation
+  - Enables Claude to autonomously help with TaskRepo task management
+  - Includes all CLI commands, examples, configuration, and best practices
+
+### Changed
+
+- **BREAKING**: Status value format changed from `in_progress` to `in-progress`
+  - Updated `Task.VALID_STATUSES` to use hyphenated format
+  - All status mappings and filtering logic updated across codebase
+  - Existing tasks with old `in_progress` status automatically migrated
+  - Consistent with other multi-word status values (e.g., command name `in-progress`)
+
+### Fixed
+
+- Python bytecode cache issues resolved by clearing `__pycache__` directories
+- Status validation now properly enforces hyphenated format
+- Countdown display bug: Tasks due in 28-44 days no longer show "0 months"
+  - Extended weeks display range from 28 to 45 days (up to 6 weeks)
+  - Months display only shows for 45+ days to avoid "0 months" for ~1 month tasks
+  - Tasks due in 29 days now correctly show "4 weeks" instead of "0 months"
+
 ## [0.8.0] - 2025-10-23
 
 ### Added

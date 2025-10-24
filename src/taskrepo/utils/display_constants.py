@@ -3,14 +3,14 @@
 # Status display mappings
 STATUS_COLORS = {
     "pending": "yellow",
-    "in_progress": "blue",
+    "in-progress": "blue",
     "completed": "green",
     "cancelled": "red",
 }
 
 STATUS_EMOJIS = {
     "pending": "⏳",
-    "in_progress": "🔄",
+    "in-progress": "🔄",
     "completed": "✅",
     "cancelled": "❌",
 }

@@ -92,7 +92,7 @@ def show_change_summary(changes: dict):
 @click.option("--title", help="Update task title")
 @click.option(
     "--status",
-    type=click.Choice(["pending", "in_progress", "completed", "cancelled"], case_sensitive=False),
+    type=click.Choice(["pending", "in-progress", "completed", "cancelled"], case_sensitive=False),
     help="Update task status",
 )
 @click.option("--priority", type=click.Choice(["H", "M", "L"], case_sensitive=False), help="Update task priority")
@@ -152,7 +152,7 @@ def edit(
     \b
     Examples:
       tsk edit 1 --priority L                      # Quick priority change
-      tsk edit 1 --status in_progress --add-tags urgent
+      tsk edit 1 --status in-progress --add-tags urgent
       tsk edit 1 --assignees @alice,@bob           # Replace assignees
       tsk edit 1 --add-assignees @charlie          # Add assignee
       tsk edit 1 --priority H --edit               # Change then review in editor

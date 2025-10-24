@@ -4,14 +4,27 @@ import click
 from git import GitCommandError
 
 from taskrepo.core.repository import RepositoryManager
+from taskrepo.tui.conflict_resolver import resolve_conflict_interactive
 from taskrepo.tui.display import display_tasks_table
+from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 
 @click.command()
 @click.option("--repo", "-r", help="Repository name (will sync all repos if not specified)")
 @click.option("--push/--no-push", default=True, help="Push changes to remote")
+@click.option(
+    "--auto-merge/--no-auto-merge",
+    default=True,
+    help="Automatically merge conflicts when possible (default: True)",
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["auto", "local", "remote", "interactive"], case_sensitive=False),
+    default="auto",
+    help="Conflict resolution strategy: auto (smart merge), local (keep local), remote (keep remote), interactive (prompt)",
+)
 @click.pass_context
-def sync(ctx, repo, push):
+def sync(ctx, repo, push, auto_merge, strategy):
     """Sync task repositories with git (pull and optionally push)."""
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -50,6 +63,57 @@ def sync(ctx, repo, push):
 
             # Check if remote exists
             if git_repo.remotes:
+                # Detect conflicts before pulling
+                click.echo("  • Checking for conflicts...")
+                conflicts = detect_conflicts(git_repo, repository.path)
+
+                if conflicts:
+                    click.secho(f"  ⚠ Found {len(conflicts)} conflicting task(s)", fg="yellow")
+                    resolved_count = 0
+
+                    for conflict in conflicts:
+                        resolved_task = None
+
+                        # Apply resolution strategy
+                        if strategy == "local":
+                            click.echo(f"    • {conflict.file_path.name}: Using local version")
+                            resolved_task = conflict.local_task
+                        elif strategy == "remote":
+                            click.echo(f"    • {conflict.file_path.name}: Using remote version")
+                            resolved_task = conflict.remote_task
+                        elif strategy == "interactive":
+                            resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                        elif strategy == "auto" and auto_merge:
+                            # Try smart merge
+                            if conflict.can_auto_merge:
+                                resolved_task = smart_merge_tasks(
+                                    conflict.local_task, conflict.remote_task, conflict.conflicting_fields
+                                )
+                                if resolved_task:
+                                    click.echo(f"    • {conflict.file_path.name}: Auto-merged (using newer timestamp)")
+                                else:
+                                    # Fall back to interactive
+                                    resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                            else:
+                                # Requires manual resolution
+                                resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                        else:
+                            # Default: interactive
+                            resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+
+                        # Save resolved task
+                        if resolved_task:
+                            repository.save_task(resolved_task)
+                            git_repo.git.add(str(conflict.file_path))
+                            resolved_count += 1
+
+                    # Commit resolved conflicts
+                    if resolved_count > 0:
+                        git_repo.index.commit(f"Merge: Resolved {resolved_count} task conflict(s)")
+                        click.secho(f"  ✓ Resolved and committed {resolved_count} conflict(s)", fg="green")
+                else:
+                    click.secho("  ✓ No conflicts detected", fg="green")
+
                 # Pull changes
                 click.echo("  • Pulling from remote...")
                 origin = git_repo.remotes.origin
