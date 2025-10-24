@@ -209,7 +209,7 @@ def test_repository_generate_readme():
         Task(
             id="002",
             title="In progress task",
-            status="in_progress",
+            status="in-progress",
             priority="M",
             assignees=["@bob", "@charlie"],
             due=datetime.now() + timedelta(days=60),

@@ -55,7 +55,7 @@ def test_repo(manager):
             id=repo.next_task_id(),
             title="Review bug in authentication",
             description="There's a critical bug that needs fixing",
-            status="in_progress",
+            status="in-progress",
             priority="H",
             tags=["bug", "v1.0.0"],
         ),
@@ -210,7 +210,7 @@ def test_search_with_filters(config, manager, test_repo):
 
     # Search for "bug" with specific status
     results = search_tasks(tasks, "bug")
-    results = [t for t in results if t.status == "in_progress"]
+    results = [t for t in results if t.status == "in-progress"]
     assert len(results) == 1
 
 
