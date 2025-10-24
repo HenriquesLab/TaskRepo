@@ -712,13 +712,18 @@ def prompt_parent_task(existing_tasks: list) -> Optional[str]:
         # Try to find task ID from input
         parent_input = parent_input.strip()
 
+        # First, try to resolve display ID to UUID (e.g., "11" -> UUID)
+        from taskrepo.utils.helpers import normalize_task_id
+
+        normalized_id = normalize_task_id(parent_input)
+
         # Check if it matches a display text from completer
         if parent_input in task_map:
             return task_map[parent_input]
 
-        # Check if it's a direct task ID match
+        # Check if normalized ID matches any task
         for task in existing_tasks:
-            if task.id == parent_input or task.id.startswith(parent_input):
+            if task.id == normalized_id or task.id.startswith(normalized_id):
                 return task.id
 
         # If no match found, return None
