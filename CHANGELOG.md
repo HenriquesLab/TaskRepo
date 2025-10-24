@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2025-10-24
+
+### Added
+
+- **Interactive organization prompt for repos-search**: Running `tsk repos-search` without args now prompts for organization
+  - Prompts user to enter GitHub organization instead of showing error
+  - Offers to save organization as default after entering it
+  - Better error messages explaining all options:
+    - Interactive prompt to enter organization
+    - Command-line usage: `tsk repos-search <org>`
+    - How to set default via `tsk config` (interactive menu, option 7)
+  - Fixes confusing error message that suggested non-existent CLI syntax
+
+### Fixed
+
+- **Test suite compatibility**: Updated tests to use new `in-progress` status format (hyphenated)
+  - Ensures all tests pass with the status format change introduced in 0.8.1
+
 ## [0.8.1] - 2025-10-25
 
 ### Added
