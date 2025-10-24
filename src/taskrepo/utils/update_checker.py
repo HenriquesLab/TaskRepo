@@ -103,6 +103,7 @@ def display_update_message(new_version: str):
     click.echo()
     click.echo("─" * 60)
     click.secho(f"⚠️  Update available: v{__version__} → v{new_version}", fg="yellow", bold=True)
+    click.secho("Run: tsk upgrade", fg="cyan", bold=True)
     click.echo("─" * 60)
 
 

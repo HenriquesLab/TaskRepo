@@ -16,6 +16,7 @@ from taskrepo.cli.commands.list import list_tasks
 from taskrepo.cli.commands.repos_search import repos_search
 from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
+from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
 from taskrepo.utils.update_checker import check_and_notify_updates
 
@@ -29,7 +30,7 @@ class OrderedGroup(click.Group):
         sections = [
             (
                 "Setup & Configuration",
-                ["init", "create-repo", "config", "config-show"],
+                ["init", "create-repo", "config", "config-show", "upgrade"],
             ),
             (
                 "Viewing Tasks",
@@ -107,6 +108,7 @@ cli.add_command(info)
 cli.add_command(repos_search)
 cli.add_command(search)
 cli.add_command(sync)
+cli.add_command(upgrade)
 
 
 @cli.command()
