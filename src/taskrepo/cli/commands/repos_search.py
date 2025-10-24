@@ -1,6 +1,7 @@
 """Search for TaskRepo repositories on GitHub."""
 
 import click
+from prompt_toolkit import prompt
 from prompt_toolkit.shortcuts import checkboxlist_dialog, confirm
 from rich.console import Console
 from rich.table import Table
@@ -33,16 +34,30 @@ def repos_search(ctx, org, list_only):
     if not org:
         org = config.default_github_org
         if not org:
-            click.secho(
-                "Error: No organization specified and no default_github_org set in config.",
-                fg="red",
-                err=True,
-            )
-            click.echo("\nProvide an organization:")
-            click.echo("  tsk repos-search <org>")
-            click.echo("\nOr set a default:")
-            click.echo("  tsk config default_github_org <org>")
-            ctx.exit(1)
+            # Prompt user for organization
+            click.echo("No GitHub organization specified.")
+            click.echo("\nYou can:")
+            click.echo("  • Enter an organization name below")
+            click.echo("  • Run: tsk repos-search <org>")
+            click.echo("  • Set a default: run 'tsk config' and choose option 7")
+            click.echo()
+
+            try:
+                org = prompt("Enter GitHub organization/owner (or press Enter to cancel): ")
+                org = org.strip()
+
+                if not org:
+                    click.echo("Cancelled.")
+                    ctx.exit(0)
+
+                # Ask if user wants to save as default
+                if confirm("\nSave this as your default GitHub organization?", default=False):
+                    config.default_github_org = org
+                    click.secho(f"✓ Saved '{org}' as default GitHub organization", fg="green")
+
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+                ctx.exit(0)
 
     # Try to list repositories
     try:
