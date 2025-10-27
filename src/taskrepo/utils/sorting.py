@@ -181,6 +181,10 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
                 exact_timestamp = -exact_timestamp if exact_timestamp != float("inf") else float("-inf")
             key_parts.append(exact_timestamp)
 
+        # Add task ID as final tiebreaker to ensure deterministic sorting
+        # This prevents tasks with identical sort keys from appearing in random order
+        key_parts.append(task.id)
+
         return tuple(key_parts)
 
     # Sort all tasks using the configured sort order

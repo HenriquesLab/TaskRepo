@@ -3,7 +3,12 @@
 import click
 
 from taskrepo.core.repository import RepositoryManager
-from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_result, update_cache_and_display_repo
+from taskrepo.utils.helpers import (
+    find_task_by_title_or_id,
+    prompt_for_subtask_unarchiving,
+    select_task_from_result,
+    update_cache_and_display_repo,
+)
 
 
 @click.command()
@@ -57,9 +62,16 @@ def cancelled(ctx, task_ids, repo):
                 # Single match found
                 task, repository = result
 
+            # Check if we're unarchiving a completed task (only for single task operations)
+            was_completed = task.status == "completed"
+
             # Mark as cancelled
             task.status = "cancelled"
             repository.save_task(task)
+
+            # Prompt for subtasks if unarchiving and processing single task
+            if was_completed and len(task_id_list) == 1:
+                prompt_for_subtask_unarchiving(manager, task, "cancelled", batch_mode=False)
 
             updated_tasks.append((task, repository))
             repositories_to_update.add(repository)

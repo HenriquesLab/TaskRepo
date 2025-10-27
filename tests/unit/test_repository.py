@@ -179,7 +179,7 @@ def test_repository_manager_list_all_tasks():
 
 
 def test_repository_generate_readme():
-    """Test generating README with active tasks table."""
+    """Test generating README with all tasks table."""
     from datetime import datetime, timedelta
 
     from taskrepo.core.config import Config
@@ -230,14 +230,12 @@ def test_repository_generate_readme():
 
         # Check header
         assert "# Tasks - test" in readme_content
-        assert "## Active Tasks" in readme_content
+        assert "## Tasks" in readme_content
 
-        # Check that active tasks are included
+        # Check that ALL tasks are included (including completed)
         assert "Pending task" in readme_content
         assert "In progress task" in readme_content
-
-        # Check that completed task is NOT included
-        assert "Completed task" not in readme_content
+        assert "Completed task" in readme_content
 
         # Check table structure with Countdown and Links columns
         assert (
@@ -265,8 +263,8 @@ def test_repository_generate_readme():
         assert "_Last updated:" in readme_content
 
 
-def test_repository_generate_readme_no_active_tasks():
-    """Test generating README when there are no active tasks."""
+def test_repository_generate_readme_no_tasks():
+    """Test generating README when there are no tasks."""
     from taskrepo.core.config import Config
 
     with TemporaryDirectory() as tmpdir:
@@ -279,18 +277,138 @@ def test_repository_generate_readme_no_active_tasks():
         config_path = Path(tmpdir) / ".taskreporc"
         config = Config(config_path)
 
-        # Create only completed tasks
-        Task(id="001", title="Completed task", status="completed").save(repo_path)
-
-        # Generate README
+        # Generate README with no tasks
         readme_path = repo.generate_readme(config)
 
         assert readme_path.exists()
         readme_content = readme_path.read_text()
 
-        # Check that it shows no active tasks message
-        assert "No active tasks." in readme_content
+        # Check that it shows no tasks message
+        assert "No tasks." in readme_content
         assert "# Tasks - test" in readme_content
+
+
+def test_repository_archive_task():
+    """Test archiving a task."""
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        repo = Repository(repo_path)
+
+        # Create a task
+        task = Task(id="001", title="Task to archive", status="pending", priority="M")
+        repo.save_task(task)
+
+        # Verify task exists in tasks/ directory
+        task_file = repo.tasks_dir / "task-001.md"
+        assert task_file.exists()
+
+        # Archive the task
+        success = repo.archive_task("001")
+        assert success
+
+        # Verify task moved to archive/ directory
+        archive_file = repo.archive_dir / "task-001.md"
+        assert archive_file.exists()
+        assert not task_file.exists()
+
+        # Verify archived task can be loaded
+        archived_tasks = repo.list_archived_tasks()
+        assert len(archived_tasks) == 1
+        assert archived_tasks[0].id == "001"
+
+
+def test_repository_unarchive_task():
+    """Test unarchiving a task."""
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        repo = Repository(repo_path)
+
+        # Create and archive a task
+        task = Task(id="001", title="Archived task", status="completed", priority="M")
+        repo.save_task(task)
+        repo.archive_task("001")
+
+        # Verify task is archived
+        archive_file = repo.archive_dir / "task-001.md"
+        assert archive_file.exists()
+
+        # Unarchive the task
+        success = repo.unarchive_task("001")
+        assert success
+
+        # Verify task moved back to tasks/ directory
+        task_file = repo.tasks_dir / "task-001.md"
+        assert task_file.exists()
+        assert not archive_file.exists()
+
+        # Verify task appears in regular list
+        tasks = repo.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].id == "001"
+
+
+def test_repository_list_tasks_excludes_archived():
+    """Test that list_tasks excludes archived tasks by default."""
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        repo = Repository(repo_path)
+
+        # Create multiple tasks
+        Task(id="001", title="Active task").save(repo_path)
+        Task(id="002", title="Completed task", status="completed").save(repo_path)
+        Task(id="003", title="To be archived").save(repo_path)
+
+        # Archive one task
+        repo.archive_task("003")
+
+        # List tasks (should exclude archived)
+        tasks = repo.list_tasks()
+        assert len(tasks) == 2
+        task_ids = {task.id for task in tasks}
+        assert "001" in task_ids
+        assert "002" in task_ids
+        assert "003" not in task_ids
+
+        # List with archived
+        all_tasks = repo.list_tasks(include_archived=True)
+        assert len(all_tasks) == 3
+
+
+def test_repository_migration_done_to_tasks():
+    """Test migration of tasks from done/ folder to tasks/ folder."""
+    with TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "tasks-test"
+        repo_path.mkdir()
+
+        tasks_dir = repo_path / "tasks"
+        tasks_dir.mkdir()
+        done_dir = tasks_dir / "done"
+        done_dir.mkdir()
+
+        # Create tasks in done/ folder (simulating old structure)
+        Task(id="001", title="Old completed task", status="completed").save(repo_path, subfolder="tasks/done")
+        Task(id="002", title="Another completed", status="completed").save(repo_path, subfolder="tasks/done")
+
+        # Create a task in tasks/ folder
+        Task(id="003", title="Active task").save(repo_path)
+
+        # Initialize repository (should trigger migration)
+        repo = Repository(repo_path)
+
+        # Verify tasks were migrated
+        assert not done_dir.exists()
+        tasks = repo.list_tasks()
+        assert len(tasks) == 3
+        task_ids = {task.id for task in tasks}
+        assert "001" in task_ids
+        assert "002" in task_ids
+        assert "003" in task_ids
 
 
 def test_repository_manager_create_github_validation():

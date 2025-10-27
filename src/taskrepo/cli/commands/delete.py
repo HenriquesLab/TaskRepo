@@ -1,7 +1,8 @@
 """Delete command for removing tasks."""
 
 import click
-from prompt_toolkit.shortcuts import confirm
+from prompt_toolkit.shortcuts import prompt
+from prompt_toolkit.validation import Validator
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_result, update_cache_and_display_repo
@@ -26,14 +27,46 @@ def delete(ctx, task_id, repo, force):
 
     # Confirmation prompt (unless --force flag is used)
     if not force:
-        click.echo(f"\nTask to delete: {task}")
-        if not confirm("Are you sure you want to delete this task? This cannot be undone."):
+        # Format task display with colored UUID and title
+        assignees_str = f" {', '.join(task.assignees)}" if task.assignees else ""
+        project_str = f" [{task.project}]" if task.project else ""
+        task_display = (
+            f"\nTask to delete: "
+            f"{click.style('[' + task.id + ']', fg='cyan')} "
+            f"{click.style(task.title, fg='yellow', bold=True)}"
+            f"{project_str}{assignees_str} ({task.status}, {task.priority})"
+        )
+        click.echo(task_display)
+
+        # Create a validator for y/n input
+        yn_validator = Validator.from_callable(
+            lambda text: text.lower() in ["y", "n", "yes", "no"],
+            error_message="Please enter 'y' or 'n'",
+            move_cursor_to_end=True,
+        )
+
+        response = prompt(
+            "Are you sure you want to delete this task? This cannot be undone. (Y/n) ",
+            default="y",
+            validator=yn_validator,
+        ).lower()
+
+        if response not in ["y", "yes"]:
             click.echo("Deletion cancelled.")
             ctx.exit(0)
 
     # Delete the task
     if repository.delete_task(task.id):
-        click.secho(f"✓ Task deleted: {task}", fg="green")
+        # Format success message with colored UUID and title
+        assignees_str = f" {', '.join(task.assignees)}" if task.assignees else ""
+        project_str = f" [{task.project}]" if task.project else ""
+        success_msg = (
+            f"{click.style('✓ Task deleted:', fg='green')} "
+            f"{click.style('[' + task.id + ']', fg='cyan')} "
+            f"{click.style(task.title, fg='yellow', bold=True)}"
+            f"{project_str}{assignees_str} ({task.status}, {task.priority})"
+        )
+        click.echo(success_msg)
         click.echo()
 
         # Update cache and display repository tasks

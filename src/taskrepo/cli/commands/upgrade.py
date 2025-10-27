@@ -121,7 +121,7 @@ def upgrade(ctx, check, yes):
         try:
             from prompt_toolkit.shortcuts import confirm
 
-            if not confirm(f"Upgrade taskrepo to v{latest_version}?", default=False):
+            if not confirm(f"Upgrade taskrepo to v{latest_version}?"):
                 click.echo("Upgrade cancelled.")
                 return
         except (KeyboardInterrupt, EOFError):

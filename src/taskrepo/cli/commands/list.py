@@ -13,34 +13,40 @@ from taskrepo.tui.display import display_tasks_table
 @click.option("--priority", type=click.Choice(["H", "M", "L"], case_sensitive=False), help="Filter by priority")
 @click.option("--assignee", "-a", help="Filter by assignee")
 @click.option("--tag", "-t", help="Filter by tag")
-@click.option("--all", "show_all", is_flag=True, help="Show all tasks (including completed)")
+@click.option("--archived", is_flag=True, help="Show archived tasks")
 @click.pass_context
-def list_tasks(ctx, repo, project, status, priority, assignee, tag, show_all):
-    """List tasks with optional filters."""
+def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
+    """List tasks with optional filters.
+
+    By default, shows all non-archived tasks (including completed).
+    Use --archived to show archived tasks instead.
+    """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
-    # Determine if we need to load completed tasks
-    # Load from done/ folder if --all is set OR if filtering by completed status
-    include_completed = show_all or (status == "completed")
-
-    # Get tasks
+    # Get tasks (including or excluding archived based on flag)
     if repo:
         repository = manager.get_repository(repo)
         if not repository:
             click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
             ctx.exit(1)
-        tasks = repository.list_tasks(include_completed=include_completed)
+        if archived:
+            tasks = repository.list_archived_tasks()
+        else:
+            tasks = repository.list_tasks(include_archived=False)
     else:
-        tasks = manager.list_all_tasks(include_completed=include_completed)
+        if archived:
+            # Get archived tasks from all repos
+            tasks = []
+            for r in manager.discover_repositories():
+                tasks.extend(r.list_archived_tasks())
+        else:
+            tasks = manager.list_all_tasks(include_archived=False)
 
     # Track if any filters are applied
-    has_filters = bool(repo or project or status or priority or assignee or tag or show_all)
+    has_filters = bool(repo or project or status or priority or assignee or tag or archived)
 
-    # Apply filters
-    # If --all is not set and status is not explicitly "completed", filter out completed tasks
-    if not show_all and status != "completed":
-        tasks = [t for t in tasks if t.status != "completed"]
+    # Apply filters (no automatic exclusion of completed tasks)
 
     if project:
         tasks = [t for t in tasks if t.project == project]

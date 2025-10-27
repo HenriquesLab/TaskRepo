@@ -51,7 +51,7 @@ def repos_search(ctx, org, list_only):
                     ctx.exit(0)
 
                 # Ask if user wants to save as default
-                if confirm("\nSave this as your default GitHub organization?", default=False):
+                if confirm("\nSave this as your default GitHub organization?"):
                     config.default_github_org = org
                     click.secho(f"✓ Saved '{org}' as default GitHub organization", fg="green")
 

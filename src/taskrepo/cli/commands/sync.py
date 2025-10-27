@@ -117,24 +117,25 @@ def sync(ctx, repo, push, auto_merge, strategy):
                 # Pull changes
                 click.echo("  • Pulling from remote...")
                 origin = git_repo.remotes.origin
-                origin.pull()
+                # Use --rebase=false to handle divergent branches
+                git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
                 click.secho("  ✓ Pulled from remote", fg="green")
 
-                # Generate README with active tasks
+                # Generate README with all tasks
                 click.echo("  • Updating README...")
                 repository.generate_readme(config)
                 click.secho("  ✓ README updated", fg="green")
 
-                # Generate done README with completed tasks
-                click.echo("  • Updating done archive README...")
-                repository.generate_done_readme(config)
-                click.secho("  ✓ Done README updated", fg="green")
+                # Generate archive README with archived tasks
+                click.echo("  • Updating archive README...")
+                repository.generate_archive_readme(config)
+                click.secho("  ✓ Archive README updated", fg="green")
 
                 # Check if README was changed and commit it
                 if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
-                    git_repo.git.add("tasks/done/README.md")
-                    git_repo.index.commit("Auto-update: README with active and completed tasks")
+                    git_repo.git.add("tasks/archive/README.md")
+                    git_repo.index.commit("Auto-update: README with tasks and archive")
                     click.secho("  ✓ README changes committed", fg="green")
 
                 # Push changes
@@ -150,16 +151,16 @@ def sync(ctx, repo, push, auto_merge, strategy):
                 repository.generate_readme(config)
                 click.secho("  ✓ README updated", fg="green")
 
-                # Generate done README with completed tasks
-                click.echo("  • Updating done archive README...")
-                repository.generate_done_readme(config)
-                click.secho("  ✓ Done README updated", fg="green")
+                # Generate archive README with archived tasks
+                click.echo("  • Updating archive README...")
+                repository.generate_archive_readme(config)
+                click.secho("  ✓ Archive README updated", fg="green")
 
                 # Check if README was changed and commit it
                 if git_repo.is_dirty(untracked_files=True):
                     git_repo.git.add("README.md")
-                    git_repo.git.add("tasks/done/README.md")
-                    git_repo.index.commit("Auto-update: README with active and completed tasks")
+                    git_repo.git.add("tasks/archive/README.md")
+                    git_repo.index.commit("Auto-update: README with tasks and archive")
                     click.secho("  ✓ README changes committed", fg="green")
 
         except GitCommandError as e:
@@ -173,9 +174,8 @@ def sync(ctx, repo, push, auto_merge, strategy):
     click.secho("✓ Sync completed", fg="green")
     click.echo()
 
-    # Display all active tasks to show current state after sync
-    all_tasks = manager.list_all_tasks()
-    active_tasks = [t for t in all_tasks if t.status != "completed"]
+    # Display all non-archived tasks to show current state after sync
+    all_tasks = manager.list_all_tasks(include_archived=False)
 
-    if active_tasks:
-        display_tasks_table(active_tasks, config, save_cache=True)
+    if all_tasks:
+        display_tasks_table(all_tasks, config, save_cache=True)

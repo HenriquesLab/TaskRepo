@@ -1,6 +1,8 @@
 """Helper utility functions for TaskRepo."""
 
 import click
+from prompt_toolkit.shortcuts import prompt
+from prompt_toolkit.validation import Validator
 
 from taskrepo.utils.id_mapping import get_uuid_from_display_id
 
@@ -143,7 +145,7 @@ def update_cache_and_display_repo(manager, repository, config):
     """Update ID cache and display repository tasks after a modification.
 
     This function centralizes the common pattern used after modifying tasks
-    (add, edit, done, delete) to update the ID cache and display active tasks.
+    (add, edit, done, delete, archive) to update the ID cache and display tasks.
 
     Args:
         manager: RepositoryManager instance
@@ -158,15 +160,129 @@ def update_cache_and_display_repo(manager, repository, config):
     from taskrepo.utils.id_mapping import save_id_cache
     from taskrepo.utils.sorting import sort_tasks
 
-    # Update cache with ALL active tasks across all repos (sorted)
-    all_tasks_all_repos = manager.list_all_tasks()
-    active_tasks_all = [t for t in all_tasks_all_repos if t.status != "completed"]
-    sorted_tasks = sort_tasks(active_tasks_all, config)
+    # Update cache with ALL non-archived tasks across all repos (sorted)
+    all_tasks_all_repos = manager.list_all_tasks(include_archived=False)
+    sorted_tasks = sort_tasks(all_tasks_all_repos, config)
     save_id_cache(sorted_tasks)
 
-    # Display tasks from this repository only (filtered view)
-    repo_tasks = repository.list_tasks()
-    active_tasks_repo = [t for t in repo_tasks if t.status != "completed"]
+    # Display tasks from this repository only (filtered view, excluding archived)
+    repo_tasks = repository.list_tasks(include_archived=False)
 
-    if active_tasks_repo:
-        display_tasks_table(active_tasks_repo, config, save_cache=False)
+    if repo_tasks:
+        display_tasks_table(repo_tasks, config, save_cache=False)
+
+
+def prompt_for_subtask_archiving(manager, task, batch_mode=False):
+    """Prompt user to archive subtasks when archiving a parent task.
+
+    Args:
+        manager: RepositoryManager instance
+        task: The parent task being archived
+        batch_mode: If True, skip prompting (used for batch operations)
+
+    Returns:
+        Number of subtasks archived
+    """
+    from taskrepo.utils.display_constants import STATUS_EMOJIS
+
+    subtasks_with_repos = manager.get_all_subtasks_cross_repo(task.id)
+
+    if not subtasks_with_repos or batch_mode:
+        return 0
+
+    count = len(subtasks_with_repos)
+    subtask_word = "subtask" if count == 1 else "subtasks"
+
+    click.echo(f"\nThis task has {count} {subtask_word}:")
+    for subtask, subtask_repo in subtasks_with_repos:
+        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+
+    # Prompt for confirmation with Y as default
+    yn_validator = Validator.from_callable(
+        lambda text: text.lower() in ["y", "n", "yes", "no"],
+        error_message="Please enter 'y' or 'n'",
+        move_cursor_to_end=True,
+    )
+
+    response = prompt(
+        f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
+        default="y",
+        validator=yn_validator,
+    ).lower()
+
+    if response in ["y", "yes"]:
+        # Mark all subtasks as completed
+        completed_count = 0
+        for subtask, subtask_repo in subtasks_with_repos:
+            if subtask.status != "completed":  # Only if not already completed
+                subtask.status = "completed"
+                subtask_repo.save_task(subtask)
+                completed_count += 1
+
+        if completed_count > 0:
+            click.secho(f"✓ Marked {completed_count} {subtask_word} as completed", fg="green")
+        return completed_count
+
+    return 0
+
+
+def prompt_for_subtask_unarchiving(manager, task, new_status, batch_mode=False):
+    """Prompt user to unarchive subtasks when unarchiving a parent task.
+
+    Args:
+        manager: RepositoryManager instance
+        task: The parent task being unarchived
+        new_status: The new status to set for subtasks
+        batch_mode: If True, skip prompting (used for batch operations)
+
+    Returns:
+        Number of subtasks unarchived
+    """
+    from taskrepo.utils.display_constants import STATUS_EMOJIS
+
+    subtasks_with_repos = manager.get_all_subtasks_cross_repo(task.id)
+
+    if not subtasks_with_repos or batch_mode:
+        return 0
+
+    # Filter to only completed subtasks
+    completed_subtasks = [(st, repo) for st, repo in subtasks_with_repos if st.status == "completed"]
+
+    if not completed_subtasks:
+        return 0
+
+    count = len(completed_subtasks)
+    subtask_word = "subtask" if count == 1 else "subtasks"
+
+    click.echo(f"\nThis task has {count} completed {subtask_word}:")
+    for subtask, subtask_repo in completed_subtasks:
+        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+
+    # Prompt for confirmation with Y as default
+    yn_validator = Validator.from_callable(
+        lambda text: text.lower() in ["y", "n", "yes", "no"],
+        error_message="Please enter 'y' or 'n'",
+        move_cursor_to_end=True,
+    )
+
+    response = prompt(
+        f"Mark {count} completed {subtask_word} as '{new_status}' too? (Y/n) ",
+        default="y",
+        validator=yn_validator,
+    ).lower()
+
+    if response in ["y", "yes"]:
+        # Mark all completed subtasks with new status
+        updated_count = 0
+        for subtask, subtask_repo in completed_subtasks:
+            subtask.status = new_status
+            subtask_repo.save_task(subtask)
+            updated_count += 1
+
+        if updated_count > 0:
+            click.secho(f"✓ Marked {updated_count} {subtask_word} as {new_status}", fg="green")
+        return updated_count
+
+    return 0

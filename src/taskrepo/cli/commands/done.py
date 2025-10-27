@@ -1,13 +1,13 @@
 """Done command for marking tasks as completed."""
 
 import click
-from prompt_toolkit.shortcuts import confirm
+from prompt_toolkit.shortcuts import prompt
+from prompt_toolkit.validation import Validator
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.display_constants import STATUS_EMOJIS
 from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_result, update_cache_and_display_repo
-from taskrepo.utils.id_mapping import get_cache_size
 
 
 @click.command()
@@ -24,16 +24,15 @@ def done(ctx, task_ids, repo):
 
     # If no task_ids provided, list completed tasks
     if not task_ids:
-        # Get tasks from specified repo or all repos
-        # Load from both tasks/ and tasks/done/ folders
+        # Get tasks from specified repo or all repos (excluding archived)
         if repo:
             repository = manager.get_repository(repo)
             if not repository:
                 click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
                 ctx.exit(1)
-            tasks = repository.list_tasks(include_completed=True)
+            tasks = repository.list_tasks(include_archived=False)
         else:
-            tasks = manager.list_all_tasks(include_completed=True)
+            tasks = manager.list_all_tasks(include_archived=False)
 
         # Filter to only completed tasks
         completed_tasks = [t for t in tasks if t.status == "completed"]
@@ -43,16 +42,12 @@ def done(ctx, task_ids, repo):
             click.echo(f"No completed tasks found{repo_msg}.")
             return
 
-        # Get the number of active tasks from cache to use as offset
-        active_task_count = get_cache_size()
-
-        # Display completed tasks with IDs starting after active tasks
+        # Display completed tasks (they're part of regular task list now)
         display_tasks_table(
             completed_tasks,
             config,
             title=f"Completed Tasks ({len(completed_tasks)} found)",
             save_cache=False,
-            id_offset=active_task_count,
             show_completed_date=True,
         )
         return
@@ -105,8 +100,20 @@ def done(ctx, task_ids, repo):
                     status_emoji = STATUS_EMOJIS.get(subtask.status, "")
                     click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                # Prompt for confirmation
-                if confirm(f"Mark all {count} {subtask_word} as completed too?"):
+                # Prompt for confirmation with Y as default
+                yn_validator = Validator.from_callable(
+                    lambda text: text.lower() in ["y", "n", "yes", "no"],
+                    error_message="Please enter 'y' or 'n'",
+                    move_cursor_to_end=True,
+                )
+
+                response = prompt(
+                    f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
+                    default="y",
+                    validator=yn_validator,
+                ).lower()
+
+                if response in ["y", "yes"]:
                     # Mark all subtasks as completed
                     completed_count = 0
                     for subtask, subtask_repo in subtasks_with_repos:

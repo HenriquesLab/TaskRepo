@@ -4,6 +4,7 @@ import click
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
+from taskrepo.cli.commands.archive import archive
 from taskrepo.cli.commands.cancelled import cancelled
 from taskrepo.cli.commands.config import config_cmd
 from taskrepo.cli.commands.delete import delete
@@ -16,6 +17,8 @@ from taskrepo.cli.commands.list import list_tasks
 from taskrepo.cli.commands.repos_search import repos_search
 from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
+from taskrepo.cli.commands.tui import tui
+from taskrepo.cli.commands.unarchive import unarchive
 from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
 from taskrepo.utils.update_checker import check_and_notify_updates
@@ -34,11 +37,11 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Viewing Tasks",
-                ["list", "search", "info"],
+                ["list", "search", "info", "tui"],
             ),
             (
                 "Managing Tasks",
-                ["add", "edit", "ext", "in-progress", "done", "cancelled", "del"],
+                ["add", "edit", "ext", "in-progress", "done", "cancelled", "del", "archive", "unarchive"],
             ),
             (
                 "Repository Operations",
@@ -96,6 +99,7 @@ def process_result(ctx, result, **kwargs):
 
 # Register commands
 cli.add_command(add)
+cli.add_command(archive)
 cli.add_command(cancelled)
 cli.add_command(config_cmd)
 cli.add_command(list_tasks)
@@ -108,6 +112,8 @@ cli.add_command(info)
 cli.add_command(repos_search)
 cli.add_command(search)
 cli.add_command(sync)
+cli.add_command(tui)
+cli.add_command(unarchive)
 cli.add_command(upgrade)
 
 
@@ -135,7 +141,7 @@ def init(ctx, reconfigure):
         click.echo(f"Parent directory: {config.parent_dir}")
         click.echo()
 
-        if not confirm("Reconfigure TaskRepo?", default=False):
+        if not confirm("Reconfigure TaskRepo?"):
             # Just verify setup
             manager = RepositoryManager(config.parent_dir)
             repos = manager.discover_repositories()
@@ -195,7 +201,7 @@ def init(ctx, reconfigure):
 
         # If current directory has repos, offer it as default
         if current_dir in found_locations:
-            if confirm(f"Use current directory ({current_dir}) as parent?", default=True):
+            if confirm(f"Use current directory ({current_dir}) as parent?"):
                 parent_dir = current_dir
         elif found_locations:
             # Ask user to choose
@@ -238,7 +244,7 @@ def init(ctx, reconfigure):
 
     # Create directory if needed
     if not parent_dir.exists():
-        if confirm(f"\nCreate directory {parent_dir}?", default=True):
+        if confirm(f"\nCreate directory {parent_dir}?"):
             parent_dir.mkdir(parents=True, exist_ok=True)
             click.secho(f"✓ Created {parent_dir}", fg="green")
 
