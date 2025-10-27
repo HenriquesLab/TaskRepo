@@ -22,18 +22,17 @@ def tui(ctx, repo):
 
     Navigation:
         ↑/↓ - Navigate tasks
-        ←/→ - Switch repositories
+        ←/→ - Switch between items (repos/projects/assignees)
+        Tab - Switch view type (repo/project/assignee)
         Space - Multi-select tasks
 
     Task Operations:
         n - New task
         e - Edit task
         d - Mark as done
-        p - Mark as in-progress
+        p - Toggle in-progress/pending
         c - Mark as cancelled
         x - Delete task
-        a - Archive task
-        u - Unarchive task
 
     View Controls:
         / - Filter tasks
@@ -62,8 +61,8 @@ def tui(ctx, repo):
 
     # Create and run TUI in a loop
     task_tui = TaskTUI(config, repositories)
-    # Set the starting repo index
-    task_tui.current_repo_idx = start_repo_idx
+    # Set the starting view index
+    task_tui.current_view_idx = start_repo_idx
 
     while True:
         result = task_tui.run()
@@ -80,15 +79,11 @@ def tui(ctx, repo):
         elif result == "done":
             _handle_status_change(task_tui, "completed")
         elif result == "in-progress":
-            _handle_status_change(task_tui, "in-progress")
+            _handle_in_progress_toggle(task_tui)
         elif result == "cancelled":
             _handle_status_change(task_tui, "cancelled")
         elif result == "delete":
             _handle_delete_task(task_tui)
-        elif result == "archive":
-            _handle_archive_task(task_tui, archive=True)
-        elif result == "unarchive":
-            _handle_archive_task(task_tui, archive=False)
         elif result == "info":
             _handle_info_task(task_tui)
         elif result == "sync":
@@ -229,6 +224,54 @@ def _handle_edit_task(task_tui: TaskTUI, config):
     input()
 
 
+def _handle_in_progress_toggle(task_tui: TaskTUI):
+    """Handle toggling between in-progress and pending status."""
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        click.echo("\nNo task selected.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    from datetime import datetime
+
+    # Update each task in its respective repository
+    for task in selected_tasks:
+        # Find the repository for this task
+        if task_tui.current_view_idx == -1:
+            # When on "All" tab, find the repo by task's repo name
+            repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
+        else:
+            repo = task_tui._get_current_repo()
+
+        if not repo:
+            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
+            continue
+
+        # Toggle: if in-progress, set to pending; otherwise, set to in-progress
+        if task.status == "in-progress":
+            task.status = "pending"
+        else:
+            task.status = "in-progress"
+
+        task.modified = datetime.now()
+        repo.save_task(task)
+
+    # Determine message based on what happened
+    if len(selected_tasks) == 1:
+        task = selected_tasks[0]
+        status_label = task.status.replace("-", " ").title()
+        click.secho(f"\n✓ Marked task as {status_label}: {task.title}", fg="green")
+    else:
+        click.secho(f"\n✓ Updated {len(selected_tasks)} tasks", fg="green")
+
+    click.echo("Press Enter to continue...")
+    input()
+
+    # Clear multi-selection
+    task_tui.multi_selected.clear()
+
+
 def _handle_status_change(task_tui: TaskTUI, new_status: str):
     """Handle changing status of selected task(s)."""
     selected_tasks = task_tui._get_selected_tasks()
@@ -243,7 +286,7 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
     # Update each task in its respective repository
     for task in selected_tasks:
         # Find the repository for this task
-        if task_tui.current_repo_idx == -1:
+        if task_tui.current_view_idx == -1:
             # When on "All" tab, find the repo by task's repo name
             repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
         else:
@@ -295,7 +338,7 @@ def _handle_delete_task(task_tui: TaskTUI):
     # Delete each task from its respective repository
     for task in selected_tasks:
         # Find the repository for this task
-        if task_tui.current_repo_idx == -1:
+        if task_tui.current_view_idx == -1:
             # When on "All" tab, find the repo by task's repo name
             repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
         else:
@@ -311,46 +354,6 @@ def _handle_delete_task(task_tui: TaskTUI):
         click.secho(f"\n✓ Deleted task: {selected_tasks[0].title}", fg="green")
     else:
         click.secho(f"\n✓ Deleted {len(selected_tasks)} tasks", fg="green")
-
-    click.echo("Press Enter to continue...")
-    input()
-
-    # Clear multi-selection
-    task_tui.multi_selected.clear()
-
-
-def _handle_archive_task(task_tui: TaskTUI, archive: bool):
-    """Handle archiving/unarchiving selected task(s)."""
-    selected_tasks = task_tui._get_selected_tasks()
-    if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
-        return
-
-    # Archive/unarchive each task from its respective repository
-    for task in selected_tasks:
-        # Find the repository for this task
-        if task_tui.current_repo_idx == -1:
-            # When on "All" tab, find the repo by task's repo name
-            repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
-        else:
-            repo = task_tui._get_current_repo()
-
-        if not repo:
-            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
-            continue
-
-        if archive:
-            repo.archive_task(task.id)
-        else:
-            repo.unarchive_task(task.id)
-
-    action = "Archived" if archive else "Unarchived"
-    if len(selected_tasks) == 1:
-        click.secho(f"\n✓ {action} task: {selected_tasks[0].title}", fg="green")
-    else:
-        click.secho(f"\n✓ {action} {len(selected_tasks)} tasks", fg="green")
 
     click.echo("Press Enter to continue...")
     input()
@@ -495,7 +498,7 @@ def _handle_sync(task_tui: TaskTUI, config):
     from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
     # Determine which repositories to sync
-    if task_tui.current_repo_idx == -1:
+    if task_tui.current_view_idx == -1:
         # Sync all repositories
         repositories_to_sync = task_tui.repositories
         click.echo("\n" + "=" * 50)

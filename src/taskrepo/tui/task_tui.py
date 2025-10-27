@@ -38,8 +38,13 @@ class TaskTUI:
         """
         self.config = config
         self.repositories = repositories
-        # Start at -1 to show "All" repositories first
-        self.current_repo_idx = -1
+        self.view_mode = config.tui_view_mode  # "repo", "project", or "assignee"
+
+        # Build view items based on mode
+        self.view_items = self._build_view_items()
+
+        # Start at -1 to show "All" items first
+        self.current_view_idx = -1
         self.selected_row = 0
         self.multi_selected: set[str] = set()  # Store task UUIDs
         self.filter_text = ""
@@ -77,6 +82,34 @@ class TaskTUI:
             full_screen=True,
             mouse_support=True,
         )
+
+    def _build_view_items(self) -> list[str]:
+        """Build list of view items based on view mode.
+
+        Returns:
+            List of view item names (repo names, projects, or assignees)
+        """
+        if self.view_mode == "repo":
+            # Return repository names
+            return [repo.name for repo in self.repositories]
+        elif self.view_mode == "project":
+            # Collect all unique projects from all repos
+            projects = set()
+            for repo in self.repositories:
+                for task in repo.list_tasks():
+                    if task.project:
+                        projects.add(task.project)
+            return sorted(projects)
+        elif self.view_mode == "assignee":
+            # Collect all unique assignees from all repos
+            assignees = set()
+            for repo in self.repositories:
+                for task in repo.list_tasks():
+                    assignees.update(task.assignees)
+            return sorted(assignees)
+        else:
+            # Fallback to repo mode
+            return [repo.name for repo in self.repositories]
 
     def _get_terminal_size(self):
         """Get current terminal size."""
@@ -227,23 +260,45 @@ class TaskTUI:
                 max_viewport_top = max(0, len(tasks) - self.viewport_size)
                 self.viewport_top = min(self.viewport_top, max_viewport_top)
 
-        # Repository switching with left/right arrows (only when not filtering)
+        # View switching with left/right arrows (only when not filtering)
         @kb.add("right", filter=Condition(lambda: not self.filter_active))
         def _(event):
-            """Switch to next repository."""
+            """Switch to next view (repo/project/assignee)."""
             # Cycle through: -1 (All) -> 0 -> 1 -> ... -> N-1 -> -1 (All)
-            self.current_repo_idx = (self.current_repo_idx + 1) % (len(self.repositories) + 1) - 1
+            self.current_view_idx = (self.current_view_idx + 2) % (len(self.view_items) + 1) - 1
             self.selected_row = 0
             self.viewport_top = 0  # Reset viewport
             self.multi_selected.clear()
 
         @kb.add("left", filter=Condition(lambda: not self.filter_active))
         def _(event):
-            """Switch to previous repository."""
+            """Switch to previous view (repo/project/assignee)."""
             # Cycle backward: -1 (All) -> N-1 -> ... -> 1 -> 0 -> -1 (All)
-            self.current_repo_idx = (self.current_repo_idx) % (len(self.repositories) + 1) - 1
+            self.current_view_idx = (self.current_view_idx) % (len(self.view_items) + 1) - 1
             self.selected_row = 0
             self.viewport_top = 0  # Reset viewport
+            self.multi_selected.clear()
+
+        # Tab to switch view type (only when not filtering)
+        @kb.add("tab", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Switch view type (repo -> project -> assignee -> repo)."""
+            # Cycle through view modes
+            view_modes = ["repo", "project", "assignee"]
+            current_idx = view_modes.index(self.view_mode)
+            next_idx = (current_idx + 1) % len(view_modes)
+            self.view_mode = view_modes[next_idx]
+
+            # Save to config for persistence
+            self.config.tui_view_mode = self.view_mode
+
+            # Rebuild view items for new mode
+            self.view_items = self._build_view_items()
+
+            # Reset to "All" view
+            self.current_view_idx = -1
+            self.selected_row = 0
+            self.viewport_top = 0
             self.multi_selected.clear()
 
         # Multi-select (only when not filtering)
@@ -289,16 +344,6 @@ class TaskTUI:
             """Delete task(s)."""
             event.app.exit(result="delete")
 
-        @kb.add("a", filter=Condition(lambda: not self.filter_active))
-        def _(event):
-            """Archive task(s)."""
-            event.app.exit(result="archive")
-
-        @kb.add("u", filter=Condition(lambda: not self.filter_active))
-        def _(event):
-            """Unarchive task(s)."""
-            event.app.exit(result="unarchive")
-
         # View operations (only when not filtering)
         @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -330,7 +375,7 @@ class TaskTUI:
                 self.filter_text = self.filter_input.text
                 self.filter_active = False
                 self.selected_row = 0
-                event.app.layout.focus(None)
+                # Focus returns automatically when filter is hidden
             else:
                 # View task info
                 event.app.exit(result="info")
@@ -399,31 +444,42 @@ class TaskTUI:
         return Layout(root_container)
 
     def _get_header_text(self) -> FormattedText:
-        """Get the header text showing current repo and filter."""
+        """Get the header text showing current view and filter."""
         if not self.repositories:
             return HTML("<b>No repositories found</b>")
 
-        # Show "All Repositories" when index is -1
-        if self.current_repo_idx == -1:
-            repo_name = "All Repositories"
+        # Determine view label based on mode
+        view_label_map = {"repo": "Repository", "project": "Project", "assignee": "Assignee"}
+        view_label = view_label_map.get(self.view_mode, "View")
+
+        # Show "All" when index is -1
+        if self.current_view_idx == -1:
+            if self.view_mode == "repo":
+                view_name = "All Repositories"
+            elif self.view_mode == "project":
+                view_name = "All Projects"
+            elif self.view_mode == "assignee":
+                view_name = "All Assignees"
+            else:
+                view_name = "All"
             current_pos = 1
         else:
-            repo_name = self.repositories[self.current_repo_idx].name
-            current_pos = self.current_repo_idx + 2  # +2 because "All" is position 1
+            view_name = self.view_items[self.current_view_idx]
+            current_pos = self.current_view_idx + 2  # +2 because "All" is position 1
 
-        total_tabs = len(self.repositories) + 1  # +1 for "All" tab
-        repo_info = f"Repository: {repo_name} ({current_pos}/{total_tabs}) [←/→ to switch]"
+        total_tabs = len(self.view_items) + 1  # +1 for "All" tab
+        view_info = f"{view_label}: {view_name} ({current_pos}/{total_tabs}) [←/→ items | Tab: view type]"
 
         if self.filter_text:
-            repo_info += f" | Filter: '{self.filter_text}'"
+            view_info += f" | Filter: '{self.filter_text}'"
 
-        return HTML(f"<b> {repo_info} </b>")
+        return HTML(f"<b> {view_info} </b>")
 
     def _get_status_bar_text(self) -> FormattedText:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
-            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [x]del [a]rchive [u]narchive "
-            "[/]filter [s]ync [t]ree [r]efresh [q]uit | Multi-select: Space"
+            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [x]del "
+            "[s]ync [/]filter [t]ree [r]efresh [q]uit | Multi-select: Space"
         )
         return HTML(f" {shortcuts} ")
 
@@ -517,30 +573,46 @@ class TaskTUI:
         return HTML("".join(lines))
 
     def _get_current_repo(self) -> Optional[Repository]:
-        """Get the currently selected repository.
+        """Get the currently selected repository (only valid in repo mode).
 
-        Returns None when showing all repositories (index -1).
+        Returns None when not in repo mode or showing all items (index -1).
         """
+        if self.view_mode != "repo":
+            return None
         if not self.repositories:
             return None
-        if self.current_repo_idx == -1:
+        if self.current_view_idx == -1:
             return None
-        return self.repositories[self.current_repo_idx]
+        # Get repository by name
+        repo_name = self.view_items[self.current_view_idx]
+        return next((r for r in self.repositories if r.name == repo_name), None)
 
     def _get_filtered_tasks(self) -> list[Task]:
-        """Get tasks from current repository with filters applied."""
-        # Load tasks from all repos or current repo
-        if self.current_repo_idx == -1:
-            # Show tasks from all repositories
-            tasks = []
-            for repo in self.repositories:
-                tasks.extend(repo.list_tasks())
+        """Get tasks from current view with filters applied."""
+        # Load all tasks first
+        all_tasks = []
+        for repo in self.repositories:
+            all_tasks.extend(repo.list_tasks())
+
+        # Filter by current view
+        if self.current_view_idx == -1:
+            # Show all tasks
+            tasks = all_tasks
         else:
-            # Show tasks from current repository
-            repo = self._get_current_repo()
-            if not repo:
-                return []
-            tasks = repo.list_tasks()
+            # Filter based on view mode
+            current_view_value = self.view_items[self.current_view_idx]
+
+            if self.view_mode == "repo":
+                # Filter by repository
+                tasks = [t for t in all_tasks if t.repo == current_view_value]
+            elif self.view_mode == "project":
+                # Filter by project
+                tasks = [t for t in all_tasks if t.project == current_view_value]
+            elif self.view_mode == "assignee":
+                # Filter by assignee
+                tasks = [t for t in all_tasks if current_view_value in t.assignees]
+            else:
+                tasks = all_tasks
 
         # Apply text filter if active
         if self.filter_text:
@@ -578,6 +650,11 @@ class TaskTUI:
 
         if not tasks:
             return HTML("<yellow>No tasks found. Press 'n' to create one.</yellow>")
+
+        # Determine which column to hide (only when viewing specific item, not "All")
+        hide_repo = self.view_mode == "repo" and self.current_view_idx >= 0
+        hide_project = self.view_mode == "project" and self.current_view_idx >= 0
+        hide_assignee = self.view_mode == "assignee" and self.current_view_idx >= 0
 
         # Build tree structure if needed
         if self.tree_view:
@@ -632,22 +709,41 @@ class TaskTUI:
             max_assignees_width = each_other
             max_tags_width = each_other
 
+        # Adjust widths for hidden columns - give space to title
+        freed_space = 0
+        if hide_repo:
+            freed_space += max_repo_width + 1  # +1 for separator
+            max_repo_width = 0
+        if hide_project:
+            freed_space += max_project_width + 1  # +1 for separator
+            max_project_width = 0
+        if hide_assignee:
+            freed_space += max_assignees_width + 1  # +1 for separator
+            max_assignees_width = 0
+
+        # Add freed space to title column
+        max_title_width += freed_space
+
         # Build result
         result = []
 
-        # Build header with abbreviated column names first to get total width
-        header = (
-            f"{'ID':<{max_id_width}} "
-            f"{'Title':<{max_title_width}} "
-            f"{'Repo':<{max_repo_width}} "
-            f"{'Proj':<{max_project_width}} "  # Project -> Proj
-            f"{'Status':<{max_status_width}} "
-            f"{'P':<{max_priority_width}} "  # Pri -> P
-            f"{'Assign':<{max_assignees_width}} "  # Assigned -> Assign
-            f"{'Tags':<{max_tags_width}} "
-            f"{'Due':<{max_due_width}} "
-            f"{'Count':<{max_countdown_width}}"  # Countdown -> Count
-        )
+        # Build header with abbreviated column names, conditionally including columns
+        header_parts = []
+        header_parts.append(f"{'ID':<{max_id_width}} ")
+        header_parts.append(f"{'Title':<{max_title_width}} ")
+        if not hide_repo:
+            header_parts.append(f"{'Repo':<{max_repo_width}} ")
+        if not hide_project:
+            header_parts.append(f"{'Proj':<{max_project_width}} ")  # Project -> Proj
+        header_parts.append(f"{'Status':<{max_status_width}} ")
+        header_parts.append(f"{'P':<{max_priority_width}} ")  # Pri -> P
+        if not hide_assignee:
+            header_parts.append(f"{'Assign':<{max_assignees_width}} ")  # Assigned -> Assign
+        header_parts.append(f"{'Tags':<{max_tags_width}} ")
+        header_parts.append(f"{'Due':<{max_due_width}} ")
+        header_parts.append(f"{'Count':<{max_countdown_width}}")  # Countdown -> Count
+
+        header = "".join(header_parts)
         table_width = len(header)
 
         # Add scroll indicator at top if there are tasks above viewport
@@ -727,19 +823,23 @@ class TaskTUI:
             # Build the row with colored segments
             if is_selected:
                 # Selected row - use selected style for entire row
-                row = (
-                    f"{selection_marker}"
-                    f"{display_id_str:<{max_id_width - 1}} "
-                    f"{multi_marker} {formatted_title:<{max_title_width - 2}} "
-                    f"{repo_str:<{max_repo_width}} "
-                    f"{project_str:<{max_project_width}} "
-                    f"{status_str:<{max_status_width}} "
-                    f"{priority_str:<{max_priority_width}} "
-                    f"{assignees_str:<{max_assignees_width}} "
-                    f"{tags_str:<{max_tags_width}} "
-                    f"{due_str:<{max_due_width}} "
-                    f"{countdown_text:<{max_countdown_width}}"
-                )
+                row_parts = []
+                row_parts.append(f"{selection_marker}")
+                row_parts.append(f"{display_id_str:<{max_id_width - 1}} ")
+                row_parts.append(f"{multi_marker} {formatted_title:<{max_title_width - 2}} ")
+                if not hide_repo:
+                    row_parts.append(f"{repo_str:<{max_repo_width}} ")
+                if not hide_project:
+                    row_parts.append(f"{project_str:<{max_project_width}} ")
+                row_parts.append(f"{status_str:<{max_status_width}} ")
+                row_parts.append(f"{priority_str:<{max_priority_width}} ")
+                if not hide_assignee:
+                    row_parts.append(f"{assignees_str:<{max_assignees_width}} ")
+                row_parts.append(f"{tags_str:<{max_tags_width}} ")
+                row_parts.append(f"{due_str:<{max_due_width}} ")
+                row_parts.append(f"{countdown_text:<{max_countdown_width}}")
+
+                row = "".join(row_parts)
                 result.append(("class:selected", row + "\n"))
             else:
                 # Unselected row - use individual field colors
@@ -756,11 +856,13 @@ class TaskTUI:
                 # Title
                 result.append(("", f" {formatted_title:<{max_title_width - 2}} "))
 
-                # Repo
-                result.append(("class:repo", f"{repo_str:<{max_repo_width}} "))
+                # Repo (conditional)
+                if not hide_repo:
+                    result.append(("class:repo", f"{repo_str:<{max_repo_width}} "))
 
-                # Project
-                result.append(("class:project", f"{project_str:<{max_project_width}} "))
+                # Project (conditional)
+                if not hide_project:
+                    result.append(("class:project", f"{project_str:<{max_project_width}} "))
 
                 # Status (colored)
                 result.append((status_style, f"{status_str:<{max_status_width}} "))
@@ -768,8 +870,9 @@ class TaskTUI:
                 # Priority (colored)
                 result.append((priority_style, f"{priority_str:<{max_priority_width}} "))
 
-                # Assignees
-                result.append(("class:assignee", f"{assignees_str:<{max_assignees_width}} "))
+                # Assignees (conditional)
+                if not hide_assignee:
+                    result.append(("class:assignee", f"{assignees_str:<{max_assignees_width}} "))
 
                 # Tags
                 result.append(("class:tag", f"{tags_str:<{max_tags_width}} "))

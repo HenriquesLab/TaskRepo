@@ -36,13 +36,14 @@ def config_cmd(ctx):
         click.echo("  8. Set default editor")
         click.echo("  9. Configure task sorting")
         click.echo(" 10. Toggle due date clustering")
-        click.echo("\n 11. Reset to defaults")
-        click.echo(" 12. Exit")
+        click.echo(" 11. Set TUI view mode")
+        click.echo("\n 12. Reset to defaults")
+        click.echo(" 13. Exit")
 
         try:
             choice = prompt(
-                "\nEnter choice (1-12): ",
-                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]),
+                "\nEnter choice (1-13): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]),
             )
         except (KeyboardInterrupt, EOFError):
             click.echo("\nExiting configuration.")
@@ -76,6 +77,7 @@ def config_cmd(ctx):
             click.echo(f"  Sort by: {sort_by}")
             cluster_status = "enabled" if config.cluster_due_dates else "disabled"
             click.echo(f"  Due date clustering: {cluster_status}")
+            click.echo(f"  TUI view mode: {config.tui_view_mode}")
             click.secho("-" * 50, fg="green")
 
         elif choice == "2":
@@ -304,6 +306,27 @@ def config_cmd(ctx):
                 click.echo("\nCancelled.")
 
         elif choice == "11":
+            # Set TUI view mode
+            click.echo(f"\nCurrent TUI view mode: {config.tui_view_mode}")
+            click.echo("\nView modes:")
+            click.echo("  repo     - Cycle through repositories with left/right arrows")
+            click.echo("  project  - Cycle through projects with left/right arrows")
+            click.echo("  assignee - Cycle through assignees with left/right arrows")
+            try:
+                new_mode = prompt(
+                    "Enter view mode (repo/project/assignee): ",
+                    completer=WordCompleter(["repo", "project", "assignee"], ignore_case=True),
+                )
+                new_mode = new_mode.strip().lower()
+                if new_mode in {"repo", "project", "assignee"}:
+                    config.tui_view_mode = new_mode
+                    click.secho(f"✓ TUI view mode updated to: {new_mode}", fg="green")
+                elif new_mode:
+                    click.secho("✗ Invalid view mode. Must be repo, project, or assignee.", fg="red")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+
+        elif choice == "12":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -316,10 +339,10 @@ def config_cmd(ctx):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "12":
+        elif choice == "13":
             # Exit
             click.echo("\nExiting configuration.")
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-12.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-13.", fg="red")

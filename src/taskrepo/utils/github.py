@@ -1,5 +1,6 @@
 """GitHub integration utilities."""
 
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,6 +19,22 @@ def check_gh_cli_installed() -> bool:
         True if gh is installed, False otherwise
     """
     return shutil.which("gh") is not None
+
+
+def get_gh_install_message() -> str:
+    """Get platform-specific installation message for GitHub CLI.
+
+    Returns:
+        Installation message with platform-specific instructions
+    """
+    base_msg = "GitHub CLI (gh) is not installed."
+
+    # Check if on macOS and if Homebrew is installed
+    if platform.system() == "Darwin" and shutil.which("brew"):
+        return f"{base_msg} Install it with:\n  brew install gh"
+
+    # Default message for other platforms or macOS without Homebrew
+    return f"{base_msg} Install it from: https://cli.github.com/"
 
 
 def check_gh_auth() -> bool:
@@ -83,7 +100,7 @@ def create_github_repo(org: str, repo_name: str, visibility: str = "private") ->
     """
     # Check prerequisites
     if not check_gh_cli_installed():
-        raise GitHubError("GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/")
+        raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
         raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
@@ -140,7 +157,7 @@ def clone_github_repo(org: str, repo_name: str, target_path: Path):
     """
     # Check prerequisites
     if not check_gh_cli_installed():
-        raise GitHubError("GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/")
+        raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
         raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
@@ -198,7 +215,7 @@ def list_github_repos(org: str, pattern: str | None = None) -> list[dict]:
 
     # Check prerequisites
     if not check_gh_cli_installed():
-        raise GitHubError("GitHub CLI (gh) is not installed. Install it from: https://cli.github.com/")
+        raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
         raise GitHubError("Not authenticated with GitHub. Run: gh auth login")

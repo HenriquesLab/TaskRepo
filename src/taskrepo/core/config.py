@@ -25,6 +25,7 @@ class Config:
         "default_editor": None,
         "sort_by": ["due", "priority"],
         "cluster_due_dates": False,
+        "tui_view_mode": "repo",  # Options: "repo", "project", "assignee"
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -300,6 +301,31 @@ class Config:
             value: True to cluster tasks by countdown buckets (today, this week, etc.)
         """
         self._data["cluster_due_dates"] = bool(value)
+        self.save()
+
+    @property
+    def tui_view_mode(self) -> str:
+        """Get TUI view mode.
+
+        Returns:
+            View mode: "repo", "project", or "assignee"
+        """
+        return self._data.get("tui_view_mode", "repo")
+
+    @tui_view_mode.setter
+    def tui_view_mode(self, value: str):
+        """Set TUI view mode.
+
+        Args:
+            value: View mode ("repo", "project", or "assignee")
+
+        Raises:
+            ValueError: If invalid view mode provided
+        """
+        valid_modes = {"repo", "project", "assignee"}
+        if value not in valid_modes:
+            raise ValueError(f"Invalid TUI view mode: {value}. Must be one of {valid_modes}")
+        self._data["tui_view_mode"] = value
         self.save()
 
     def get(self, key: str, default=None):
