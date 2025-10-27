@@ -204,7 +204,7 @@ def _handle_edit_task(task_tui: TaskTUI, config):
         # Parse and save
         from taskrepo.core.task import Task
 
-        updated_task = Task.from_markdown(content, repo_name=repo.name)
+        updated_task = Task.from_markdown(content, task_id=task.id, repo=repo.name)
         updated_task.modified = task.modified  # Preserve original modified time initially
 
         # Update modified time if content changed
