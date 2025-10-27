@@ -32,6 +32,7 @@ def tui(ctx, repo):
         d - Mark as done
         p - Toggle in-progress/pending
         c - Mark as cancelled
+        a - Archive task
         x - Delete task
 
     View Controls:
@@ -84,6 +85,8 @@ def tui(ctx, repo):
             _handle_status_change(task_tui, "cancelled")
         elif result == "delete":
             _handle_delete_task(task_tui)
+        elif result == "archive":
+            _handle_archive_task(task_tui, config)
         elif result == "info":
             _handle_info_task(task_tui)
         elif result == "sync":
@@ -342,6 +345,56 @@ def _handle_delete_task(task_tui: TaskTUI):
         click.secho(f"\n✓ Deleted task: {selected_tasks[0].title}", fg="green")
     else:
         click.secho(f"\n✓ Deleted {len(selected_tasks)} tasks", fg="green")
+
+    click.echo("Press Enter to continue...")
+    input()
+
+    # Clear multi-selection
+    task_tui.multi_selected.clear()
+
+
+def _handle_archive_task(task_tui: TaskTUI, config):
+    """Handle archiving selected task(s)."""
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        click.echo("\nNo task selected.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Confirm archiving
+    if len(selected_tasks) == 1:
+        message = f"Archive task '{selected_tasks[0].title}'?"
+    else:
+        message = f"Archive {len(selected_tasks)} tasks?"
+
+    click.echo(f"\n{message}")
+    if not confirm("Confirm archiving?"):
+        click.echo("Cancelled.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Archive each task from its respective repository
+    archived_count = 0
+    for task in selected_tasks:
+        # Find the repository for this task by name (works in all view modes)
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
+
+        if not repo:
+            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
+            continue
+
+        if repo.archive_task(task.id):
+            archived_count += 1
+        else:
+            click.secho(f"\n✗ Could not archive task: {task.title}", fg="red")
+
+    if archived_count > 0:
+        if len(selected_tasks) == 1:
+            click.secho(f"\n✓ Archived task: {selected_tasks[0].title}", fg="green")
+        else:
+            click.secho(f"\n✓ Archived {archived_count} of {len(selected_tasks)} tasks", fg="green")
 
     click.echo("Press Enter to continue...")
     input()

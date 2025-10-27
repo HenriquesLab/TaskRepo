@@ -344,6 +344,11 @@ class TaskTUI:
             """Delete task(s)."""
             event.app.exit(result="delete")
 
+        @kb.add("a", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Archive task(s)."""
+            event.app.exit(result="archive")
+
         # View operations (only when not filtering)
         @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -478,7 +483,7 @@ class TaskTUI:
     def _get_status_bar_text(self) -> FormattedText:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
-            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [x]del "
+            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [a]rchive [x]del "
             "[s]ync [/]filter [t]ree [r]efresh [q]uit | Multi-select: Space"
         )
         return HTML(f" {shortcuts} ")
