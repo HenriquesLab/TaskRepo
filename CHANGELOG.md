@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2025-10-27
+
+### Fixed
+
+- **TUI Edit Task Error**: Fixed crash when editing tasks in TUI with "unexpected keyword argument 'repo_name'" error
+  - Root cause: `Task.from_markdown()` was called with incorrect parameter names
+  - Changed `repo_name` → `repo` (correct parameter name)
+  - Added missing required `task_id` parameter
+  - TUI edit handler now correctly parses edited task content
+  - Implementation: `src/taskrepo/cli/commands/tui.py:207`
+
 ## [0.9.3] - 2025-10-27
 
 ### Fixed
