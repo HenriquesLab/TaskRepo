@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2025-10-27
+
+### Added
+
+- **Configurable TUI View Modes**: Choose how to organize and navigate tasks in the TUI
+  - **View modes**: Repository, Project, or Assignee-based organization
+  - **Configuration**: Set default view mode via `tsk config` (option 11: "Set TUI view mode")
+  - **Config field**: `tui_view_mode` in `~/.TaskRepo/config` (options: `repo`, `project`, `assignee`)
+  - **Dynamic switching**: Press `Tab` to cycle through view types during TUI session (Repo → Project → Assignee → Repo)
+  - **Persistent**: Last used view mode is automatically saved and remembered for next session
+  - **Navigation**: Left/Right arrows cycle through items within current view type (repos, projects, or assignees)
+  - **Header indicator**: Shows current view type and navigation hints: `[←/→ items | Tab: view type]`
+  - Implementation: `src/taskrepo/core/config.py`, `src/taskrepo/tui/task_tui.py`, `src/taskrepo/cli/commands/config.py`
+
+- **Smart Column Hiding in TUI**: Automatically hide redundant columns when viewing filtered items
+  - Hides **Repo column** when viewing a specific repository
+  - Hides **Project column** when viewing a specific project
+  - Hides **Assignee column** when viewing a specific assignee
+  - Only applies when viewing specific items, not "All" views
+  - **Freed space**: Expands Title column to show longer task names
+  - Example: Viewing "Feature A" project hides Project column and expands Title from 25 to 34 characters
+  - Implementation: `src/taskrepo/tui/task_tui.py` (`_get_task_list_text()` method)
+
+- **Platform-specific GitHub CLI Installation Messages**: Smarter guidance for installing `gh` CLI
+  - Detects macOS + Homebrew and suggests: `brew install gh`
+  - Falls back to generic installation URL for other platforms
+  - Applies to `tsk repos-search` and other GitHub-dependent commands
+  - Implementation: `src/taskrepo/utils/github.py` (`get_gh_install_message()` function)
+
+### Changed
+
+- **TUI [p] Key Behavior**: Toggle between in-progress and pending status
+  - Previously: Always set to in-progress
+  - Now: If task is in-progress → set to pending; otherwise → set to in-progress
+  - Provides quick way to "reset" tasks to pending state
+  - Implementation: `src/taskrepo/cli/commands/tui.py` (`_handle_in_progress_toggle()` function)
+
+- **TUI Command Documentation**: Updated docstring to reflect new keyboard shortcuts
+  - Tab key: "Switch view type (repo/project/assignee)"
+  - [p] key: "Toggle in-progress/pending"
+  - Left/Right arrows: "Switch between items (repos/projects/assignees)"
+
+### Technical Details
+
+- View mode configuration with property getter/setter and validation in `Config` class
+- Tab key binding with view mode cycling and config persistence
+- Dynamic `_build_view_items()` method to collect repos/projects/assignees based on mode
+- Conditional column rendering in `_get_task_list_text()` with freed space reallocation
+- Platform detection using `platform.system()` and `shutil.which()` for Homebrew check
+
 ## [0.9.1] - 2025-10-27
 
 ### Improved
