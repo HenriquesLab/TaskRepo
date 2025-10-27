@@ -237,12 +237,8 @@ def _handle_in_progress_toggle(task_tui: TaskTUI):
 
     # Update each task in its respective repository
     for task in selected_tasks:
-        # Find the repository for this task
-        if task_tui.current_view_idx == -1:
-            # When on "All" tab, find the repo by task's repo name
-            repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
-        else:
-            repo = task_tui._get_current_repo()
+        # Find the repository for this task by name (works in all view modes)
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
 
         if not repo:
             click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
@@ -285,12 +281,8 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
 
     # Update each task in its respective repository
     for task in selected_tasks:
-        # Find the repository for this task
-        if task_tui.current_view_idx == -1:
-            # When on "All" tab, find the repo by task's repo name
-            repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
-        else:
-            repo = task_tui._get_current_repo()
+        # Find the repository for this task by name (works in all view modes)
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
 
         if not repo:
             click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
@@ -337,12 +329,8 @@ def _handle_delete_task(task_tui: TaskTUI):
 
     # Delete each task from its respective repository
     for task in selected_tasks:
-        # Find the repository for this task
-        if task_tui.current_view_idx == -1:
-            # When on "All" tab, find the repo by task's repo name
-            repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
-        else:
-            repo = task_tui._get_current_repo()
+        # Find the repository for this task by name (works in all view modes)
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
 
         if not repo:
             click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
