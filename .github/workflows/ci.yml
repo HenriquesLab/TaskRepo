@@ -193,7 +193,7 @@ jobs:
           echo "✅ Coverage report generated"
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: coverage.xml
@@ -239,7 +239,7 @@ jobs:
           echo "✅ Package verification complete"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dist-packages
           path: dist/
