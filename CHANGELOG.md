@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-10-27
+
+### Improved
+
+- **TUI Color Enhancements**: Rich color scheme throughout the TUI for better visual scanning
+  - **Priority colors**: Red (High), Yellow (Medium), Green (Low) in both task list and detail panel
+  - **Status colors**: Yellow (pending), Blue (in-progress), Green (completed), Red (cancelled)
+  - **Countdown colors**: Red (overdue), Yellow (urgent), Green (normal) - dynamically colored based on urgency
+  - **Field-specific colors**:
+    - ID numbers: Dimmed (bright black)
+    - Repo names: Magenta
+    - Projects: Cyan
+    - Assignees: Blue
+    - Tags: Yellow
+    - Due dates: White
+  - **UI elements**: Cyan scroll indicators, green multi-select markers
+  - **Detail panel**: Color-coded field labels (cyan bold) with colored values for better readability
+  - **Selected row**: Blue background highlight for easy visual tracking
+  - Comprehensive color styling using `prompt_toolkit.styles.Style` system
+
+### Technical Details
+
+- Added `Style` import from `prompt_toolkit.styles`
+- Created `_create_style()` method with comprehensive color definitions
+- Individual field coloring in task rows using `FormattedText` tuples
+- Color-coded countdown based on `get_countdown_text()` return values
+- HTML color tags in detail panel for rich formatting
+
 ## [0.9.0] - 2025-10-27
 
 ### Added
@@ -562,6 +590,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.1
 [0.9.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.0
 [0.8.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.2
 [0.8.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.1

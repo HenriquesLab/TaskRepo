@@ -15,6 +15,7 @@ from prompt_toolkit.layout import (
     Layout,
     Window,
 )
+from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
 
 from taskrepo.core.config import Config
@@ -65,10 +66,14 @@ class TaskTUI:
         # Build layout
         self.layout = self._create_layout()
 
+        # Create style
+        self.style = self._create_style()
+
         # Create application
         self.app = Application(
             layout=self.layout,
             key_bindings=self.kb,
+            style=self.style,
             full_screen=True,
             mouse_support=True,
         )
@@ -120,6 +125,39 @@ class TaskTUI:
         detail_height = max(8, min(15, detail_height))
 
         return detail_height
+
+    def _create_style(self) -> Style:
+        """Create the color scheme for the TUI."""
+        return Style.from_dict(
+            {
+                # Priority colors
+                "priority-high": "fg:ansired bold",
+                "priority-medium": "fg:ansiyellow",
+                "priority-low": "fg:ansigreen",
+                # Status colors
+                "status-pending": "fg:ansiyellow",
+                "status-in-progress": "fg:ansiblue bold",
+                "status-completed": "fg:ansigreen",
+                "status-cancelled": "fg:ansired",
+                # Countdown colors
+                "countdown-overdue": "fg:ansired bold",
+                "countdown-urgent": "fg:ansiyellow bold",
+                "countdown-soon": "fg:ansiyellow",
+                "countdown-normal": "fg:ansiwhite",
+                # UI elements
+                "selected": "bg:ansiblue fg:ansiwhite bold",
+                "header": "bg:ansiblue fg:ansiwhite bold",
+                "scrollbar": "fg:ansicyan",
+                "multi-select": "fg:ansigreen bold",
+                "field-label": "fg:ansicyan bold",
+                "repo": "fg:ansimagenta",
+                "project": "fg:ansicyan",
+                "assignee": "fg:ansiblue",
+                "tag": "fg:ansiyellow",
+                "due-date": "fg:ansiwhite",
+                "id": "fg:ansibrightblack",
+            }
+        )
 
     def _create_key_bindings(self) -> KeyBindings:
         """Create keyboard shortcuts for the TUI."""
@@ -412,10 +450,25 @@ class TaskTUI:
         # Metadata line 1: Repo, Project, Status, Priority
         repo = task.repo or "-"
         project = task.project or "-"
-        status = task.status
-        priority = task.priority
+
+        # Color-code status
+        status_color_map = {
+            "pending": "yellow",
+            "in-progress": "blue",
+            "completed": "green",
+            "cancelled": "red",
+        }
+        status_color = status_color_map.get(task.status, "white")
+
+        # Color-code priority
+        priority_color_map = {"H": "red", "M": "yellow", "L": "green"}
+        priority_color = priority_color_map.get(task.priority, "white")
+
         lines.append(
-            f"<cyan>Repo:</cyan> {repo} | <cyan>Project:</cyan> {project} | <cyan>Status:</cyan> {status} | <cyan>Priority:</cyan> {priority}\n"
+            f"<cyan>Repo:</cyan> <magenta>{repo}</magenta> | "
+            f"<cyan>Project:</cyan> <cyan>{project}</cyan> | "
+            f"<cyan>Status:</cyan> <{status_color}><b>{task.status}</b></{status_color}> | "
+            f"<cyan>Priority:</cyan> <{priority_color}><b>{task.priority}</b></{priority_color}>\n"
         )
 
         # Metadata line 2: Timestamps
@@ -427,7 +480,13 @@ class TaskTUI:
         assignees = ", ".join(task.assignees) if task.assignees else "-"
         tags = ", ".join(task.tags) if task.tags else "-"
         due_str = task.due.strftime("%Y-%m-%d") if task.due else "-"
-        lines.append(f"<cyan>Assigned:</cyan> {assignees} | <cyan>Tags:</cyan> {tags} | <cyan>Due:</cyan> {due_str}\n")
+
+        # Color-code assignees and tags
+        lines.append(
+            f"<cyan>Assigned:</cyan> <blue>{assignees}</blue> | "
+            f"<cyan>Tags:</cyan> <yellow>{tags}</yellow> | "
+            f"<cyan>Due:</cyan> {due_str}\n"
+        )
 
         # Links section
         if task.links:
@@ -638,32 +697,90 @@ class TaskTUI:
             tags_str = (", ".join(task.tags) if task.tags else "-")[:max_tags_width]
             due_str = (task.due.strftime("%Y-%m-%d") if task.due else "-")[:max_due_width]
 
-            # Format countdown
+            # Format countdown with color
             if task.due:
-                countdown_text, _ = get_countdown_text(task.due)
+                countdown_text, countdown_color = get_countdown_text(task.due)
                 countdown_text = countdown_text[:max_countdown_width]
+                # Map colors to style classes
+                countdown_style_map = {
+                    "red": "class:countdown-overdue",
+                    "yellow": "class:countdown-urgent",
+                    "green": "class:countdown-normal",
+                }
+                countdown_style = countdown_style_map.get(countdown_color, "")
             else:
                 countdown_text = "-"
+                countdown_style = ""
 
-            # Build the row with proper spacing
-            row = (
-                f"{selection_marker}"
-                f"{display_id_str:<{max_id_width - 1}} "
-                f"{multi_marker} {formatted_title:<{max_title_width - 2}} "
-                f"{repo_str:<{max_repo_width}} "
-                f"{project_str:<{max_project_width}} "
-                f"{status_str:<{max_status_width}} "
-                f"{priority_str:<{max_priority_width}} "
-                f"{assignees_str:<{max_assignees_width}} "
-                f"{tags_str:<{max_tags_width}} "
-                f"{due_str:<{max_due_width}} "
-                f"{countdown_text:<{max_countdown_width}}"
-            )
+            # Get style classes for priority and status
+            priority_style_map = {"H": "class:priority-high", "M": "class:priority-medium", "L": "class:priority-low"}
+            priority_style = priority_style_map.get(task.priority, "")
 
+            status_style_map = {
+                "pending": "class:status-pending",
+                "in-progress": "class:status-in-progress",
+                "completed": "class:status-completed",
+                "cancelled": "class:status-cancelled",
+            }
+            status_style = status_style_map.get(task.status, "")
+
+            # Build the row with colored segments
             if is_selected:
+                # Selected row - use selected style for entire row
+                row = (
+                    f"{selection_marker}"
+                    f"{display_id_str:<{max_id_width - 1}} "
+                    f"{multi_marker} {formatted_title:<{max_title_width - 2}} "
+                    f"{repo_str:<{max_repo_width}} "
+                    f"{project_str:<{max_project_width}} "
+                    f"{status_str:<{max_status_width}} "
+                    f"{priority_str:<{max_priority_width}} "
+                    f"{assignees_str:<{max_assignees_width}} "
+                    f"{tags_str:<{max_tags_width}} "
+                    f"{due_str:<{max_due_width}} "
+                    f"{countdown_text:<{max_countdown_width}}"
+                )
                 result.append(("class:selected", row + "\n"))
             else:
-                result.append(("", row + "\n"))
+                # Unselected row - use individual field colors
+                # Selection marker and ID
+                result.append(("", selection_marker))
+                result.append(("class:id", f"{display_id_str:<{max_id_width - 1}} "))
+
+                # Multi-select marker
+                if is_multi_selected:
+                    result.append(("class:multi-select", multi_marker))
+                else:
+                    result.append(("", multi_marker))
+
+                # Title
+                result.append(("", f" {formatted_title:<{max_title_width - 2}} "))
+
+                # Repo
+                result.append(("class:repo", f"{repo_str:<{max_repo_width}} "))
+
+                # Project
+                result.append(("class:project", f"{project_str:<{max_project_width}} "))
+
+                # Status (colored)
+                result.append((status_style, f"{status_str:<{max_status_width}} "))
+
+                # Priority (colored)
+                result.append((priority_style, f"{priority_str:<{max_priority_width}} "))
+
+                # Assignees
+                result.append(("class:assignee", f"{assignees_str:<{max_assignees_width}} "))
+
+                # Tags
+                result.append(("class:tag", f"{tags_str:<{max_tags_width}} "))
+
+                # Due date
+                result.append(("class:due-date", f"{due_str:<{max_due_width}} "))
+
+                # Countdown (colored)
+                result.append((countdown_style, f"{countdown_text:<{max_countdown_width}}"))
+
+                result.append(("", "\n"))
 
         # Add scroll indicator at bottom if there are tasks below viewport
         if viewport_bottom < len(tree_items):
