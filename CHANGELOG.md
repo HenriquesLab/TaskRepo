@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2025-10-27
+
+### Fixed
+
+- **TUI Task Operations in Non-Repo Views**: Fixed critical bug where [d]one, [p]rogress, [c]ancelled, and [x]delete operations would fail when using Project or Assignee view modes
+  - Previously: Operations only worked in Repository view mode because handlers used `_get_current_repo()` which returns None in other view modes
+  - Now: All operations consistently look up repository by `task.repo` name, working across all view modes
+  - Affected handlers: `_handle_in_progress_toggle()`, `_handle_status_change()`, `_handle_delete_task()`, `_handle_archive_task()`
+  - Implementation: `src/taskrepo/cli/commands/tui.py`
+
+### Added
+
+- **TUI Archive Key Binding**: Restored [a]rchive functionality to TUI
+  - Press [a] to archive selected task(s)
+  - Supports multi-select for batch archiving
+  - Includes confirmation prompt before archiving
+  - Shows success/failure feedback for each task
+  - Updated status bar and command docstring
+  - Implementation: `src/taskrepo/tui/task_tui.py`, `src/taskrepo/cli/commands/tui.py`
+
+### Technical Details
+
+- Simplified repository lookup logic to always use `task.repo` name instead of view-dependent methods
+- Consistent error handling across all view modes
+- Archive handler follows same pattern as delete/status change handlers
+
 ## [0.9.2] - 2025-10-27
 
 ### Added
