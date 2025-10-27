@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-10-27
+
+### Added
+
+- **Full-screen TUI (Text User Interface)**: New interactive terminal UI for task management
+  - Launch with `tsk tui` command for immersive full-screen experience
+  - **Keyboard-driven navigation**: Arrow keys for task selection, left/right for repository switching
+  - **Multi-repository support**: Tab between "All Repositories" view and individual repos
+  - **Task operations**:
+    - `[n]` Create new task
+    - `[e]` Edit selected task(s)
+    - `[d]` Mark as done
+    - `[p]` Mark as in-progress
+    - `[c]` Mark as cancelled
+    - `[x]` Delete task(s)
+    - `[a]` Archive task(s)
+    - `[u]` Unarchive task(s)
+  - **Multi-select**: Use `Space` to select multiple tasks for batch operations
+  - **Live filtering**: Press `/` to filter tasks by text, `Escape` to clear
+  - **Tree view toggle**: Press `[t]` to toggle hierarchical task display
+  - **Git sync**: Press `[s]` to sync with remote repositories
+  - **Task detail panel**: Bottom panel shows extended task information (metadata, links, dependencies, description)
+  - **Scrollable viewport**: Rolodex-style scrolling for large task lists (starts scrolling after 5th task)
+  - **Status bar**: Always-visible keyboard shortcuts and commands
+  - **Dynamic terminal sizing**: Automatically adapts to terminal width and height
+    - Viewport height adjusts based on available space
+    - Detail panel uses ~30% of terminal height (8-15 lines)
+    - Column widths dynamically distributed based on terminal width
+    - Title column gets 40% of flexible space, other columns share remaining space
+  - **Keyboard shortcut isolation**: Filter mode disables command shortcuts to prevent accidental triggers
+  - Implementation: `src/taskrepo/tui/task_tui.py`, `src/taskrepo/cli/commands/tui.py`
+
+- **Archive/Unarchive commands**: New commands for managing archived tasks
+  - `tsk archive TASK_IDS` - Archive one or more tasks to `tasks/archive/` folder
+  - `tsk archive` (no args) - List all archived tasks with display IDs
+  - `tsk unarchive TASK_IDS` - Restore archived tasks back to active status
+  - Archived tasks are excluded from regular task listings by default
+  - Archive folder has its own README.md with archived task table
+  - Subtask handling: Prompts to archive subtasks when archiving parent task
+  - Implementation: `src/taskrepo/cli/commands/archive.py`, `src/taskrepo/cli/commands/unarchive.py`
+
+### Changed
+
+- **TUI keyboard shortcuts**: Updated for better usability
+  - Left/Right arrows for repository navigation (instead of Tab)
+  - `[s]` for sync (instead of sort)
+  - Filter mode (`/`) now properly isolates input from command shortcuts
+
+### Technical Details
+
+- New TUI framework using `prompt_toolkit` for full-screen terminal applications
+- Layout components: `Application`, `Layout`, `HSplit`, `Window`, `Frame`, `ConditionalContainer`
+- Dynamic sizing with `_get_terminal_size()`, `_calculate_viewport_size()`, `_calculate_detail_panel_height()`
+- Viewport scrolling mechanism with configurable trigger point
+- Conditional key bindings to prevent shortcut conflicts during text input
+- Archive folder structure: `tasks/archive/` with its own README.md
+- ID mapping for archived tasks: Display IDs continue after active tasks (e.g., 1-15 active, 16-20 archived)
+
 ## [0.8.2] - 2025-10-24
 
 ### Added
@@ -504,6 +562,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.0
+[0.8.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.2
+[0.8.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.1
+[0.8.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.0
+[0.7.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.7.1
+[0.7.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.7.0
+[0.6.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.6.2
 [0.6.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.6.1
 [0.6.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.6.0
 [0.5.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.5.0
