@@ -19,10 +19,10 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
 
 from taskrepo.core.config import Config
-from taskrepo.core.repository import Repository
+from taskrepo.core.repository import Repository, RepositoryManager
 from taskrepo.core.task import Task
 from taskrepo.tui.display import build_task_tree, count_subtasks, format_tree_title, get_countdown_text
-from taskrepo.utils.id_mapping import get_display_id_from_uuid
+from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 from taskrepo.utils.sorting import sort_tasks
 
 
@@ -349,12 +349,34 @@ class TaskTUI:
             """Archive task(s)."""
             event.app.exit(result="archive")
 
+        @kb.add("m", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Move task(s) to another repository."""
+            event.app.exit(result="move")
+
         # View operations (only when not filtering)
         @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Refresh view."""
-            # Just trigger a redraw
-            pass
+            # Reload repositories from disk
+            manager = RepositoryManager(self.config.parent_dir)
+            self.repositories = manager.discover_repositories()
+
+            # Rebuild view items
+            self.view_items = self._build_view_items()
+
+            # Update ID cache with all current tasks
+            all_tasks = manager.list_all_tasks(include_archived=False)
+            sorted_tasks = sort_tasks(all_tasks, self.config)
+            save_id_cache(sorted_tasks)
+
+            # Clear multi-selection since task IDs may have changed
+            self.multi_selected.clear()
+
+            # Reset selected row if out of bounds
+            tasks = self._get_filtered_tasks()
+            if self.selected_row >= len(tasks):
+                self.selected_row = max(0, len(tasks) - 1)
 
         @kb.add("t", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -483,7 +505,7 @@ class TaskTUI:
     def _get_status_bar_text(self) -> FormattedText:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
-            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [a]rchive [x]del "
+            "[n]ew [e]dit [d]one [p]rogress [c]ancelled [a]rchive [m]ove [x]del "
             "[s]ync [/]filter [t]ree [r]efresh [q]uit | Multi-select: Space"
         )
         return HTML(f" {shortcuts} ")
@@ -689,7 +711,23 @@ class TaskTUI:
 
         # Calculate space used by fixed columns and separators
         fixed_width = max_id_width + max_status_width + max_priority_width + max_due_width + max_countdown_width
-        separators = 9  # Number of spaces between columns
+
+        # Calculate number of separators dynamically based on visible columns
+        # Each visible column has 1 space separator, except:
+        # - ID column has its marker (no additional space)
+        # - Due/Count has 4 spaces between them (3 extra + 1 normal)
+        num_visible_cols = 5  # ID, Title, Status, Priority, Tags (always visible)
+        if not hide_repo:
+            num_visible_cols += 1  # Repo
+        if not hide_project:
+            num_visible_cols += 1  # Project
+        if not hide_assignee:
+            num_visible_cols += 1  # Assignee
+        num_visible_cols += 2  # Due and Count
+
+        # Each column gets 1 separator space, except ID (no space before) and Count (no space after)
+        # Plus 3 extra spaces between Due and Count
+        separators = num_visible_cols - 1 + 3
 
         # Calculate remaining space for flexible columns
         remaining_width = terminal_width - fixed_width - separators - 2  # -2 for margins
@@ -745,7 +783,7 @@ class TaskTUI:
         if not hide_assignee:
             header_parts.append(f"{'Assign':<{max_assignees_width}} ")  # Assigned -> Assign
         header_parts.append(f"{'Tags':<{max_tags_width}} ")
-        header_parts.append(f"{'Due':<{max_due_width}} ")
+        header_parts.append(f"{'Due':<{max_due_width}}    ")  # Extra spacing before Countdown
         header_parts.append(f"{'Count':<{max_countdown_width}}")  # Countdown -> Count
 
         header = "".join(header_parts)
@@ -841,7 +879,7 @@ class TaskTUI:
                 if not hide_assignee:
                     row_parts.append(f"{assignees_str:<{max_assignees_width}} ")
                 row_parts.append(f"{tags_str:<{max_tags_width}} ")
-                row_parts.append(f"{due_str:<{max_due_width}} ")
+                row_parts.append(f"{due_str:<{max_due_width}}    ")  # Extra spacing before Countdown
                 row_parts.append(f"{countdown_text:<{max_countdown_width}}")
 
                 row = "".join(row_parts)
@@ -883,7 +921,7 @@ class TaskTUI:
                 result.append(("class:tag", f"{tags_str:<{max_tags_width}} "))
 
                 # Due date
-                result.append(("class:due-date", f"{due_str:<{max_due_width}} "))
+                result.append(("class:due-date", f"{due_str:<{max_due_width}}    "))  # Extra spacing before Countdown
 
                 # Countdown (colored)
                 result.append((countdown_style, f"{countdown_text:<{max_countdown_width}}"))

@@ -156,12 +156,16 @@ def config_cmd(ctx):
             if not repositories:
                 click.secho("✗ No repositories found. Create one first with: tsk create-repo", fg="red")
             else:
+                # Sort by task count (descending), then name (ascending)
+                repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+
                 current_repo = config.default_repo if config.default_repo else "(none)"
                 click.echo(f"\nCurrent default repository: {current_repo}")
                 click.echo("\nAvailable repositories:")
                 for idx, repo in enumerate(repositories, start=1):
+                    task_count = len(repo.list_tasks())
                     marker = " (current default)" if repo.name == config.default_repo else ""
-                    click.echo(f"  {idx}. {repo.name}{marker}")
+                    click.echo(f"  {idx}. {repo.name} ({task_count} tasks){marker}")
 
                 try:
                     user_input = prompt(

@@ -142,7 +142,10 @@ def prompt_repository(repositories: list[Repository], default: Optional[str] = N
         print(f"Repository: {repositories[0].name}")
         return repositories[0]
 
-    # Find the default repository's index
+    # Sort by task count (descending), then name (ascending)
+    repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+
+    # Find the default repository's index (after sorting)
     default_index = None
     if default:
         for idx, repo in enumerate(repositories):
@@ -153,8 +156,9 @@ def prompt_repository(repositories: list[Repository], default: Optional[str] = N
     # Display numbered list of repositories
     print("\nAvailable repositories:")
     for idx, repo in enumerate(repositories, start=1):
+        task_count = len(repo.list_tasks())
         marker = " (default)" if default and repo.name == default else ""
-        print(f"  {idx}. {repo.name}{marker}")
+        print(f"  {idx}. {repo.name} ({task_count} tasks){marker}")
     print()
 
     # Validator for numeric choice

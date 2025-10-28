@@ -2,7 +2,6 @@
 
 import click
 
-from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
 from taskrepo.cli.commands.archive import archive
 from taskrepo.cli.commands.cancelled import cancelled
@@ -14,6 +13,7 @@ from taskrepo.cli.commands.extend import ext
 from taskrepo.cli.commands.in_progress import in_progress
 from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
+from taskrepo.cli.commands.move import move
 from taskrepo.cli.commands.repos_search import repos_search
 from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
@@ -21,6 +21,7 @@ from taskrepo.cli.commands.tui import tui
 from taskrepo.cli.commands.unarchive import unarchive
 from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
+from taskrepo.utils.banner import display_banner
 from taskrepo.utils.update_checker import check_and_notify_updates
 
 
@@ -33,7 +34,7 @@ class OrderedGroup(click.Group):
         sections = [
             (
                 "Setup & Configuration",
-                ["init", "create-repo", "config", "config-show", "upgrade"],
+                ["init", "config", "config-show", "upgrade"],
             ),
             (
                 "Viewing Tasks",
@@ -41,11 +42,11 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Managing Tasks",
-                ["add", "edit", "ext", "in-progress", "done", "cancelled", "del", "archive", "unarchive"],
+                ["add", "edit", "ext", "move", "in-progress", "done", "cancelled", "del", "archive", "unarchive"],
             ),
             (
                 "Repository Operations",
-                ["repos", "repos-search", "sync"],
+                ["create-repo", "repos", "repos-search", "sync"],
             ),
         ]
 
@@ -71,8 +72,41 @@ class OrderedGroup(click.Group):
                     )
 
 
-@click.group(cls=OrderedGroup)
-@click.version_option(version=__version__, prog_name="taskrepo")
+def print_version(ctx, param, value):
+    """Custom version callback that displays banner with version."""
+    if not value or ctx.resilient_parsing:
+        return
+    display_banner()
+    ctx.exit()
+
+
+def print_help(ctx, param, value):
+    """Custom help callback that displays banner with help."""
+    if not value or ctx.resilient_parsing:
+        return
+    display_banner()
+    click.echo(ctx.get_help())
+    ctx.exit()
+
+
+@click.group(cls=OrderedGroup, invoke_without_command=True)
+@click.option(
+    "--version",
+    is_flag=True,
+    callback=print_version,
+    expose_value=False,
+    is_eager=True,
+    help="Show the version and exit.",
+)
+@click.option(
+    "--help",
+    "-h",
+    is_flag=True,
+    callback=print_help,
+    expose_value=False,
+    is_eager=True,
+    help="Show this message and exit.",
+)
 @click.pass_context
 def cli(ctx):
     """TaskRepo - TaskWarrior-inspired task management with git and markdown.
@@ -84,6 +118,11 @@ def cli(ctx):
 
     # Load configuration
     ctx.obj["config"] = Config()
+
+    # Display banner when no subcommand is provided (shows help)
+    if ctx.invoked_subcommand is None:
+        display_banner()
+        click.echo(ctx.get_help())
 
 
 @cli.result_callback()
@@ -107,6 +146,7 @@ cli.add_command(edit)
 cli.add_command(done)
 cli.add_command(delete, name="del")  # Register only as "del"
 cli.add_command(ext)
+cli.add_command(move)
 cli.add_command(in_progress)
 cli.add_command(info)
 cli.add_command(repos_search)
@@ -427,6 +467,9 @@ def repos(ctx):
         click.echo(f"No repositories found in {config.parent_dir}")
         click.echo("Create one with: taskrepo create-repo <name>")
         return
+
+    # Sort by task count (descending), then name (ascending)
+    repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
 
     click.echo(f"Repositories in {config.parent_dir}:\n")
     for repo in repositories:

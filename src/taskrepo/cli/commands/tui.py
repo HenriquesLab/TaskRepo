@@ -10,6 +10,8 @@ from prompt_toolkit.shortcuts import confirm
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui import prompts
 from taskrepo.tui.task_tui import TaskTUI
+from taskrepo.utils.id_mapping import save_id_cache
+from taskrepo.utils.sorting import sort_tasks
 
 
 @click.command()
@@ -60,6 +62,12 @@ def tui(ctx, repo):
             click.secho(f"Repository '{repo}' not found.", fg="red", err=True)
             ctx.exit(1)
 
+    # Update ID cache with all tasks before starting TUI
+    manager = RepositoryManager(config.parent_dir)
+    all_tasks = manager.list_all_tasks(include_archived=False)
+    sorted_tasks = sort_tasks(all_tasks, config)
+    save_id_cache(sorted_tasks)
+
     # Create and run TUI in a loop
     task_tui = TaskTUI(config, repositories)
     # Set the starting view index
@@ -71,6 +79,12 @@ def tui(ctx, repo):
         if result is None:
             # User quit (q or Esc)
             break
+
+        # Save current view state before handling action
+        saved_view_mode = task_tui.view_mode
+        saved_view_idx = task_tui.current_view_idx
+        saved_filter_text = task_tui.filter_text
+        saved_tree_view = task_tui.tree_view
 
         # Handle the action
         if result == "new":
@@ -87,13 +101,29 @@ def tui(ctx, repo):
             _handle_delete_task(task_tui)
         elif result == "archive":
             _handle_archive_task(task_tui, config)
+        elif result == "move":
+            _handle_move_task(task_tui, config)
         elif result == "info":
             _handle_info_task(task_tui)
         elif result == "sync":
             _handle_sync(task_tui, config)
 
-        # Recreate TUI to refresh
+        # Update ID cache after task operations
+        all_tasks = manager.list_all_tasks(include_archived=False)
+        sorted_tasks = sort_tasks(all_tasks, config)
+        save_id_cache(sorted_tasks)
+
+        # Recreate TUI to refresh, restoring view state
         task_tui = TaskTUI(config, repositories)
+        task_tui.view_mode = saved_view_mode
+        task_tui.current_view_idx = saved_view_idx
+        task_tui.filter_text = saved_filter_text
+        task_tui.filter_input.text = saved_filter_text  # Also restore the filter input widget
+        task_tui.tree_view = saved_tree_view
+        # Update config to match restored view mode
+        config.tui_view_mode = saved_view_mode
+        # Rebuild view items with restored state
+        task_tui.view_items = task_tui._build_view_items()
 
 
 def _handle_new_task(task_tui: TaskTUI, config):
@@ -401,6 +431,130 @@ def _handle_archive_task(task_tui: TaskTUI, config):
 
     # Clear multi-selection
     task_tui.multi_selected.clear()
+
+
+def _handle_move_task(task_tui: TaskTUI, config):
+    """Handle moving selected task(s) to another repository."""
+    from datetime import datetime
+
+    from taskrepo.core.repository import RepositoryManager
+    from taskrepo.tui import prompts
+
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        click.echo("\nNo task selected.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Prompt for target repository
+    click.echo("\n" + "=" * 50)
+    click.echo("Move Task(s) to Repository")
+    click.echo("=" * 50)
+
+    target_repo = prompts.prompt_repository(task_tui.repositories)
+    if not target_repo:
+        click.echo("Cancelled.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Confirm move
+    if len(selected_tasks) == 1:
+        message = f"Move '{selected_tasks[0].title}' to repository '{target_repo.name}'?"
+    else:
+        message = f"Move {len(selected_tasks)} tasks to repository '{target_repo.name}'?"
+
+    click.echo(f"\n{message}")
+    if not confirm("Confirm move?"):
+        click.echo("Cancelled.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Initialize manager for subtask checking
+    manager = RepositoryManager(config.parent_dir)
+
+    # Move each task
+    moved_count = 0
+    for task in selected_tasks:
+        # Find source repository
+        source_repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
+        if not source_repo:
+            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
+            continue
+
+        # Don't move if already in target repo
+        if source_repo.name == target_repo.name:
+            click.secho(f"\n⚠ Task '{task.title}' is already in '{target_repo.name}'", fg="yellow")
+            continue
+
+        try:
+            # Check for subtasks
+            subtasks_with_repos = manager.get_all_subtasks_cross_repo(task.id)
+            move_subtasks = False
+
+            if subtasks_with_repos:
+                click.echo(f"\nTask '{task.title}' has {len(subtasks_with_repos)} subtask(s).")
+                if confirm("Move subtasks as well?"):
+                    move_subtasks = True
+
+            # Check for dependencies
+            if task.depends:
+                click.secho(
+                    f"\n⚠ Warning: Task '{task.title}' has {len(task.depends)} "
+                    f"dependenc{'y' if len(task.depends) == 1 else 'ies'}.",
+                    fg="yellow",
+                )
+
+            # Check if task is archived
+            is_archived = _is_task_archived(source_repo, task.id)
+
+            # Update modified timestamp
+            task.modified = datetime.now()
+
+            # Save to target repo (always goes to tasks/ first)
+            target_repo.save_task(task)
+
+            # If task was archived, move it to archive/ in target repo
+            if is_archived:
+                target_repo.archive_task(task.id)
+
+            # Delete from source repo
+            source_repo.delete_task(task.id)
+
+            # Move subtasks if requested
+            if move_subtasks and subtasks_with_repos:
+                for subtask, subtask_repo in subtasks_with_repos:
+                    subtask_is_archived = _is_task_archived(subtask_repo, subtask.id)
+                    subtask.modified = datetime.now()
+                    target_repo.save_task(subtask)
+                    if subtask_is_archived:
+                        target_repo.archive_task(subtask.id)
+                    subtask_repo.delete_task(subtask.id)
+
+            moved_count += 1
+
+        except Exception as e:
+            click.secho(f"\n✗ Failed to move task '{task.title}': {str(e)}", fg="red")
+
+    if moved_count > 0:
+        if len(selected_tasks) == 1:
+            click.secho(f"\n✓ Moved task to '{target_repo.name}': {selected_tasks[0].title}", fg="green")
+        else:
+            click.secho(f"\n✓ Moved {moved_count} of {len(selected_tasks)} tasks to '{target_repo.name}'", fg="green")
+
+    click.echo("Press Enter to continue...")
+    input()
+
+    # Clear multi-selection
+    task_tui.multi_selected.clear()
+
+
+def _is_task_archived(repository, task_id: str) -> bool:
+    """Check if a task is archived."""
+    archive_path = repository.path / "tasks" / "archive" / f"task-{task_id}.md"
+    return archive_path.exists()
 
 
 def _handle_info_task(task_tui: TaskTUI):
