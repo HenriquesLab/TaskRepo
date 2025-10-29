@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.6] - 2025-10-29
+
+### Fixed
+
+- **Release automation**: Fixed missing CHANGELOG entry that caused v0.9.5 release workflow to fail
+  - Added complete v0.9.5 CHANGELOG documentation retroactively
+  - Ensures CI/CD validation passes for future releases
+
 ## [0.9.5] - 2025-10-28
 
 ### Added
@@ -712,6 +720,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.6]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.6
 [0.9.5]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.5
 [0.9.4]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.4
 [0.9.3]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.3
