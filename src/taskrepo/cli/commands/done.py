@@ -1,5 +1,7 @@
 """Done command for marking tasks as completed."""
 
+from typing import Tuple
+
 import click
 from prompt_toolkit.shortcuts import prompt
 from prompt_toolkit.validation import Validator
@@ -13,9 +15,17 @@ from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_re
 @click.command()
 @click.argument("task_ids", nargs=-1)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
+@click.option("--yes", "-y", is_flag=True, help="Automatically mark subtasks as completed (skip prompt)")
 @click.pass_context
-def done(ctx, task_ids, repo):
+def done(ctx, task_ids: Tuple[str, ...], repo, yes):
     """Mark one or more tasks as completed, or list completed tasks if no task IDs are provided.
+
+    Supports multiple tasks at once using space-separated or comma-separated IDs.
+
+    Examples:
+        tsk done 4              # Mark task 4 as completed
+        tsk done 4 5 6          # Mark tasks 4, 5, and 6 as completed (space-separated)
+        tsk done 4,5,6          # Mark tasks 4, 5, and 6 as completed (comma-separated)
 
     TASK_IDS: One or more task IDs to mark as done (optional - if omitted, lists completed tasks)
     """
@@ -52,12 +62,17 @@ def done(ctx, task_ids, repo):
         )
         return
 
+    # Flatten comma-separated task IDs (supports both "4 5 6" and "4,5,6")
+    task_id_list = []
+    for task_id in task_ids:
+        task_id_list.extend([tid.strip() for tid in task_id.split(",")])
+
     # Process multiple task IDs
     completed_tasks = []
     failed_tasks = []
     repositories_to_update = set()
 
-    for task_id in task_ids:
+    for task_id in task_id_list:
         try:
             # Try to find task by ID or title
             result = find_task_by_title_or_id(manager, task_id, repo)
@@ -65,7 +80,7 @@ def done(ctx, task_ids, repo):
             # Handle the result manually for batch processing
             if result[0] is None:
                 # Not found
-                if len(task_ids) > 1:
+                if len(task_id_list) > 1:
                     click.secho(f"✗ No task found matching '{task_id}'", fg="red")
                     failed_tasks.append(task_id)
                     continue
@@ -75,7 +90,7 @@ def done(ctx, task_ids, repo):
 
             elif isinstance(result[0], list):
                 # Multiple matches
-                if len(task_ids) > 1:
+                if len(task_id_list) > 1:
                     click.secho(f"✗ Multiple tasks found matching '{task_id}' - skipping", fg="red")
                     failed_tasks.append(task_id)
                     continue
@@ -90,30 +105,37 @@ def done(ctx, task_ids, repo):
             # Just mark the parent task as completed
             subtasks_with_repos = manager.get_all_subtasks_cross_repo(task.id)
 
-            if subtasks_with_repos and len(task_ids) == 1:
+            if subtasks_with_repos and len(task_id_list) == 1:
                 # Only prompt for subtasks if processing a single task
                 count = len(subtasks_with_repos)
                 subtask_word = "subtask" if count == 1 else "subtasks"
 
-                click.echo(f"\nThis task has {count} {subtask_word}:")
-                for subtask, subtask_repo in subtasks_with_repos:
-                    status_emoji = STATUS_EMOJIS.get(subtask.status, "")
-                    click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+                # Determine whether to mark subtasks
+                mark_subtasks = yes  # Default to --yes flag value
 
-                # Prompt for confirmation with Y as default
-                yn_validator = Validator.from_callable(
-                    lambda text: text.lower() in ["y", "n", "yes", "no"],
-                    error_message="Please enter 'y' or 'n'",
-                    move_cursor_to_end=True,
-                )
+                if not yes:
+                    # Show subtasks and prompt
+                    click.echo(f"\nThis task has {count} {subtask_word}:")
+                    for subtask, subtask_repo in subtasks_with_repos:
+                        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+                        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                response = prompt(
-                    f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
-                    default="y",
-                    validator=yn_validator,
-                ).lower()
+                    # Prompt for confirmation with Y as default
+                    yn_validator = Validator.from_callable(
+                        lambda text: text.lower() in ["y", "n", "yes", "no"],
+                        error_message="Please enter 'y' or 'n'",
+                        move_cursor_to_end=True,
+                    )
 
-                if response in ["y", "yes"]:
+                    response = prompt(
+                        f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
+                        default="y",
+                        validator=yn_validator,
+                    ).lower()
+
+                    mark_subtasks = response in ["y", "yes"]
+
+                if mark_subtasks:
                     # Mark all subtasks as completed
                     completed_count = 0
                     for subtask, subtask_repo in subtasks_with_repos:
@@ -135,10 +157,11 @@ def done(ctx, task_ids, repo):
         except Exception as e:
             # Unexpected error - show message and continue with next task
             failed_tasks.append(task_id)
-            if len(task_ids) > 1:
+            if len(task_id_list) > 1:
                 click.secho(f"✗ Could not mark task '{task_id}' as completed: {e}", fg="red")
             else:
-                raise
+                click.secho(f"Error: Could not mark task '{task_id}' as completed: {e}", fg="red", err=True)
+                ctx.exit(1)
 
     # Show summary
     if completed_tasks:
@@ -147,9 +170,9 @@ def done(ctx, task_ids, repo):
             click.secho(f"✓ Task marked as completed: {task}", fg="green")
 
         # Show summary for batch operations
-        if len(task_ids) > 1:
+        if len(task_id_list) > 1:
             click.echo()
-            click.secho(f"Completed {len(completed_tasks)} of {len(task_ids)} tasks", fg="green")
+            click.secho(f"Completed {len(completed_tasks)} of {len(task_id_list)} tasks", fg="green")
 
     # Update cache and display for affected repositories
     # For simplicity, just update the first repository or show all tasks

@@ -33,20 +33,26 @@ from taskrepo.utils.helpers import (
     "--force",
     "-f",
     is_flag=True,
-    help="Skip confirmation prompt",
+    help="Skip confirmation and automatically move subtasks",
 )
 @click.pass_context
 def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bool):
     """Move one or more tasks to a different repository.
+
+    Supports multiple tasks at once using space-separated or comma-separated IDs.
 
     Examples:
         # Move a single task to 'personal' repository
 
         tsk move 5 --to personal
 
-        # Move multiple tasks to 'work' repository
+        # Move multiple tasks to 'work' repository (space-separated)
 
         tsk move 12 13 14 --to work
+
+        # Move multiple tasks to 'work' repository (comma-separated)
+
+        tsk move 12,13,14 --to work
 
         # Move from specific source repo to target repo
 
@@ -57,14 +63,14 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
         tsk move 8 --to personal --force
     """
     config = ctx.obj["config"]
-    manager = ctx.obj["manager"]
+    manager = RepositoryManager(config.parent_dir)
 
     # Validate that target repository exists
     target_repo = manager.get_repository(to)
     if not target_repo:
         click.secho(f"Error: Target repository '{to}' not found.", fg="red", err=True)
         click.echo("\nAvailable repositories:")
-        for r in manager.repositories:
+        for r in manager.discover_repositories():
             click.echo(f"  - {r.name}")
         ctx.exit(1)
 
@@ -72,14 +78,19 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
     failed_tasks: List[str] = []
     repositories_to_update = set()
 
+    # Flatten comma-separated task IDs (supports both "12 13 14" and "12,13,14")
+    task_id_list = []
     for task_id in task_ids:
+        task_id_list.extend([tid.strip() for tid in task_id.split(",")])
+
+    for task_id in task_id_list:
         try:
             # Find task by ID, UUID, or title
             result = find_task_by_title_or_id(manager, task_id, repo)
 
             # Handle not found / multiple matches
             if result[0] is None:
-                if len(task_ids) > 1:
+                if len(task_id_list) > 1:
                     click.secho(f"✗ No task found matching '{task_id}'", fg="red")
                     failed_tasks.append(task_id)
                     continue
@@ -95,7 +106,7 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
 
             # Check if task is already in target repo
             if source_repo.name == target_repo.name:
-                if len(task_ids) > 1:
+                if len(task_id_list) > 1:
                     click.secho(
                         f"⚠ Task '{task.title}' is already in repository '{to}'",
                         fg="yellow",
@@ -115,7 +126,7 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
             repositories_to_update.add(target_repo)
 
         except Exception as e:
-            if len(task_ids) > 1:
+            if len(task_id_list) > 1:
                 click.secho(f"✗ Error processing task '{task_id}': {str(e)}", fg="red")
                 failed_tasks.append(task_id)
                 continue
@@ -164,9 +175,9 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
         try:
             # Check for subtasks
             subtasks_with_repos = manager.get_all_subtasks_cross_repo(task.id)
-            move_subtasks = False
+            move_subtasks = force  # Default to --force flag value
 
-            if subtasks_with_repos:
+            if subtasks_with_repos and not force:
                 click.echo(f"\nTask '{task.title}' has {len(subtasks_with_repos)} subtask(s).")
 
                 yn_validator = Validator.from_callable(
@@ -228,6 +239,13 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
                     subtask_repo.delete_task(subtask.id)
                     if subtask_repo != source_repo:
                         repositories_to_update.add(subtask_repo)
+            elif subtasks_with_repos and not move_subtasks:
+                # Warn user that subtasks are staying behind
+                subtask_count = len(subtasks_with_repos)
+                subtask_word = "subtask" if subtask_count == 1 else "subtasks"
+                click.secho(
+                    f"⚠ Warning: {subtask_count} {subtask_word} will remain in original repository.", fg="yellow"
+                )
 
             # Format success message
             assignees_str = f" {', '.join(task.assignees)}" if task.assignees else ""

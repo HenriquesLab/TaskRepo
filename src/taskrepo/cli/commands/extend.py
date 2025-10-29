@@ -1,6 +1,7 @@
 """Extend command for extending task due dates."""
 
 from datetime import datetime, timedelta
+from typing import Tuple
 
 import click
 
@@ -11,19 +12,19 @@ from taskrepo.utils.helpers import find_task_by_title_or_id
 
 
 @click.command(name="ext")
-@click.argument("task_ids")
+@click.argument("task_ids", nargs=-1, required=True)
 @click.argument("date_or_duration")
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
 @click.pass_context
-def ext(ctx, task_ids, date_or_duration, repo):
+def ext(ctx, task_ids: Tuple[str, ...], date_or_duration, repo):
     """Set task due dates to a specific date or extend by a duration.
 
-    Supports multiple tasks at once using comma-separated IDs.
+    Supports multiple tasks at once using space-separated or comma-separated IDs.
 
     For durations (1w, 2d, etc.): Extends from current due date, or sets from today if no due date.
     For dates (tomorrow, 2025-10-30, etc.): Sets due date to the specified date directly.
 
-    TASK_IDS: Task ID(s) to modify (comma-separated for multiple, e.g., "4,5,6")
+    TASK_IDS: Task ID(s) to modify (space or comma-separated for multiple)
 
     DATE_OR_DURATION: Target date or duration
         Durations: 1w, 2d, 3m, 1y
@@ -36,7 +37,9 @@ def ext(ctx, task_ids, date_or_duration, repo):
 
         tsk ext 4 1w          # Extend task 4 by 1 week from current due date
 
-        tsk ext 4,5,6 2d      # Extend tasks 4, 5, and 6 by 2 days
+        tsk ext 4 5 6 2d      # Extend tasks 4, 5, and 6 by 2 days (space-separated)
+
+        tsk ext 4,5,6 2d      # Extend tasks 4, 5, and 6 by 2 days (comma-separated)
 
         tsk ext 10 "next week"  # Set task 10 due date to next week
 
@@ -52,8 +55,10 @@ def ext(ctx, task_ids, date_or_duration, repo):
         click.secho(f"Error: {e}", fg="red", err=True)
         ctx.exit(1)
 
-    # Parse task IDs (comma-separated)
-    task_id_list = [tid.strip() for tid in task_ids.split(",")]
+    # Flatten comma-separated task IDs (supports both "4 5 6" and "4,5,6")
+    task_id_list = []
+    for task_id in task_ids:
+        task_id_list.extend([tid.strip() for tid in task_id.split(",")])
 
     # Track results
     extended_tasks = []

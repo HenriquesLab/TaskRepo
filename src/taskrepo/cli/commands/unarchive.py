@@ -12,8 +12,9 @@ from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_re
 @click.command()
 @click.argument("task_ids", nargs=-1, required=True)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
+@click.option("--yes", "-y", is_flag=True, help="Automatically unarchive subtasks (skip prompt)")
 @click.pass_context
-def unarchive(ctx, task_ids, repo):
+def unarchive(ctx, task_ids, repo, yes):
     """Unarchive one or more tasks (restore from archive folder).
 
     TASK_IDS: One or more task IDs to unarchive
@@ -71,25 +72,32 @@ def unarchive(ctx, task_ids, repo):
                     count = len(archived_subtasks)
                     subtask_word = "subtask" if count == 1 else "subtasks"
 
-                    click.echo(f"\nThis task has {count} archived {subtask_word}:")
-                    for subtask, subtask_repo in archived_subtasks:
-                        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
-                        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+                    # Determine whether to unarchive subtasks
+                    unarchive_subtasks = yes  # Default to --yes flag value
 
-                    # Prompt for confirmation with Y as default
-                    yn_validator = Validator.from_callable(
-                        lambda text: text.lower() in ["y", "n", "yes", "no"],
-                        error_message="Please enter 'y' or 'n'",
-                        move_cursor_to_end=True,
-                    )
+                    if not yes:
+                        # Show subtasks and prompt
+                        click.echo(f"\nThis task has {count} archived {subtask_word}:")
+                        for subtask, subtask_repo in archived_subtasks:
+                            status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+                            click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                    response = prompt(
-                        f"Unarchive all {count} {subtask_word} too? (Y/n) ",
-                        default="y",
-                        validator=yn_validator,
-                    ).lower()
+                        # Prompt for confirmation with Y as default
+                        yn_validator = Validator.from_callable(
+                            lambda text: text.lower() in ["y", "n", "yes", "no"],
+                            error_message="Please enter 'y' or 'n'",
+                            move_cursor_to_end=True,
+                        )
 
-                    if response in ["y", "yes"]:
+                        response = prompt(
+                            f"Unarchive all {count} {subtask_word} too? (Y/n) ",
+                            default="y",
+                            validator=yn_validator,
+                        ).lower()
+
+                        unarchive_subtasks = response in ["y", "yes"]
+
+                    if unarchive_subtasks:
                         # Unarchive all subtasks
                         unarchived_count = 0
                         for subtask, subtask_repo in archived_subtasks:

@@ -7,57 +7,67 @@ from typing import Optional, Tuple
 import click
 
 from taskrepo.__version__ import __version__
+from taskrepo.utils.install_detector import detect_install_method
 from taskrepo.utils.update_checker import check_for_updates
 
 
 def detect_installer() -> Tuple[str, list[str]]:
     """Detect which package installer was used to install taskrepo.
 
+    Uses the unified install_detector module for consistent detection.
+
     Returns:
         Tuple of (installer_name, upgrade_command_parts)
     """
-    # Try pipx first
-    try:
-        result = subprocess.run(
-            ["pipx", "list"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and "taskrepo" in result.stdout:
-            return ("pipx", ["pipx", "upgrade", "taskrepo"])
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    install_method = detect_install_method()
 
-    # Try uv
-    try:
-        result = subprocess.run(
-            ["uv", "pip", "list"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and "taskrepo" in result.stdout:
-            return ("uv", ["uv", "pip", "install", "--upgrade", "taskrepo"])
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    # Fallback to pip
-    # Try pip3 first, then pip
-    pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
-    return (pip_cmd, [pip_cmd, "install", "--upgrade", "taskrepo"])
+    # Map install method to command list
+    if install_method == "homebrew":
+        return ("Homebrew", ["brew", "upgrade", "taskrepo"])
+    elif install_method == "pipx":
+        return ("pipx", ["pipx", "upgrade", "taskrepo"])
+    elif install_method == "uv":
+        return ("uv tool", ["uv", "tool", "upgrade", "taskrepo"])
+    elif install_method == "pip-user":
+        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
+        return (f"{pip_cmd} (user)", [pip_cmd, "install", "--upgrade", "--user", "taskrepo"])
+    elif install_method == "pip":
+        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
+        return (pip_cmd, [pip_cmd, "install", "--upgrade", "taskrepo"])
+    elif install_method == "dev":
+        return ("Development mode", ["git", "pull"])
+    else:  # unknown
+        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
+        return (pip_cmd, [pip_cmd, "install", "--upgrade", "taskrepo"])
 
 
-def run_upgrade(upgrade_cmd: list[str]) -> Tuple[bool, Optional[str]]:
+def run_upgrade(upgrade_cmd: list[str], is_homebrew: bool = False) -> Tuple[bool, Optional[str]]:
     """Run the upgrade command.
 
     Args:
         upgrade_cmd: List of command parts to execute
+        is_homebrew: Whether this is a Homebrew installation (requires brew update first)
 
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
     """
     try:
+        # For Homebrew, run 'brew update' first to fetch latest formulae
+        if is_homebrew:
+            click.echo("Running: brew update")
+            update_result = subprocess.run(
+                ["brew", "update"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if update_result.returncode != 0:
+                error_msg = update_result.stderr.strip() if update_result.stderr else update_result.stdout.strip()
+                return (False, f"brew update failed: {error_msg}")
+            click.echo("✓ Homebrew formulae updated")
+            click.echo()
+
+        # Run the actual upgrade command
         result = subprocess.run(
             upgrade_cmd,
             capture_output=True,
@@ -130,12 +140,17 @@ def upgrade(ctx, check, yes):
 
     # Detect installer
     installer_name, upgrade_cmd = detect_installer()
+    is_homebrew = installer_name == "Homebrew"
+
     click.echo(f"\nDetected installer: {installer_name}")
-    click.echo(f"Running: {' '.join(upgrade_cmd)}")
+    if is_homebrew:
+        click.echo("Running: brew update && brew upgrade taskrepo")
+    else:
+        click.echo(f"Running: {' '.join(upgrade_cmd)}")
     click.echo()
 
     # Run upgrade
-    success, error = run_upgrade(upgrade_cmd)
+    success, error = run_upgrade(upgrade_cmd, is_homebrew=is_homebrew)
 
     if success:
         click.echo()
@@ -154,10 +169,14 @@ def upgrade(ctx, check, yes):
 
         # Provide manual upgrade instructions
         click.secho("Manual upgrade:", fg="yellow")
-        if installer_name == "pipx":
+        if installer_name == "Homebrew":
+            click.echo("  brew update && brew upgrade taskrepo")
+        elif installer_name == "pipx":
             click.echo("  pipx upgrade taskrepo")
-        elif installer_name == "uv":
-            click.echo("  uv pip install --upgrade taskrepo")
+        elif installer_name == "uv tool":
+            click.echo("  uv tool upgrade taskrepo")
+        elif installer_name == "Development mode":
+            click.echo("  cd <repo> && git pull && uv sync")
         else:
             click.echo(f"  {installer_name} install --upgrade taskrepo")
             click.echo("  # Or try with --user flag:")

@@ -23,7 +23,14 @@ from prompt_toolkit.widgets import Frame, TextArea
 from taskrepo.core.config import Config
 from taskrepo.core.repository import Repository, RepositoryManager
 from taskrepo.core.task import Task
-from taskrepo.tui.display import build_task_tree, count_subtasks, format_tree_title, get_countdown_text
+from taskrepo.tui.display import (
+    build_task_tree,
+    count_subtasks,
+    format_tree_title,
+    get_countdown_text,
+    pad_to_width,
+    truncate_to_width,
+)
 from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 from taskrepo.utils.sorting import sort_tasks
 
@@ -864,9 +871,9 @@ class TaskTUI:
                 formatted_title = task.title
 
             # Truncate title if too long (account for multi-select marker)
+            # Use display width to properly handle emojis and wide characters
             title_space = max_title_width - 2  # Reserve space for markers
-            if len(formatted_title) > title_space:
-                formatted_title = formatted_title[: title_space - 3] + "..."
+            formatted_title = truncate_to_width(formatted_title, title_space)
 
             # Add selection markers
             selection_marker = ">" if is_selected else " "
@@ -917,7 +924,9 @@ class TaskTUI:
                 row_parts = []
                 row_parts.append(f"{selection_marker}")
                 row_parts.append(f"{display_id_str:<{max_id_width - 1}} ")
-                row_parts.append(f"{multi_marker} {formatted_title:<{max_title_width - 2}} ")
+                # Pad title with display width awareness
+                padded_title = pad_to_width(formatted_title, max_title_width - 2)
+                row_parts.append(f"{multi_marker} {padded_title} ")
                 if not hide_repo:
                     row_parts.append(f"{repo_str:<{max_repo_width}} ")
                 if not hide_project:
@@ -944,8 +953,9 @@ class TaskTUI:
                 else:
                     result.append(("", multi_marker))
 
-                # Title
-                result.append(("", f" {formatted_title:<{max_title_width - 2}} "))
+                # Title (pad with display width awareness)
+                padded_title = pad_to_width(formatted_title, max_title_width - 2)
+                result.append(("", f" {padded_title} "))
 
                 # Repo (conditional)
                 if not hide_repo:

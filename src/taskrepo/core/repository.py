@@ -1078,7 +1078,7 @@ _Last updated: {self._get_timestamp()}_
         # Get direct children from all repositories
         direct_children = []
         for repo in all_repos:
-            for task in repo.list_tasks():
+            for task in repo.list_tasks(include_archived=True):
                 if task.parent == task_id:
                     direct_children.append((task, repo))
 

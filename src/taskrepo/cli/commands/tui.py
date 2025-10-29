@@ -261,9 +261,7 @@ def _handle_in_progress_toggle(task_tui: TaskTUI):
     """Handle toggling between in-progress and pending status."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
+        # Silently return if no task selected
         return
 
     from datetime import datetime
@@ -274,7 +272,7 @@ def _handle_in_progress_toggle(task_tui: TaskTUI):
         repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
 
         if not repo:
-            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
+            # Skip this task if repo not found
             continue
 
         # Toggle: if in-progress, set to pending; otherwise, set to in-progress
@@ -286,18 +284,7 @@ def _handle_in_progress_toggle(task_tui: TaskTUI):
         task.modified = datetime.now()
         repo.save_task(task)
 
-    # Determine message based on what happened
-    if len(selected_tasks) == 1:
-        task = selected_tasks[0]
-        status_label = task.status.replace("-", " ").title()
-        click.secho(f"\n✓ Marked task as {status_label}: {task.title}", fg="green")
-    else:
-        click.secho(f"\n✓ Updated {len(selected_tasks)} tasks", fg="green")
-
-    click.echo("Press Enter to continue...")
-    input()
-
-    # Clear multi-selection
+    # Clear multi-selection (no message, immediate return to TUI)
     task_tui.multi_selected.clear()
 
 
@@ -305,9 +292,7 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
     """Handle changing status of selected task(s)."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
+        # Silently return if no task selected
         return
 
     from datetime import datetime
@@ -318,23 +303,14 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
         repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
 
         if not repo:
-            click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
+            # Skip this task if repo not found
             continue
 
         task.status = new_status
         task.modified = datetime.now()
         repo.save_task(task)
 
-    status_label = new_status.replace("-", " ").title()
-    if len(selected_tasks) == 1:
-        click.secho(f"\n✓ Marked task as {status_label}: {selected_tasks[0].title}", fg="green")
-    else:
-        click.secho(f"\n✓ Marked {len(selected_tasks)} tasks as {status_label}", fg="green")
-
-    click.echo("Press Enter to continue...")
-    input()
-
-    # Clear multi-selection
+    # Clear multi-selection (no message, immediate return to TUI)
     task_tui.multi_selected.clear()
 
 

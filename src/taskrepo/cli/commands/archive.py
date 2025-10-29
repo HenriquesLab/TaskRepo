@@ -14,8 +14,9 @@ from taskrepo.utils.id_mapping import get_cache_size
 @click.command()
 @click.argument("task_ids", nargs=-1)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
+@click.option("--yes", "-y", is_flag=True, help="Automatically archive subtasks (skip prompt)")
 @click.pass_context
-def archive(ctx, task_ids, repo):
+def archive(ctx, task_ids, repo, yes):
     """Archive one or more tasks, or list archived tasks if no task IDs are provided.
 
     TASK_IDS: One or more task IDs to archive (optional - if omitted, lists archived tasks)
@@ -98,25 +99,32 @@ def archive(ctx, task_ids, repo):
                     count = len(subtasks_with_repos)
                     subtask_word = "subtask" if count == 1 else "subtasks"
 
-                    click.echo(f"\nThis task has {count} {subtask_word}:")
-                    for subtask, subtask_repo in subtasks_with_repos:
-                        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
-                        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+                    # Determine whether to archive subtasks
+                    archive_subtasks = yes  # Default to --yes flag value
 
-                    # Prompt for confirmation with Y as default
-                    yn_validator = Validator.from_callable(
-                        lambda text: text.lower() in ["y", "n", "yes", "no"],
-                        error_message="Please enter 'y' or 'n'",
-                        move_cursor_to_end=True,
-                    )
+                    if not yes:
+                        # Show subtasks and prompt
+                        click.echo(f"\nThis task has {count} {subtask_word}:")
+                        for subtask, subtask_repo in subtasks_with_repos:
+                            status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+                            click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                    response = prompt(
-                        f"Archive all {count} {subtask_word} too? (Y/n) ",
-                        default="y",
-                        validator=yn_validator,
-                    ).lower()
+                        # Prompt for confirmation with Y as default
+                        yn_validator = Validator.from_callable(
+                            lambda text: text.lower() in ["y", "n", "yes", "no"],
+                            error_message="Please enter 'y' or 'n'",
+                            move_cursor_to_end=True,
+                        )
 
-                    if response in ["y", "yes"]:
+                        response = prompt(
+                            f"Archive all {count} {subtask_word} too? (Y/n) ",
+                            default="y",
+                            validator=yn_validator,
+                        ).lower()
+
+                        archive_subtasks = response in ["y", "yes"]
+
+                    if archive_subtasks:
                         # Archive all subtasks
                         archived_count = 0
                         for subtask, subtask_repo in subtasks_with_repos:

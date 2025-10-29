@@ -114,8 +114,16 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
                 due_date = dateparser.parse(due, settings={"PREFER_DATES_FROM": "future"})
                 if due_date is None:
                     raise ValueError("Could not parse date")
-            except Exception as e:
-                click.secho(f"Error: Invalid due date: {e}", fg="red", err=True)
+            except Exception:
+                click.secho(
+                    f"Error: Invalid due date '{due}'\n"
+                    f"Supported formats:\n"
+                    f"  - Keywords: tomorrow, today, 'next week', 'next month'\n"
+                    f"  - ISO dates: 2025-12-31\n"
+                    f"  - Natural dates: 'Oct 30', 'October 30 2025', 'Dec 1'",
+                    fg="red",
+                    err=True,
+                )
                 ctx.exit(1)
 
         # Get description
@@ -170,8 +178,16 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
                 due_date = dateparser.parse(due, settings={"PREFER_DATES_FROM": "future"})
                 if due_date is None:
                     raise ValueError("Could not parse date")
-            except Exception as e:
-                click.secho(f"Error: Invalid due date: {e}", fg="red", err=True)
+            except Exception:
+                click.secho(
+                    f"Error: Invalid due date '{due}'\n"
+                    f"Supported formats:\n"
+                    f"  - Keywords: tomorrow, today, 'next week', 'next month'\n"
+                    f"  - ISO dates: 2025-12-31\n"
+                    f"  - Natural dates: 'Oct 30', 'October 30 2025', 'Dec 1'",
+                    fg="red",
+                    err=True,
+                )
                 ctx.exit(1)
 
         if not priority:
@@ -184,23 +200,31 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
     task_id = selected_repo.next_task_id()
 
     # Create task
-    task = Task(
-        id=task_id,
-        title=title,
-        status=config.default_status,
-        priority=priority.upper(),
-        project=project,
-        assignees=assignees_list,
-        tags=tags_list,
-        links=links_list,
-        parent=parent_id,
-        due=due_date,
-        description=description,
-        repo=selected_repo.name,
-    )
+    try:
+        task = Task(
+            id=task_id,
+            title=title,
+            status=config.default_status,
+            priority=priority.upper(),
+            project=project,
+            assignees=assignees_list,
+            tags=tags_list,
+            links=links_list,
+            parent=parent_id,
+            due=due_date,
+            description=description,
+            repo=selected_repo.name,
+        )
+    except ValueError as e:
+        click.secho(f"Error: Invalid task data: {e}", fg="red", err=True)
+        ctx.exit(1)
 
     # Save task
-    task_file = selected_repo.save_task(task)
+    try:
+        task_file = selected_repo.save_task(task)
+    except IOError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        ctx.exit(1)
 
     click.echo()
     click.secho(f"✓ Task created: {task}", fg="green")

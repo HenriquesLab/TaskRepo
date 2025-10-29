@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+import wcwidth
 from rich.console import Console
 from rich.table import Table
 
@@ -10,6 +11,88 @@ from taskrepo.core.task import Task
 from taskrepo.utils.display_constants import PRIORITY_COLORS, STATUS_COLORS
 from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 from taskrepo.utils.sorting import sort_tasks
+
+
+def display_width(text: str) -> int:
+    """Calculate the display width of a string, accounting for emojis and wide characters.
+
+    Args:
+        text: String to measure
+
+    Returns:
+        Display width in terminal cells (emojis typically count as 2)
+    """
+    width = wcwidth.wcswidth(text)
+    # wcswidth returns -1 if there are non-printable characters
+    # Fall back to len() in that case
+    return width if width >= 0 else len(text)
+
+
+def truncate_to_width(text: str, max_width: int, suffix: str = "...") -> str:
+    """Truncate a string to fit within a specific display width.
+
+    Args:
+        text: String to truncate
+        max_width: Maximum display width
+        suffix: Suffix to add when truncating (default: "...")
+
+    Returns:
+        Truncated string that fits within max_width cells
+    """
+    current_width = display_width(text)
+
+    if current_width <= max_width:
+        return text
+
+    # Need to truncate - account for suffix width
+    suffix_width = display_width(suffix)
+    target_width = max_width - suffix_width
+
+    if target_width <= 0:
+        # Not enough space for suffix
+        return suffix[:max_width]
+
+    # Build truncated string character by character
+    result = ""
+    current = 0
+
+    for char in text:
+        char_width = wcwidth.wcwidth(char)
+        # wcwidth returns -1 for control chars, treat as 1
+        if char_width < 0:
+            char_width = 1
+
+        if current + char_width > target_width:
+            break
+
+        result += char
+        current += char_width
+
+    return result + suffix
+
+
+def pad_to_width(text: str, target_width: int, align: str = "left") -> str:
+    """Pad a string to a specific display width.
+
+    Args:
+        text: String to pad
+        target_width: Target display width
+        align: Alignment - "left" or "right"
+
+    Returns:
+        Padded string that displays at exactly target_width cells
+    """
+    current_width = display_width(text)
+
+    if current_width >= target_width:
+        return text
+
+    padding = " " * (target_width - current_width)
+
+    if align == "right":
+        return padding + text
+    else:  # left (default)
+        return text + padding
 
 
 def get_countdown_text(due_date: datetime) -> tuple[str, str]:

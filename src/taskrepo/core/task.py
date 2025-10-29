@@ -71,14 +71,26 @@ class Task:
     def __post_init__(self):
         """Validate task fields after initialization."""
         if self.status not in self.VALID_STATUSES:
-            raise ValueError(f"Invalid status: {self.status}. Must be one of {self.VALID_STATUSES}")
+            raise ValueError(
+                f"Invalid status: '{self.status}'. Must be one of: {', '.join(self.VALID_STATUSES)}\n"
+                f"Example: --status pending"
+            )
         if self.priority not in self.VALID_PRIORITIES:
-            raise ValueError(f"Invalid priority: {self.priority}. Must be one of {self.VALID_PRIORITIES}")
+            raise ValueError(
+                f"Invalid priority: '{self.priority}'. Must be one of: {', '.join(self.VALID_PRIORITIES)}\n"
+                f"Example: --priority H (for High), M (for Medium), or L (for Low)"
+            )
 
         # Validate links are valid URLs
         for link in self.links:
             if not self.validate_url(link):
-                raise ValueError(f"Invalid URL in links: {link}. URLs must start with http:// or https://")
+                raise ValueError(
+                    f"Invalid URL in links: '{link}'\n"
+                    f"URLs must start with http:// or https://\n"
+                    f"Examples:\n"
+                    f"  --links https://github.com/user/repo/issues/123\n"
+                    f"  --links https://docs.example.com,https://mail.google.com/..."
+                )
 
     @classmethod
     def from_markdown(cls, content: str, task_id: str, repo: Optional[str] = None) -> "Task":
@@ -207,11 +219,17 @@ class Task:
 
         # Ensure target directory exists
         target_dir = base_path / subfolder
-        target_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except (IOError, OSError) as e:
+            raise IOError(f"Failed to create task directory: {e}") from e
 
         # Save task
         task_file = target_dir / f"task-{self.id}.md"
-        task_file.write_text(self.to_markdown())
+        try:
+            task_file.write_text(self.to_markdown())
+        except (IOError, OSError) as e:
+            raise IOError(f"Failed to save task file: {e}") from e
 
         return task_file
 

@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Tuple
 
 import click
 import dateparser
@@ -127,7 +128,7 @@ def show_change_summary(changes: dict):
 @click.pass_context
 def edit(
     ctx,
-    task_ids,
+    task_ids: Tuple[str, ...],
     repo,
     title,
     status,
@@ -153,6 +154,8 @@ def edit(
 ):
     r"""Edit one or more tasks.
 
+    Supports multiple tasks at once using space-separated or comma-separated IDs.
+
     TASK_IDS: One or more task IDs or titles to edit
 
     \b
@@ -164,14 +167,24 @@ def edit(
       tsk edit 1 --priority H --edit-mode          # Change then review in editor
 
     \b
-    Batch editing examples:
+    Batch editing examples (space-separated):
       tsk edit 12 13 14 --project mAIcrobe         # Set project for multiple tasks
       tsk edit -p mAIcrobe 12 13 14 15 16          # Same using short option
       tsk edit 10 11 12 --priority H --add-tags urgent
       tsk edit 5 6 7 --assignees @alice            # Set same assignee for all
+
+    \b
+    Batch editing examples (comma-separated):
+      tsk edit 12,13,14 --project mAIcrobe         # Comma-separated also works
+      tsk edit 5,6,7 --assignees @alice            # Set same assignee for all
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Flatten comma-separated task IDs (supports both "12 13 14" and "12,13,14")
+    task_id_list = []
+    for task_id in task_ids:
+        task_id_list.extend([tid.strip() for tid in task_id.split(",")])
 
     # Check if any field options were provided
     has_field_changes = any(
@@ -199,7 +212,7 @@ def edit(
     )
 
     # Validation for batch vs single task modes
-    is_batch = len(task_ids) > 1
+    is_batch = len(task_id_list) > 1
 
     if is_batch and not has_field_changes:
         click.secho("Error: Batch editing requires at least one field option", fg="red", err=True)
@@ -211,8 +224,8 @@ def edit(
         ctx.exit(1)
 
     # Handle single task with no field changes (open editor)
-    if len(task_ids) == 1 and not has_field_changes:
-        task_id = task_ids[0]
+    if len(task_id_list) == 1 and not has_field_changes:
+        task_id = task_id_list[0]
         result = find_task_by_title_or_id(manager, task_id, repo)
         task, repository = select_task_from_result(ctx, result, task_id)
 
@@ -261,7 +274,7 @@ def edit(
     failed_tasks = []
     repositories_to_update = set()
 
-    for task_id in task_ids:
+    for task_id in task_id_list:
         try:
             # Try to find task by ID or title
             result = find_task_by_title_or_id(manager, task_id, repo)
@@ -329,22 +342,29 @@ def edit(
                 try:
                     parsed_due = dateparser.parse(due, settings={"PREFER_DATES_FROM": "future"})
                     if parsed_due is None:
+                        error_msg = (
+                            f"Could not parse due date '{due}'\n"
+                            f"Supported formats: tomorrow, 2025-12-31, 'Oct 30', 'next week'"
+                        )
                         if is_batch:
-                            click.secho(f"✗ Could not parse due date '{due}' for task '{task_id}' - skipping", fg="red")
+                            click.secho(f"✗ {error_msg} - skipping task '{task_id}'", fg="red")
                             failed_tasks.append(task_id)
                             continue
                         else:
-                            click.secho(f"Error: Could not parse due date: {due}", fg="red", err=True)
+                            click.secho(f"Error: {error_msg}", fg="red", err=True)
                             ctx.exit(1)
                     task.due = parsed_due
                     changes["due"] = (old_due, task.due)
                 except Exception as e:
+                    error_msg = (
+                        f"Invalid due date '{due}': {e}\nSupported formats: tomorrow, 2025-12-31, 'Oct 30', 'next week'"
+                    )
                     if is_batch:
-                        click.secho(f"✗ Invalid due date for task '{task_id}': {e} - skipping", fg="red")
+                        click.secho(f"✗ {error_msg} - skipping task '{task_id}'", fg="red")
                         failed_tasks.append(task_id)
                         continue
                     else:
-                        click.secho(f"Error: Invalid due date: {e}", fg="red", err=True)
+                        click.secho(f"Error: {error_msg}", fg="red", err=True)
                         ctx.exit(1)
 
             # List fields - Replace mode
@@ -511,7 +531,8 @@ def edit(
             if is_batch:
                 click.secho(f"✗ Could not update task '{task_id}': {e}", fg="red")
             else:
-                raise
+                click.secho(f"Error: Could not update task '{task_id}': {e}", fg="red", err=True)
+                ctx.exit(1)
 
     # Show summary for successful updates
     if updated_tasks:
@@ -524,7 +545,7 @@ def edit(
         # Show batch summary
         if is_batch:
             click.echo()
-            click.secho(f"Updated {len(updated_tasks)} of {len(task_ids)} tasks", fg="green")
+            click.secho(f"Updated {len(updated_tasks)} of {len(task_id_list)} tasks", fg="green")
 
     # Update cache and display for affected repositories
     if repositories_to_update:
