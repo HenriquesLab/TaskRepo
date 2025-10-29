@@ -1,6 +1,8 @@
 """Full-screen TUI for TaskRepo using prompt_toolkit."""
 
+import asyncio
 import os
+from pathlib import Path
 from typing import Optional
 
 from prompt_toolkit.application import Application
@@ -57,6 +59,10 @@ class TaskTUI:
         self.viewport_size = self._calculate_viewport_size()  # Dynamic based on terminal size
         self.scroll_trigger = min(5, max(2, self.viewport_size // 3))  # Start scrolling at 1/3 of viewport
 
+        # Auto-reload state
+        self.last_mtime = self._get_repositories_mtime()
+        self.auto_reload_task: Optional[asyncio.Task] = None
+
         # Create filter input widget
         self.filter_input = TextArea(
             height=1,
@@ -110,6 +116,71 @@ class TaskTUI:
         else:
             # Fallback to repo mode
             return [repo.name for repo in self.repositories]
+
+    def _get_repositories_mtime(self) -> float:
+        """Get the latest modification time across all repository task directories.
+
+        Returns:
+            Latest modification time as a float timestamp, or 0.0 if no repos
+        """
+        max_mtime = 0.0
+        for repo in self.repositories:
+            tasks_dir = Path(repo.path) / "tasks"
+            if tasks_dir.exists():
+                try:
+                    # Check the directory itself
+                    dir_mtime = tasks_dir.stat().st_mtime
+                    max_mtime = max(max_mtime, dir_mtime)
+
+                    # Check all task files
+                    for task_file in tasks_dir.glob("task-*.md"):
+                        file_mtime = task_file.stat().st_mtime
+                        max_mtime = max(max_mtime, file_mtime)
+                except (OSError, PermissionError):
+                    # Skip if we can't access the file
+                    pass
+        return max_mtime
+
+    def _check_for_changes(self) -> bool:
+        """Check if any task files have been modified since last check.
+
+        Returns:
+            True if changes detected, False otherwise
+        """
+        current_mtime = self._get_repositories_mtime()
+        if current_mtime > self.last_mtime:
+            self.last_mtime = current_mtime
+            return True
+        return False
+
+    async def _auto_reload_loop(self):
+        """Background task that periodically checks for file changes and reloads."""
+        while True:
+            await asyncio.sleep(2)  # Check every 2 seconds
+
+            if self._check_for_changes():
+                # Reload repositories from disk
+                manager = RepositoryManager(self.config.parent_dir)
+                self.repositories = manager.discover_repositories()
+
+                # Rebuild view items
+                self.view_items = self._build_view_items()
+
+                # Update ID cache with all current tasks
+                all_tasks = manager.list_all_tasks(include_archived=False)
+                sorted_tasks = sort_tasks(all_tasks, self.config)
+                save_id_cache(sorted_tasks)
+
+                # Clear multi-selection since task IDs may have changed
+                self.multi_selected.clear()
+
+                # Reset selected row if out of bounds
+                tasks = self._get_filtered_tasks()
+                if self.selected_row >= len(tasks):
+                    self.selected_row = max(0, len(tasks) - 1)
+
+                # Invalidate the display to trigger a redraw
+                self.app.invalidate()
 
     def _get_terminal_size(self):
         """Get current terminal size."""
@@ -355,29 +426,6 @@ class TaskTUI:
             event.app.exit(result="move")
 
         # View operations (only when not filtering)
-        @kb.add("r", filter=Condition(lambda: not self.filter_active))
-        def _(event):
-            """Refresh view."""
-            # Reload repositories from disk
-            manager = RepositoryManager(self.config.parent_dir)
-            self.repositories = manager.discover_repositories()
-
-            # Rebuild view items
-            self.view_items = self._build_view_items()
-
-            # Update ID cache with all current tasks
-            all_tasks = manager.list_all_tasks(include_archived=False)
-            sorted_tasks = sort_tasks(all_tasks, self.config)
-            save_id_cache(sorted_tasks)
-
-            # Clear multi-selection since task IDs may have changed
-            self.multi_selected.clear()
-
-            # Reset selected row if out of bounds
-            tasks = self._get_filtered_tasks()
-            if self.selected_row >= len(tasks):
-                self.selected_row = max(0, len(tasks) - 1)
-
         @kb.add("t", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Toggle tree view."""
@@ -506,7 +554,7 @@ class TaskTUI:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
             "[n]ew [e]dit [d]one [p]rogress [c]ancelled [a]rchive [m]ove [x]del "
-            "[s]ync [/]filter [t]ree [r]efresh [q]uit | Multi-select: Space"
+            "[s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
         )
         return HTML(f" {shortcuts} ")
 
@@ -954,4 +1002,22 @@ class TaskTUI:
         Returns:
             Action result string or None
         """
-        return self.app.run()
+
+        # Run the application with async support for background tasks
+        async def run_with_auto_reload():
+            # Start auto-reload background task
+            self.auto_reload_task = asyncio.create_task(self._auto_reload_loop())
+
+            try:
+                return await self.app.run_async()
+            finally:
+                # Cancel the background task when exiting
+                if self.auto_reload_task:
+                    self.auto_reload_task.cancel()
+                    try:
+                        await self.auto_reload_task
+                    except asyncio.CancelledError:
+                        pass
+
+        # Run the async function
+        return asyncio.run(run_with_auto_reload())

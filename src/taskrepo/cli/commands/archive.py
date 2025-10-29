@@ -165,9 +165,10 @@ def archive(ctx, task_ids, repo):
         from taskrepo.utils.sorting import sort_tasks
 
         # Update cache with ALL non-archived tasks across all repos (sorted)
+        # Use stable mode (rebalance=False) to preserve IDs
         all_tasks_all_repos = manager.list_all_tasks(include_archived=False)
         sorted_tasks = sort_tasks(all_tasks_all_repos, config)
-        save_id_cache(sorted_tasks)
+        save_id_cache(sorted_tasks, rebalance=False)
 
         # Get archived tasks from all repos
         archived_tasks_all_repos = []

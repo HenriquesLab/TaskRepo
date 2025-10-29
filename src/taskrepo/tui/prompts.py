@@ -566,9 +566,9 @@ def prompt_github_enabled() -> bool:
 
     try:
         answer = prompt(
-            "Create GitHub repository? [y/N]: ",
+            "Create GitHub repository? [Y/n]: ",
             validator=YesNoValidator(),
-            default="n",
+            default="y",
         )
         return answer.strip().lower() in {"y", "yes"}
     except (KeyboardInterrupt, EOFError):

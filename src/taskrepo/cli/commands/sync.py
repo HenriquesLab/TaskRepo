@@ -178,4 +178,14 @@ def sync(ctx, repo, push, auto_merge, strategy):
     all_tasks = manager.list_all_tasks(include_archived=False)
 
     if all_tasks:
-        display_tasks_table(all_tasks, config, save_cache=True)
+        # Rebalance IDs to sequential order after sync
+        from taskrepo.utils.id_mapping import save_id_cache
+        from taskrepo.utils.sorting import sort_tasks
+
+        sorted_tasks = sort_tasks(all_tasks, config)
+        save_id_cache(sorted_tasks, rebalance=True)
+
+        click.secho("IDs rebalanced to sequential order", fg="cyan")
+        click.echo()
+
+        display_tasks_table(all_tasks, config, save_cache=False)

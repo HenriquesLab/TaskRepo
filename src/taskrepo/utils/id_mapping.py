@@ -19,21 +19,70 @@ def get_cache_path() -> Path:
     return get_id_cache_path()
 
 
-def save_id_cache(tasks: list[Task]) -> None:
+def save_id_cache(tasks: list[Task], rebalance: bool = True) -> None:
     """Save display ID to UUID mapping cache.
 
     Args:
         tasks: List of tasks in display order
+        rebalance: If True, reassign sequential IDs. If False, preserve existing IDs.
     """
-    cache = {}
-    for idx, task in enumerate(tasks, start=1):
-        cache[str(idx)] = {
-            "uuid": task.id,
-            "repo": task.repo,
-            "title": task.title,
-        }
-
     cache_path = get_cache_path()
+
+    if rebalance:
+        # Full rebalance: assign sequential IDs based on task order
+        cache = {}
+        for idx, task in enumerate(tasks, start=1):
+            cache[str(idx)] = {
+                "uuid": task.id,
+                "repo": task.repo,
+                "title": task.title,
+            }
+    else:
+        # Stable mode: preserve existing IDs, assign new IDs to new tasks
+        # Load existing cache
+        existing_cache = {}
+        if cache_path.exists():
+            try:
+                with open(cache_path) as f:
+                    existing_cache = json.load(f)
+            except (json.JSONDecodeError, KeyError):
+                existing_cache = {}
+
+        # Build UUID -> existing ID mapping
+        uuid_to_id = {}
+        for display_id, entry in existing_cache.items():
+            uuid_to_id[entry["uuid"]] = int(display_id)
+
+        # Find which IDs are currently used
+        used_ids = set(uuid_to_id.values())
+
+        # Find gaps (freed IDs)
+        max_id = max(used_ids) if used_ids else 0
+        all_possible_ids = set(range(1, max_id + 1))
+        gaps = sorted(all_possible_ids - used_ids)
+
+        # Build new cache
+        cache = {}
+        next_new_id = max_id + 1
+
+        for task in tasks:
+            if task.id in uuid_to_id:
+                # Existing task: keep its ID
+                display_id = uuid_to_id[task.id]
+            else:
+                # New task: fill gap or use next sequential ID
+                if gaps:
+                    display_id = gaps.pop(0)
+                else:
+                    display_id = next_new_id
+                    next_new_id += 1
+
+            cache[str(display_id)] = {
+                "uuid": task.id,
+                "repo": task.repo,
+                "title": task.title,
+            }
+
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w") as f:
         json.dump(cache, f, indent=2)

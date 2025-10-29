@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.7] - 2025-10-29
+
+### Added
+
+- **TUI auto-reload**: TUI now automatically detects file changes and reloads every 2 seconds
+  - Monitors task directories for modifications
+  - Automatically refreshes task list when changes detected
+  - Clears multi-selection on reload to prevent ID mismatches
+  - Status bar shows "Auto-reload: ON" indicator
+  - Removed manual [r]efresh key (no longer needed)
+  - Implementation: `src/taskrepo/tui/task_tui.py` with async background task
+
+- **ID stability system**: Smart ID assignment preserves existing task IDs when possible
+  - **Stable mode** (`rebalance=False`): Preserves existing IDs, fills gaps for new tasks
+  - **Rebalance mode** (`rebalance=True`): Reassigns sequential IDs from scratch
+  - Gap filling: When tasks are deleted, new tasks reuse freed IDs (e.g., if task #5 deleted, next new task gets ID 5)
+  - Used by `tsk add`, `tsk edit`, `tsk done`, `tsk del`, `tsk archive` to maintain stable IDs
+  - Implementation: `src/taskrepo/utils/id_mapping.py`
+
+### Changed
+
+- **ID rebalancing behavior**: `tsk list` (unfiltered) and `tsk sync` now explicitly rebalance IDs to sequential order
+  - Ensures clean sequential numbering (1, 2, 3...) after sync operations
+  - Displays "IDs rebalanced to sequential order" message after sync
+  - Eliminates gaps from deleted tasks during these operations
+  - Other commands preserve existing IDs for stability
+
+- **GitHub repository default**: Changed default prompt answer from "no" to "yes" when creating repositories
+  - New prompt: "Create GitHub repository? [Y/n]:" (capital Y indicates default)
+  - Makes GitHub integration more accessible for new users
+  - Implementation: `src/taskrepo/tui/prompts.py`
+
+### Technical Details
+
+- New async background task using `asyncio.create_task()` for TUI auto-reload
+- Application runs with `run_async()` instead of `run()` for concurrent task support
+- File modification time tracking across all task directories
+- Enhanced `save_id_cache()` with gap detection and filling algorithm
+- Added `.folder2md_ignore` file for folder2md4llms tool compatibility
+
 ## [0.9.6] - 2025-10-29
 
 ### Fixed
@@ -720,6 +760,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.7]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.7
 [0.9.6]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.6
 [0.9.5]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.5
 [0.9.4]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.4

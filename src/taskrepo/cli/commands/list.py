@@ -71,5 +71,12 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
         return
 
     # Display tasks using shared display function
-    # Only save ID cache for unfiltered views to maintain consistent IDs
-    display_tasks_table(tasks, config, save_cache=not has_filters)
+    # Only rebalance IDs for unfiltered views (like sync does)
+    if not has_filters:
+        from taskrepo.utils.id_mapping import save_id_cache
+        from taskrepo.utils.sorting import sort_tasks
+
+        sorted_tasks = sort_tasks(tasks, config)
+        save_id_cache(sorted_tasks, rebalance=True)
+
+    display_tasks_table(tasks, config, save_cache=False)
