@@ -505,36 +505,56 @@ def llm_info(ctx):
     Provides concise information about commands, syntax, and workflows
     to help LLMs assist users with TaskRepo tasks.
     """
+    from taskrepo.cli.commands.config import _display_config
+
+    config = ctx.obj["config"]
+
     click.echo()
-    click.echo("=" * 60)
+    click.echo("=" * 70)
     click.secho("TaskRepo CLI Reference for LLMs", fg="cyan", bold=True)
-    click.echo("=" * 60)
+    click.echo("=" * 70)
     click.echo()
     click.echo("TaskRepo is a TaskWarrior-inspired CLI for managing tasks as")
     click.echo("markdown files in git repositories.")
     click.echo()
 
-    # Essential Commands
-    click.secho("📋 ESSENTIAL COMMANDS", fg="yellow", bold=True)
+    # Section 1: Available Commands (dynamic from --help)
+    click.secho("📋 AVAILABLE COMMANDS", fg="yellow", bold=True)
     click.echo()
-    click.echo("  tsk list [filters]         List tasks with optional filtering")
-    click.echo("  tsk add [options]          Create a new task")
-    click.echo('  tsk search "query"         Search tasks by text')
-    click.echo("  tsk info <id>              Show detailed task information")
-    click.echo("  tsk edit <id> [options]    Edit task fields or open in editor")
-    click.echo("  tsk done <id>              Mark task(s) as completed")
-    click.echo("  tsk in-progress <id>       Mark task(s) as in-progress")
-    click.echo("  tsk cancelled <id>         Mark task(s) as cancelled")
-    click.echo("  tsk ext <id> <date>        Set or extend task due date")
-    click.echo("  tsk move <id> --to <repo>  Move task(s) to another repository")
-    click.echo("  tsk del <id>               Delete task(s)")
-    click.echo("  tsk sync [--push]          Git pull/push repositories")
-    click.echo("  tsk repos                  List all repositories")
-    click.echo("  tsk config --show          Show configuration")
-    click.echo("  tsk tui                    Launch interactive TUI")
+    click.echo("Run 'tsk --help' to see all commands. Key commands include:")
     click.echo()
 
-    # Command Examples
+    # Get the help output from the parent CLI group
+    help_text = ctx.parent.get_help()
+    # Extract just the commands section (after "Options:" and before the end)
+    lines = help_text.split("\n")
+    in_commands = False
+    for line in lines:
+        # Start printing after we pass the Options section
+        if "Setup & Configuration:" in line:
+            in_commands = True
+        if in_commands:
+            click.echo(line)
+
+    click.echo()
+
+    # Section 2: Current Configuration (dynamic from config --show)
+    click.secho("⚙️  CURRENT CONFIGURATION", fg="yellow", bold=True)
+    _display_config(config)
+    click.echo()
+
+    # Section 3: Task Properties (static but important)
+    click.secho("🏷️  TASK PROPERTIES", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  Statuses:   pending, in-progress, completed, cancelled")
+    click.echo("  Priorities: H (High), M (Medium), L (Low)")
+    click.echo('  Due dates:  today, tomorrow, "next week", "Nov 15", 2025-11-15')
+    click.echo("              OR durations: 1d, 2w, 3m, 1y (extends from current due)")
+    click.echo("  Assignees:  @username (GitHub handles)")
+    click.echo("  Display IDs: Sequential numbers (1, 2, 3...) mapped to task UUIDs")
+    click.echo()
+
+    # Section 4: Command Examples (curated for LLMs)
     click.secho("💡 COMMAND EXAMPLES", fg="yellow", bold=True)
     click.echo()
     click.echo("  # List high-priority tasks in work repo")
@@ -551,6 +571,7 @@ def llm_info(ctx):
     click.echo()
     click.echo("  # Edit task fields directly (non-interactive)")
     click.echo("  tsk edit 5 --priority L --status in-progress")
+    click.echo("  tsk edit 5 --add-tags urgent --add-assignees @bob")
     click.echo()
     click.echo("  # Extend due date by 1 week")
     click.echo("  tsk ext 5 1w")
@@ -562,19 +583,11 @@ def llm_info(ctx):
     click.echo("  # Mark multiple tasks as done")
     click.echo("  tsk done 4,5,6")
     click.echo()
-
-    # Task Properties
-    click.secho("🏷️  TASK PROPERTIES", fg="yellow", bold=True)
-    click.echo()
-    click.echo("  Statuses:   pending, in-progress, completed, cancelled")
-    click.echo("  Priorities: H (High), M (Medium), L (Low)")
-    click.echo('  Due dates:  today, tomorrow, "next week", "Nov 15", 2025-11-15')
-    click.echo("              OR durations: 1d, 2w, 3m, 1y (extends from current due)")
-    click.echo("  Assignees:  @username (GitHub handles)")
-    click.echo("  Display IDs: Sequential numbers (1, 2, 3...) mapped to task UUIDs")
+    click.echo("  # Move task to another repository")
+    click.echo("  tsk move 5 --to personal")
     click.echo()
 
-    # Filtering
+    # Section 5: Filtering & Searching
     click.secho("🔍 FILTERING & SEARCHING", fg="yellow", bold=True)
     click.echo()
     click.echo("  Filter flags for 'tsk list':")
@@ -591,7 +604,7 @@ def llm_info(ctx):
     click.echo('    tsk search "bug" --priority H  Combine search with filters')
     click.echo()
 
-    # Common Workflows
+    # Section 6: Common Workflows
     click.secho("📝 COMMON WORKFLOWS", fg="yellow", bold=True)
     click.echo()
     click.echo("  1. Create and start working on a task:")
@@ -611,8 +624,8 @@ def llm_info(ctx):
     click.echo("     tsk sync --push")
     click.echo()
 
-    # Quick Tips
-    click.secho("💡 QUICK TIPS", fg="yellow", bold=True)
+    # Section 7: Quick Tips for LLMs
+    click.secho("💡 QUICK TIPS FOR LLMs", fg="yellow", bold=True)
     click.echo()
     click.echo("  • Use display IDs (1, 2, 3...) to reference tasks in commands")
     click.echo("  • Multiple IDs: Use comma-separated list (e.g., 4,5,6)")
@@ -621,8 +634,10 @@ def llm_info(ctx):
     click.echo("  • Configuration file: ~/.TaskRepo/config")
     click.echo("  • Interactive mode: Run 'tsk tui' for full-screen interface")
     click.echo("  • Each task has a UUID but users interact via sequential IDs")
+    click.echo("  • Use 'tsk config --show' to see current user configuration")
+    click.echo("  • Use 'tsk --help' to see all available commands")
     click.echo()
-    click.echo("=" * 60)
+    click.echo("=" * 70)
     click.echo()
 
 

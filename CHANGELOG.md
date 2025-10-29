@@ -10,11 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **LLM CLI reference**: New `tsk llm-info` command provides concise CLI usage reference for LLM assistants
-  - Essential commands and syntax examples
+  - **Dynamic content**: Automatically includes output from `tsk --help` (all available commands)
+  - **Current configuration**: Shows user's actual config via `tsk config --show` integration
   - Task properties (statuses, priorities, date formats)
-  - Common workflows and filtering options
-  - Quick tips for CLI usage
+  - Curated command examples and common workflows
+  - Filtering options and search syntax
+  - Quick tips specifically for LLMs assisting users
   - Purely user-facing information (no source code details)
+  - Always up-to-date with latest commands and user's actual configuration
   - Example: `tsk llm-info`
 
 - **Non-interactive config display**: New `tsk config --show` flag to display configuration without entering interactive menu
