@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Non-interactive config display**: New `tsk config --show` flag to display configuration without entering interactive menu
+  - Shows all configuration settings in formatted output
+  - Useful for scripts and quick reference
+  - Same detailed output as interactive menu option 1
+  - Example: `tsk config --show`
+
 ## [0.9.7] - 2025-10-29
 
 ### Added

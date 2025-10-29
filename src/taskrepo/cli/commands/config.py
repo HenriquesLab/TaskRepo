@@ -10,11 +10,47 @@ from prompt_toolkit.shortcuts import confirm
 from taskrepo.core.config import Config
 
 
+def _display_config(config):
+    """Display current configuration in a formatted way."""
+    click.echo()
+    click.secho("-" * 50, fg="green")
+    click.secho("Current Configuration:", fg="green", bold=True)
+    click.secho("-" * 50, fg="green")
+    click.echo(f"  Config file: {config.config_path}")
+    click.echo(f"  Parent directory: {config.parent_dir}")
+    click.echo()
+    click.secho("  Task Defaults:", fg="yellow", bold=True)
+    click.echo(f"  Default priority: {config.default_priority}")
+    click.echo(f"  Default status: {config.default_status}")
+    default_assignee = config.default_assignee if config.default_assignee else "(none)"
+    click.echo(f"  Default assignee: {default_assignee}")
+    default_repo = config.default_repo if config.default_repo else "(none)"
+    click.echo(f"  Default repository: {default_repo}")
+    click.echo()
+    click.secho("  Other Settings:", fg="yellow", bold=True)
+    default_github_org = config.default_github_org if config.default_github_org else "(none)"
+    click.echo(f"  Default GitHub org: {default_github_org}")
+    default_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
+    click.echo(f"  Default editor: {default_editor}")
+    sort_by = ", ".join(config.sort_by)
+    click.echo(f"  Sort by: {sort_by}")
+    cluster_status = "enabled" if config.cluster_due_dates else "disabled"
+    click.echo(f"  Due date clustering: {cluster_status}")
+    click.echo(f"  TUI view mode: {config.tui_view_mode}")
+    click.secho("-" * 50, fg="green")
+
+
 @click.command(name="config")
+@click.option("--show", is_flag=True, help="Show current configuration (non-interactive)")
 @click.pass_context
-def config_cmd(ctx):
+def config_cmd(ctx, show):
     """Interactive configuration management."""
     config = ctx.obj["config"]
+
+    # If --show flag is provided, display config and exit
+    if show:
+        _display_config(config)
+        return
 
     while True:
         click.echo()
@@ -53,32 +89,7 @@ def config_cmd(ctx):
 
         if choice == "1":
             # View current settings
-            click.echo()
-            click.secho("-" * 50, fg="green")
-            click.secho("Current Configuration:", fg="green", bold=True)
-            click.secho("-" * 50, fg="green")
-            click.echo(f"  Config file: {config.config_path}")
-            click.echo(f"  Parent directory: {config.parent_dir}")
-            click.echo()
-            click.secho("  Task Defaults:", fg="yellow", bold=True)
-            click.echo(f"  Default priority: {config.default_priority}")
-            click.echo(f"  Default status: {config.default_status}")
-            default_assignee = config.default_assignee if config.default_assignee else "(none)"
-            click.echo(f"  Default assignee: {default_assignee}")
-            default_repo = config.default_repo if config.default_repo else "(none)"
-            click.echo(f"  Default repository: {default_repo}")
-            click.echo()
-            click.secho("  Other Settings:", fg="yellow", bold=True)
-            default_github_org = config.default_github_org if config.default_github_org else "(none)"
-            click.echo(f"  Default GitHub org: {default_github_org}")
-            default_editor = config.default_editor if config.default_editor else "(none - using $EDITOR or vim)"
-            click.echo(f"  Default editor: {default_editor}")
-            sort_by = ", ".join(config.sort_by)
-            click.echo(f"  Sort by: {sort_by}")
-            cluster_status = "enabled" if config.cluster_due_dates else "disabled"
-            click.echo(f"  Due date clustering: {cluster_status}")
-            click.echo(f"  TUI view mode: {config.tui_view_mode}")
-            click.secho("-" * 50, fg="green")
+            _display_config(config)
 
         elif choice == "2":
             # Change parent directory
