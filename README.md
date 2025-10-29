@@ -23,7 +23,25 @@ TaskRepo is a powerful command-line task management tool that combines the best 
 
 ## Installation
 
-### Using pipx (recommended)
+### macOS (Homebrew) - Recommended for Mac users
+
+```bash
+# Tap the HenriquesLab formulas repository
+brew tap henriqueslab/formulas
+
+# Install TaskRepo
+brew install taskrepo
+```
+
+**Updating:**
+```bash
+brew update
+brew upgrade taskrepo
+```
+
+Benefits: Simple installation, automatic dependency management (Python 3.12, git, gh), easy updates
+
+### Using pipx (recommended for Linux/Windows)
 
 ```bash
 # Install pipx if you haven't already

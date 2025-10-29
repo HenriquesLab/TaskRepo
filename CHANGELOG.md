@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Homebrew installation**: TaskRepo now available via Homebrew for macOS users
+  - Install: `brew tap henriqueslab/formulas && brew install taskrepo`
+  - Simplifies macOS installation with automatic dependency management
+  - Update: `brew update && brew upgrade taskrepo`
+  - Tap repository: https://github.com/HenriquesLab/homebrew-formulas
+
 ## [0.9.8] - 2025-10-29
 
 ### Added
