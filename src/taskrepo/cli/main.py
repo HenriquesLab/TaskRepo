@@ -34,7 +34,7 @@ class OrderedGroup(click.Group):
         sections = [
             (
                 "Setup & Configuration",
-                ["init", "config", "config-show", "upgrade"],
+                ["init", "config", "config-show", "llm-info", "upgrade"],
             ),
             (
                 "Viewing Tasks",
@@ -495,6 +495,135 @@ def config_show(ctx):
     click.echo(f"  Sort by: {sort_by}")
     cluster_status = "enabled" if config.cluster_due_dates else "disabled"
     click.echo(f"  Due date clustering: {cluster_status}")
+
+
+@cli.command()
+@click.pass_context
+def llm_info(ctx):
+    """Display TaskRepo CLI reference for LLM assistants.
+
+    Provides concise information about commands, syntax, and workflows
+    to help LLMs assist users with TaskRepo tasks.
+    """
+    click.echo()
+    click.echo("=" * 60)
+    click.secho("TaskRepo CLI Reference for LLMs", fg="cyan", bold=True)
+    click.echo("=" * 60)
+    click.echo()
+    click.echo("TaskRepo is a TaskWarrior-inspired CLI for managing tasks as")
+    click.echo("markdown files in git repositories.")
+    click.echo()
+
+    # Essential Commands
+    click.secho("📋 ESSENTIAL COMMANDS", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  tsk list [filters]         List tasks with optional filtering")
+    click.echo("  tsk add [options]          Create a new task")
+    click.echo('  tsk search "query"         Search tasks by text')
+    click.echo("  tsk info <id>              Show detailed task information")
+    click.echo("  tsk edit <id> [options]    Edit task fields or open in editor")
+    click.echo("  tsk done <id>              Mark task(s) as completed")
+    click.echo("  tsk in-progress <id>       Mark task(s) as in-progress")
+    click.echo("  tsk cancelled <id>         Mark task(s) as cancelled")
+    click.echo("  tsk ext <id> <date>        Set or extend task due date")
+    click.echo("  tsk move <id> --to <repo>  Move task(s) to another repository")
+    click.echo("  tsk del <id>               Delete task(s)")
+    click.echo("  tsk sync [--push]          Git pull/push repositories")
+    click.echo("  tsk repos                  List all repositories")
+    click.echo("  tsk config --show          Show configuration")
+    click.echo("  tsk tui                    Launch interactive TUI")
+    click.echo()
+
+    # Command Examples
+    click.secho("💡 COMMAND EXAMPLES", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  # List high-priority tasks in work repo")
+    click.echo("  tsk list --repo work --priority H")
+    click.echo()
+    click.echo("  # List pending tasks for a specific assignee")
+    click.echo("  tsk list --assignee @alice --status pending")
+    click.echo()
+    click.echo("  # Search for authentication-related tasks")
+    click.echo('  tsk search "authentication"')
+    click.echo()
+    click.echo("  # Create task with multiple options")
+    click.echo('  tsk add --title "Fix bug" --priority H --due tomorrow --repo work')
+    click.echo()
+    click.echo("  # Edit task fields directly (non-interactive)")
+    click.echo("  tsk edit 5 --priority L --status in-progress")
+    click.echo()
+    click.echo("  # Extend due date by 1 week")
+    click.echo("  tsk ext 5 1w")
+    click.echo()
+    click.echo("  # Set due date to specific date")
+    click.echo("  tsk ext 5 tomorrow")
+    click.echo('  tsk ext 5 "Nov 15"')
+    click.echo()
+    click.echo("  # Mark multiple tasks as done")
+    click.echo("  tsk done 4,5,6")
+    click.echo()
+
+    # Task Properties
+    click.secho("🏷️  TASK PROPERTIES", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  Statuses:   pending, in-progress, completed, cancelled")
+    click.echo("  Priorities: H (High), M (Medium), L (Low)")
+    click.echo('  Due dates:  today, tomorrow, "next week", "Nov 15", 2025-11-15')
+    click.echo("              OR durations: 1d, 2w, 3m, 1y (extends from current due)")
+    click.echo("  Assignees:  @username (GitHub handles)")
+    click.echo("  Display IDs: Sequential numbers (1, 2, 3...) mapped to task UUIDs")
+    click.echo()
+
+    # Filtering
+    click.secho("🔍 FILTERING & SEARCHING", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  Filter flags for 'tsk list':")
+    click.echo("    --repo, -r <name>        Filter by repository")
+    click.echo("    --status, -s <status>    Filter by status")
+    click.echo("    --priority <H|M|L>       Filter by priority")
+    click.echo("    --assignee, -a @user     Filter by assignee")
+    click.echo("    --tag, -t <tag>          Filter by tag")
+    click.echo("    --project, -p <name>     Filter by project")
+    click.echo("    --archived               Show archived tasks")
+    click.echo()
+    click.echo("  Search command:")
+    click.echo('    tsk search "keyword"      Search title, description, project, tags')
+    click.echo('    tsk search "bug" --priority H  Combine search with filters')
+    click.echo()
+
+    # Common Workflows
+    click.secho("📝 COMMON WORKFLOWS", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  1. Create and start working on a task:")
+    click.echo('     tsk add --title "Implement feature" --priority H --repo work')
+    click.echo("     tsk in-progress <id>")
+    click.echo()
+    click.echo("  2. Find and update tasks:")
+    click.echo('     tsk search "authentication"')
+    click.echo("     tsk edit <id> --add-tags security")
+    click.echo("     tsk ext <id> 1w")
+    click.echo()
+    click.echo("  3. Review and complete tasks:")
+    click.echo("     tsk list --status in-progress")
+    click.echo("     tsk done <id>")
+    click.echo()
+    click.echo("  4. Sync with team:")
+    click.echo("     tsk sync --push")
+    click.echo()
+
+    # Quick Tips
+    click.secho("💡 QUICK TIPS", fg="yellow", bold=True)
+    click.echo()
+    click.echo("  • Use display IDs (1, 2, 3...) to reference tasks in commands")
+    click.echo("  • Multiple IDs: Use comma-separated list (e.g., 4,5,6)")
+    click.echo("  • Tasks are stored as markdown files in git repositories")
+    click.echo("  • Repository naming: tasks-{name} (e.g., tasks-work, tasks-personal)")
+    click.echo("  • Configuration file: ~/.TaskRepo/config")
+    click.echo("  • Interactive mode: Run 'tsk tui' for full-screen interface")
+    click.echo("  • Each task has a UUID but users interact via sequential IDs")
+    click.echo()
+    click.echo("=" * 60)
+    click.echo()
 
 
 if __name__ == "__main__":
