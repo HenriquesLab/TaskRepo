@@ -7,13 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.9] - 2025-10-29
+
+### Fixed
+
+- **TUI column alignment**: Fixed misalignment caused by emojis and tree characters
+  - Implemented wcwidth-based display width calculation
+  - Added `display_width()`, `truncate_to_width()`, and `pad_to_width()` utility functions
+  - Properly handles 📋 emoji (2 terminal cells) and tree characters (└─)
+  - All columns now align perfectly regardless of content
+
+- **Archived subtask detection**: Fixed data loss bug when moving parent tasks
+  - `get_all_subtasks_cross_repo()` now includes archived subtasks
+  - Prevents orphaning of archived children during move operations
+
+- **Stack trace errors**: Replaced Python tracebacks with user-friendly error messages
+  - Task validation errors (invalid status, priority, links) show clean messages with examples
+  - File I/O errors (disk full, permissions) show descriptive messages
+  - Edit/done command exceptions no longer re-raise in single-task mode
+
+### Improved
+
+- **Batch operation syntax**: Standardized across all commands
+  - `extend`, `done`, `edit` now support BOTH comma AND space-separated task IDs
+  - Example: `tsk done 1,2,3` or `tsk done 1 2 3` (both work)
+  - Consistent with `move` command pattern
+
+- **TUI status changes**: Made instant without confirmation prompts
+  - Press [p] to toggle in-progress/pending instantly
+  - Press [d] to mark done instantly
+  - Press [c] to cancel instantly
+  - No more "Press Enter to continue" interruptions
+
+- **Validation error messages**: More actionable with examples
+  - Invalid status/priority shows all valid options with examples
+  - Date parsing errors include supported formats (ISO, keywords, natural language)
+  - Link validation shows example URLs
+
 ### Added
+
+- **Batch delete support**: Delete multiple tasks at once
+  - `tsk delete 1 2 3` or `tsk delete 1,2,3`
+  - Batch confirmation prompt with summary
+  - Proper error handling for each task
+
+- **Move subtask warning**: Warns when subtasks stay behind
+  - Yellow warning: "⚠ Warning: N subtask(s) will remain in original repository"
+  - Prevents silent orphaning of subtasks
 
 - **Homebrew installation**: TaskRepo now available via Homebrew for macOS users
   - Install: `brew tap henriqueslab/formulas && brew install taskrepo`
   - Simplifies macOS installation with automatic dependency management
   - Update: `brew update && brew upgrade taskrepo`
   - Tap repository: https://github.com/HenriquesLab/homebrew-formulas
+
+- **Installation detection utilities**: Auto-detect how TaskRepo was installed
+  - Detects Homebrew, pipx, uv, pip, or dev installations
+  - Shows appropriate update commands in upgrade notifications
+  - Implementation: `src/taskrepo/utils/install_detector.py`
+
+### Technical Details
+
+- Added `wcwidth` library integration for accurate terminal width calculations
+- Enhanced error handling in `add.py`, `edit.py`, `done.py`, `task.py`
+- Refactored TUI status change handlers to remove blocking prompts
+- Updated batch syntax parsing in `extend.py`, `done.py`, `edit.py`, `delete.py`
+- New display utilities: `display_width()`, `truncate_to_width()`, `pad_to_width()`
+
+Files Modified: 18 files
+Tests: 124/130 passing
 
 ## [0.9.8] - 2025-10-29
 
