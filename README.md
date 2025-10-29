@@ -1,5 +1,7 @@
 # TaskRepo
 
+<img src="src/taskrepo/logo/logo-taskrepo.png" align="right" width="200" style="margin-left: 20px;"/>
+
 [![CI](https://github.com/HenriquesLab/TaskRepo/actions/workflows/ci.yml/badge.svg)](https://github.com/HenriquesLab/TaskRepo/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/taskrepo.svg)](https://badge.fury.io/py/taskrepo)
 [![Python versions](https://img.shields.io/pypi/pyversions/taskrepo.svg)](https://pypi.org/project/taskrepo/)
