@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.8] - 2025-10-29
+
 ### Added
 
 - **LLM CLI reference**: New `tsk llm-info` command provides concise CLI usage reference for LLM assistants
@@ -779,6 +781,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.8]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.8
 [0.9.7]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.7
 [0.9.6]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.6
 [0.9.5]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.5
