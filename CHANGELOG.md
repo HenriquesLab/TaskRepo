@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] - 2025-10-28
+
+### Added
+
+- **Move tasks between repositories**: New command and TUI feature to relocate tasks
+  - **CLI command**: `tsk move TASK_IDS --to TARGET_REPO` to move one or more tasks to a different repository
+  - **TUI key binding**: Press [m] to move selected task(s) to another repository
+  - **Subtask handling**: Prompts user when moving tasks with subtasks (move together or independently)
+  - **Dependency warnings**: Warns about tasks that depend on the task being moved
+  - **Preserves archived status**: Archived tasks remain in archive folder after move
+  - **Multi-selection support**: Move multiple tasks at once in TUI or CLI
+  - Implementation: `src/taskrepo/cli/commands/move.py`, `src/taskrepo/cli/commands/tui.py:350-450`
+
+### Improved
+
+- **TUI state preservation**: View state (view mode, filter text, tree mode) now persists after task operations
+  - Previously: Operations like done/delete/edit would reset view to default state
+  - Now: Returns to exact view state after completing operations
+  - Implementation: `src/taskrepo/tui/task_tui.py`
+
+- **TUI column alignment**: Fixed dynamic column separator calculation for consistent spacing
+  - Resolves alignment issues in task list display
+  - Implementation: `src/taskrepo/tui/task_tui.py`
+
+- **Repository sorting**: Repositories now sorted by task count in prompts and config
+  - Shows busiest repositories first for better UX
+  - Implementation: `src/taskrepo/cli/commands/config.py`, `src/taskrepo/tui/prompts.py`
+
+### Technical Details
+
+- New utility: `src/taskrepo/utils/banner.py` for ASCII art banners (future use)
+- Enhanced TUI with [m]ove key binding and move handler
+- Updated CLI main to register move command
+- Total: 594 insertions, 20 deletions across 8 files
+
 ## [0.9.4] - 2025-10-27
 
 ### Fixed
@@ -677,6 +712,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - python-dateutil >= 2.8.0
 - dateparser >= 1.0.0
 
+[0.9.5]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.5
+[0.9.4]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.4
+[0.9.3]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.3
+[0.9.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.2
 [0.9.1]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.1
 [0.9.0]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.9.0
 [0.8.2]: https://github.com/henriqueslab/TaskRepo/releases/tag/v0.8.2
