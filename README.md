@@ -23,6 +23,14 @@ TaskRepo is a powerful command-line task management tool that combines the best 
 - **Beautiful output**: Rich terminal formatting with tables and colors
 - **Version control**: Full git history and collaboration capabilities
 
+### Interactive TUI
+
+<p align="center">
+  <img src="docs/screenshots/tui-interface.png" alt="TaskRepo TUI Interface" width="100%"/>
+</p>
+
+Browse and manage tasks with the interactive Terminal User Interface featuring color-coded statuses, task details panel, and keyboard shortcuts.
+
 ## Installation
 
 ### macOS (Homebrew) - Recommended for Mac users
