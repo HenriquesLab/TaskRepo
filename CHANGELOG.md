@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.11] - 2025-10-30
+
+### Added
+
+- **TUI keybindings for subtask and extend**: Added convenient keyboard shortcuts
+  - `[u]` - Create subtask under selected task with inherited defaults
+  - `ex[t]end` - Extend/set due dates for single or multiple tasks
+  - Supports both absolute dates (tomorrow, 2025-11-15) and relative durations (1w, 2d)
+  - Instant return to TUI without "Press Enter" prompts
+
+- **Automatic conflict resolution**: Sync now auto-resolves git conflict markers
+  - Post-pull detection of conflict markers in task files
+  - Automatic parsing of conflicted local/remote versions
+  - Smart merge using "keep newer" strategy based on modified timestamp
+  - Automatic commit of resolved conflicts
+  - Eliminates need for manual conflict marker cleanup
+  - Works in both CLI sync and TUI sync
+
+### Fixed
+
+- **TUI sync prompt removal**: Removed redundant "Press Enter" after sync completes
+  - Instant return to TUI after sync operation
+  - Consistent with other TUI operations (archive, done, etc.)
+
+- **Rich markup escaping in conflict resolver**: Fixed crash when task content contains special characters
+  - Escape task titles, field values, and descriptions before display
+  - Prevents errors like "closing tag '[/]' has nothing to close"
+  - Fixes crashes when displaying conflicts with tasks containing `[/]`, `[+]`, etc.
+
+- **Rich markup escaping in sync errors**: Fixed crash when error messages contain special characters
+  - Escape exception messages before displaying
+  - Prevents crashes when git errors contain characters interpreted as markup
+
+### Improved
+
+- **TUI keybinding mnemonics**: Reorganized keyboard shortcuts for better intuitiveness
+  - `[a]dd` - Add new task (was `[n]ew`)
+  - `[d]one` - Mark as done (was `[w]`)
+  - `de[l]` - Delete task (was `[x]`)
+  - `ar[v]hive` - Archive task (was `[a]`)
+  - `ex[t]end` - Extend/set due date (new)
+  - `s[u]btask` - Create subtask (new)
+  - `t[r]ee` - Toggle tree view (was `[t]`)
+  - All shortcuts now align with primary action letters
+
+- **TUI status bar wrapping**: Status bar now wraps on narrow terminals
+  - Dynamically calculates required lines based on terminal width
+  - Supports up to 3 lines for full shortcut display
+  - Makes TUI usable on smaller terminal windows
+
 ## [0.9.10] - 2025-10-30
 
 ### Added
