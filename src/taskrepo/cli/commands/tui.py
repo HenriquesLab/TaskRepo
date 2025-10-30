@@ -666,14 +666,8 @@ def _handle_sync(task_tui: TaskTUI, config):
     from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
     # Determine which repositories to sync
-    if task_tui.current_view_idx == -1:
-        # Sync all repositories
-        repositories_to_sync = task_tui.repositories
-        click.echo("\n" + "=" * 50)
-        click.echo("Syncing All Repositories")
-        click.echo("=" * 50)
-    else:
-        # Sync current repository
+    if task_tui.view_mode == "repo" and task_tui.current_view_idx >= 0:
+        # Sync specific repository (only in repo view mode)
         repo = task_tui._get_current_repo()
         if not repo:
             click.echo("\nNo repository selected.")
@@ -683,6 +677,17 @@ def _handle_sync(task_tui: TaskTUI, config):
         repositories_to_sync = [repo]
         click.echo("\n" + "=" * 50)
         click.echo(f"Syncing Repository: {repo.name}")
+        click.echo("=" * 50)
+    else:
+        # Sync all repositories (when viewing all, by project, or by assignee)
+        repositories_to_sync = task_tui.repositories
+        click.echo("\n" + "=" * 50)
+        if task_tui.current_view_idx == -1:
+            click.echo("Syncing All Repositories")
+        elif task_tui.view_mode == "project":
+            click.echo(f"Syncing All Repositories (viewing project: {task_tui.view_items[task_tui.current_view_idx]})")
+        elif task_tui.view_mode == "assignee":
+            click.echo(f"Syncing All Repositories (viewing assignee: {task_tui.view_items[task_tui.current_view_idx]})")
         click.echo("=" * 50)
 
     for repository in repositories_to_sync:
