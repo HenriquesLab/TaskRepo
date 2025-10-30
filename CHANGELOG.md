@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.10] - 2025-10-30
+
+### Added
+
+- **Unexpected file detection in sync**: Protect against accidentally committing non-task files
+  - Detects and groups unexpected files by pattern (*.log, .vscode/*, etc.)
+  - Interactive prompt with 4 options: add to .gitignore, delete, commit anyway, or skip
+  - Default .gitignore automatically created for new repositories
+  - Covers common patterns: editor files, Python cache, OS files, temporary files
+  - Works in both CLI sync and TUI sync commands
+  - New utility module: `src/taskrepo/utils/file_validation.py`
+
+### Fixed
+
+- **TUI selected row contrast**: Improved text readability on light backgrounds
+  - Changed selected row text from white to black for better contrast
+  - Fixes visibility issue where selected text was nearly invisible on light/white backgrounds
+
+- **TUI archive prompt**: Removed redundant "Press Enter" after confirming archive
+  - Archive operation now returns immediately after y/n confirmation
+  - Consistent with other quick operations like done and in-progress
+
+- **TUI sync in project/assignee views**: Fixed context-aware repository syncing
+  - Project view: Now syncs only repositories containing tasks in that project
+  - Assignee view: Now syncs only repositories with tasks for that assignee
+  - Shows count of repositories being synced (e.g., "Syncing 3 repos with project 'X'")
+  - More efficient - doesn't sync unrelated repositories
+
+### Improved
+
+- **Default repository setup**: New repositories include sensible defaults
+  - Automatic .gitignore with common patterns
+  - Protects against committing .DS_Store, .vscode/, __pycache__/, etc.
+
 ## [0.9.9] - 2025-10-29
 
 ### Fixed
