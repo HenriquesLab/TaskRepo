@@ -244,8 +244,8 @@ class TaskTUI:
 
         # Get the status bar text content
         shortcuts = (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove [x]del "
-            "s[u]btask [+]extend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l] "
+            "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space | Auto-reload: ON"
         )
 
         # Add padding (1 space at start and end)
@@ -437,7 +437,7 @@ class TaskTUI:
             """Mark task(s) as cancelled."""
             event.app.exit(result="cancelled")
 
-        @kb.add("x", filter=Condition(lambda: not self.filter_active))
+        @kb.add("l", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Delete task(s)."""
             event.app.exit(result="delete")
@@ -457,13 +457,13 @@ class TaskTUI:
             """Create subtask under selected task."""
             event.app.exit(result="subtask")
 
-        @kb.add("+", filter=Condition(lambda: not self.filter_active))
+        @kb.add("t", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Extend task due date."""
             event.app.exit(result="extend")
 
         # View operations (only when not filtering)
-        @kb.add("t", filter=Condition(lambda: not self.filter_active))
+        @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Toggle tree view."""
             self.tree_view = not self.tree_view
@@ -591,8 +591,8 @@ class TaskTUI:
     def _get_status_bar_text(self) -> FormattedText:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove [x]del "
-            "s[u]btask [+]extend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l] "
+            "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space | Auto-reload: ON"
         )
         return HTML(f" {shortcuts} ")
 
