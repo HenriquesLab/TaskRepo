@@ -256,7 +256,7 @@ class TaskTUI:
                 "countdown-soon": "fg:ansiyellow",
                 "countdown-normal": "fg:ansiwhite",
                 # UI elements
-                "selected": "bg:ansiblue fg:ansiwhite bold",
+                "selected": "bg:ansiblue fg:ansiblack bold",
                 "header": "bg:ansiblue fg:ansiwhite bold",
                 "scrollbar": "fg:ansicyan",
                 "multi-select": "fg:ansigreen bold",
