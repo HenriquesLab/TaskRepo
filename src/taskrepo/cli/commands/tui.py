@@ -103,6 +103,10 @@ def tui(ctx, repo):
             _handle_archive_task(task_tui, config)
         elif result == "move":
             _handle_move_task(task_tui, config)
+        elif result == "subtask":
+            _handle_subtask(task_tui, config)
+        elif result == "extend":
+            _handle_extend(task_tui, config)
         elif result == "info":
             _handle_info_task(task_tui)
         elif result == "sync":
@@ -528,6 +532,173 @@ def _is_task_archived(repository, task_id: str) -> bool:
     """Check if a task is archived."""
     archive_path = repository.path / "tasks" / "archive" / f"task-{task_id}.md"
     return archive_path.exists()
+
+
+def _handle_subtask(task_tui: TaskTUI, config):
+    """Handle creating a subtask under the selected task."""
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        click.echo("\nNo task selected.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    if len(selected_tasks) > 1:
+        click.secho("\n⚠ Cannot create subtask under multiple tasks. Select only one task.", fg="yellow")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    parent_task = selected_tasks[0]
+
+    # Find the repository for this task
+    repo = next((r for r in task_tui.repositories if r.name == parent_task.repo), None)
+    if not repo:
+        click.secho(f"\n✗ Could not find repository for task: {parent_task.repo}", fg="red")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Use existing interactive prompts
+    click.echo("\n" + "=" * 50)
+    click.echo(f"Create Subtask under: {parent_task.title}")
+    click.echo("=" * 50)
+
+    title = prompts.prompt_title()
+    if not title:
+        click.echo("Cancelled.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    existing_tasks = repo.list_tasks()
+
+    # Prompt for other task details
+    project = prompts.prompt_project(existing_tasks, default=parent_task.project)
+    priority = prompts.prompt_priority(default=config.default_priority or "M")
+    assignees = prompts.prompt_assignees(existing_tasks, default=parent_task.assignees)
+    tags = prompts.prompt_tags(existing_tasks, default=parent_task.tags)
+    links = prompts.prompt_links()
+    due_date = prompts.prompt_due_date()
+    description = prompts.prompt_description()
+
+    # Create the task
+    from datetime import datetime
+
+    from taskrepo.core.task import Task
+
+    task = Task(
+        id=repo.next_task_id(),
+        title=title,
+        status=config.default_status or "pending",
+        project=project,
+        priority=priority,
+        assignees=assignees,
+        tags=tags,
+        links=links,
+        parent=parent_task.id,  # Set parent to create subtask relationship
+        due=due_date,
+        description=description,
+        created=datetime.now(),
+        modified=datetime.now(),
+        repo=repo.name,
+    )
+
+    repo.save_task(task)
+    click.secho(f"\n✓ Created subtask: {task.title}", fg="green")
+
+    # Clear multi-selection
+    task_tui.multi_selected.clear()
+
+
+def _handle_extend(task_tui: TaskTUI, config):
+    """Handle extending task due date(s)."""
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        click.echo("\nNo task selected.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    click.echo("\n" + "=" * 50)
+    click.echo(f"Extend Task Due Date{'s' if len(selected_tasks) > 1 else ''}")
+    click.echo("=" * 50)
+
+    # Show selected tasks
+    if len(selected_tasks) == 1:
+        task = selected_tasks[0]
+        click.echo(f"\nTask: {task.title}")
+        if task.due:
+            click.echo(f"Current due date: {task.due.strftime('%Y-%m-%d')}")
+        else:
+            click.echo("Current due date: None")
+    else:
+        click.echo(f"\n{len(selected_tasks)} tasks selected")
+
+    # Prompt for date or duration
+    click.echo("\nEnter date or duration:")
+    click.echo("  Durations: 1w, 2d, 3m, 1y (extends from current due date)")
+    click.echo("  Keywords: today, tomorrow, next week, next month, next year")
+    click.echo("  ISO dates: 2025-10-30")
+    click.echo("  Natural dates: 'Oct 30', 'October 30 2025'")
+
+    date_input = click.prompt("\nDate or duration", type=str, default="")
+    if not date_input:
+        click.echo("Cancelled.")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Parse date or duration
+    from taskrepo.utils.date_parser import parse_date_or_duration
+
+    try:
+        parsed_value, is_absolute_date = parse_date_or_duration(date_input)
+    except ValueError as e:
+        click.secho(f"\n✗ Error: {e}", fg="red")
+        click.echo("Press Enter to continue...")
+        input()
+        return
+
+    # Apply to all selected tasks
+    from datetime import datetime
+
+    extended_count = 0
+    for task in selected_tasks:
+        # Find the repository for this task
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
+        if not repo:
+            continue
+
+        # Calculate new due date
+        if is_absolute_date:
+            # Set to specific date
+            new_due = parsed_value
+        else:
+            # Extend by duration
+            if task.due:
+                new_due = task.due + parsed_value
+            else:
+                new_due = datetime.now() + parsed_value
+
+        # Update task
+        task.due = new_due
+        task.modified = datetime.now()
+        repo.save_task(task)
+        extended_count += 1
+
+    # Show result
+    if extended_count > 0:
+        action_verb = "Updated" if is_absolute_date else "Extended"
+        if len(selected_tasks) == 1:
+            click.secho(f"\n✓ {action_verb} task: {selected_tasks[0].title}", fg="green")
+        else:
+            click.secho(f"\n✓ {action_verb} {extended_count} task{'s' if extended_count != 1 else ''}", fg="green")
+    else:
+        click.secho("\n✗ Failed to update any tasks", fg="red")
+
+    # Clear multi-selection
+    task_tui.multi_selected.clear()
 
 
 def _handle_info_task(task_tui: TaskTUI):

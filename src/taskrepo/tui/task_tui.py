@@ -432,6 +432,16 @@ class TaskTUI:
             """Move task(s) to another repository."""
             event.app.exit(result="move")
 
+        @kb.add("u", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Create subtask under selected task."""
+            event.app.exit(result="subtask")
+
+        @kb.add("+", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Extend task due date."""
+            event.app.exit(result="extend")
+
         # View operations (only when not filtering)
         @kb.add("t", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -561,7 +571,7 @@ class TaskTUI:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
             "[n]ew [e]dit [d]one [p]rogress [c]ancelled [a]rchive [m]ove [x]del "
-            "[s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
+            "[u]subtask [+]extend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
         )
         return HTML(f" {shortcuts} ")
 
