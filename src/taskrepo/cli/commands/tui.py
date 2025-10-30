@@ -665,30 +665,59 @@ def _handle_sync(task_tui: TaskTUI, config):
     from taskrepo.tui.conflict_resolver import resolve_conflict_interactive
     from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
-    # Determine which repositories to sync
-    if task_tui.view_mode == "repo" and task_tui.current_view_idx >= 0:
-        # Sync specific repository (only in repo view mode)
-        repo = task_tui._get_current_repo()
-        if not repo:
-            click.echo("\nNo repository selected.")
-            click.echo("Press Enter to continue...")
-            input()
-            return
-        repositories_to_sync = [repo]
-        click.echo("\n" + "=" * 50)
-        click.echo(f"Syncing Repository: {repo.name}")
-        click.echo("=" * 50)
-    else:
-        # Sync all repositories (when viewing all, by project, or by assignee)
+    # Determine which repositories to sync based on current view
+    if task_tui.current_view_idx == -1:
+        # Viewing "All" - sync all repositories
         repositories_to_sync = task_tui.repositories
         click.echo("\n" + "=" * 50)
-        if task_tui.current_view_idx == -1:
-            click.echo("Syncing All Repositories")
-        elif task_tui.view_mode == "project":
-            click.echo(f"Syncing All Repositories (viewing project: {task_tui.view_items[task_tui.current_view_idx]})")
-        elif task_tui.view_mode == "assignee":
-            click.echo(f"Syncing All Repositories (viewing assignee: {task_tui.view_items[task_tui.current_view_idx]})")
+        click.echo("Syncing All Repositories")
         click.echo("=" * 50)
+    else:
+        # Viewing specific item - find relevant repositories
+        if task_tui.view_mode == "repo":
+            # Sync specific repository
+            repo = task_tui._get_current_repo()
+            if not repo:
+                click.echo("\nNo repository selected.")
+                click.echo("Press Enter to continue...")
+                input()
+                return
+            repositories_to_sync = [repo]
+            click.echo("\n" + "=" * 50)
+            click.echo(f"Syncing Repository: {repo.name}")
+            click.echo("=" * 50)
+        elif task_tui.view_mode == "project":
+            # Find repositories with tasks in this project
+            current_project = task_tui.view_items[task_tui.current_view_idx]
+            repo_names = set()
+            for repo in task_tui.repositories:
+                for task in repo.list_tasks():
+                    if task.project == current_project:
+                        repo_names.add(repo.name)
+                        break
+            repositories_to_sync = [r for r in task_tui.repositories if r.name in repo_names]
+            click.echo("\n" + "=" * 50)
+            click.echo(f"Syncing Repositories with project '{current_project}' ({len(repositories_to_sync)} repos)")
+            click.echo("=" * 50)
+        elif task_tui.view_mode == "assignee":
+            # Find repositories with tasks assigned to this user
+            current_assignee = task_tui.view_items[task_tui.current_view_idx]
+            repo_names = set()
+            for repo in task_tui.repositories:
+                for task in repo.list_tasks():
+                    if current_assignee in task.assignees:
+                        repo_names.add(repo.name)
+                        break
+            repositories_to_sync = [r for r in task_tui.repositories if r.name in repo_names]
+            click.echo("\n" + "=" * 50)
+            click.echo(f"Syncing Repositories for assignee '{current_assignee}' ({len(repositories_to_sync)} repos)")
+            click.echo("=" * 50)
+        else:
+            # Fallback: sync all
+            repositories_to_sync = task_tui.repositories
+            click.echo("\n" + "=" * 50)
+            click.echo("Syncing All Repositories")
+            click.echo("=" * 50)
 
     for repository in repositories_to_sync:
         git_repo = repository.git_repo
