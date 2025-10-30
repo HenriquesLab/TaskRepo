@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 from git import GitCommandError
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
 from taskrepo.core.repository import Repository, RepositoryManager
@@ -347,13 +348,13 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     progress.update(overall_task, advance=1)
 
             except GitCommandError as e:
-                progress.console.print(f"  [red]✗[/red] Git error: {e}", style="red")
+                progress.console.print(f"  [red]✗[/red] Git error: {escape(str(e))}", style="red")
                 repo_timings[repository.name] = time.perf_counter() - repo_start_time
                 if overall_task is not None:
                     progress.update(overall_task, advance=1)
                 continue
             except Exception as e:
-                progress.console.print(f"  [red]✗[/red] Error: {e}", style="red")
+                progress.console.print(f"  [red]✗[/red] Error: {escape(str(e))}", style="red")
                 repo_timings[repository.name] = time.perf_counter() - repo_start_time
                 if overall_task is not None:
                     progress.update(overall_task, advance=1)
