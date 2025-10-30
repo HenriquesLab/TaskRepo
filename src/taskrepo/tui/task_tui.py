@@ -392,7 +392,7 @@ class TaskTUI:
                     self.multi_selected.add(task_id)
 
         # Task operations (only when not filtering)
-        @kb.add("n", filter=Condition(lambda: not self.filter_active))
+        @kb.add("a", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Create a new task."""
             event.app.exit(result="new")
@@ -401,6 +401,11 @@ class TaskTUI:
         def _(event):
             """Edit selected task(s)."""
             event.app.exit(result="edit")
+
+        @kb.add("d", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Mark task(s) as completed (done)."""
+            event.app.exit(result="done")
 
         @kb.add("p", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -412,17 +417,12 @@ class TaskTUI:
             """Mark task(s) as cancelled."""
             event.app.exit(result="cancelled")
 
-        @kb.add("w", filter=Condition(lambda: not self.filter_active))
-        def _(event):
-            """Mark task(s) as completed (done)."""
-            event.app.exit(result="done")
-
-        @kb.add("d", filter=Condition(lambda: not self.filter_active))
+        @kb.add("x", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Delete task(s)."""
             event.app.exit(result="delete")
 
-        @kb.add("a", filter=Condition(lambda: not self.filter_active))
+        @kb.add("v", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Archive task(s)."""
             event.app.exit(result="archive")
@@ -437,7 +437,7 @@ class TaskTUI:
             """Create subtask under selected task."""
             event.app.exit(result="subtask")
 
-        @kb.add("x", filter=Condition(lambda: not self.filter_active))
+        @kb.add("+", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Extend task due date."""
             event.app.exit(result="extend")
@@ -570,8 +570,8 @@ class TaskTUI:
     def _get_status_bar_text(self) -> FormattedText:
         """Get the status bar text with keyboard shortcuts."""
         shortcuts = (
-            "[n]ew [e]dit [w]done [p]rogress [c]ancelled [a]rchive [m]ove [d]el "
-            "s[u]btask e[x]tend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove [x]del "
+            "s[u]btask [+]extend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
         )
         return HTML(f" {shortcuts} ")
 
