@@ -8,6 +8,7 @@ from prompt_toolkit import prompt
 from prompt_toolkit.formatted_text import HTML
 from rich.columns import Columns
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -39,7 +40,7 @@ def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None
     # Display conflict header
     console.print()
     console.print(f"[bold red]Conflict in:[/bold red] {conflict_info.file_path}")
-    console.print(f"[bold]Task:[/bold] [{local_task.id}] {local_task.title}")
+    console.print(f"[bold]Task:[/bold] [{local_task.id}] {escape(local_task.title)}")
     console.print()
 
     # Display both versions side-by-side
@@ -149,8 +150,9 @@ def _display_conflict_comparison(console: Console, local_task: Task, remote_task
             remote_style = ""
             conflict_marker = ""
 
-        local_table.add_row(field_name, f"[{local_style}]{local_val}[/{local_style}]{conflict_marker}")
-        remote_table.add_row(field_name, f"[{remote_style}]{remote_val}[/{remote_style}]{conflict_marker}")
+        # Escape values to prevent Rich markup interpretation
+        local_table.add_row(field_name, f"[{local_style}]{escape(str(local_val))}[/{local_style}]{conflict_marker}")
+        remote_table.add_row(field_name, f"[{remote_style}]{escape(str(remote_val))}[/{remote_style}]{conflict_marker}")
 
     # Create panels
     local_panel = Panel(
@@ -174,19 +176,23 @@ def _display_conflict_comparison(console: Console, local_task: Task, remote_task
         console.print("[bold yellow]Description differs:[/bold yellow]")
         console.print()
         console.print("[cyan]LOCAL:[/cyan]")
+        local_desc = (
+            local_task.description[:200] + "..." if len(local_task.description) > 200 else local_task.description
+        )
         console.print(
             Panel(
-                local_task.description[:200] + "..." if len(local_task.description) > 200 else local_task.description,
+                escape(local_desc),
                 border_style="cyan",
             )
         )
         console.print()
         console.print("[magenta]REMOTE:[/magenta]")
+        remote_desc = (
+            remote_task.description[:200] + "..." if len(remote_task.description) > 200 else remote_task.description
+        )
         console.print(
             Panel(
-                remote_task.description[:200] + "..."
-                if len(remote_task.description) > 200
-                else remote_task.description,
+                escape(remote_desc),
                 border_style="magenta",
             )
         )
