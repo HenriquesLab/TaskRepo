@@ -209,13 +209,14 @@ class TaskTUI:
         # - Detail panel content: dynamic (see _calculate_detail_panel_height)
         # - Detail panel Frame borders: 2 lines (top + bottom)
         # - Filter input: 1 line (when visible)
-        # - Status bar: 1 line
+        # - Status bar: dynamic (see _calculate_status_bar_height)
         # - Scroll indicators: 2 lines (max)
 
         detail_panel_height = self._calculate_detail_panel_height()
-        fixed_lines = 1 + 2 + detail_panel_height + 2 + 1 + 1 + 2  # All fixed elements
+        status_bar_height = self._calculate_status_bar_height()
+        fixed_lines = 1 + 2 + detail_panel_height + 2 + 1 + status_bar_height + 2  # All fixed elements
         # = header + task header/sep + detail content + frame borders + filter + status + scrollers
-        # = detail_panel_height + 9
+        # = detail_panel_height + status_bar_height + 8
 
         available_lines = terminal_height - fixed_lines
 
@@ -236,6 +237,25 @@ class TaskTUI:
         detail_height = max(8, min(15, detail_height))
 
         return detail_height
+
+    def _calculate_status_bar_height(self) -> int:
+        """Calculate status bar height based on content length and terminal width."""
+        _, terminal_width = self._get_terminal_size()
+
+        # Get the status bar text content
+        shortcuts = (
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove [x]del "
+            "s[u]btask [+]extend [s]ync [/]filter [t]ree [q]uit | Multi-select: Space | Auto-reload: ON"
+        )
+
+        # Add padding (1 space at start and end)
+        content_length = len(shortcuts) + 2
+
+        # Calculate lines needed (round up)
+        lines_needed = (content_length + terminal_width - 1) // terminal_width
+
+        # Ensure at least 1 line, max 3 lines
+        return max(1, min(3, lines_needed))
 
     def _create_style(self) -> Style:
         """Create the color scheme for the TUI."""
@@ -512,7 +532,8 @@ class TaskTUI:
         # Status bar with keyboard shortcuts
         status_bar = Window(
             content=FormattedTextControl(self._get_status_bar_text),
-            height=Dimension.exact(1),
+            height=lambda: Dimension.exact(self._calculate_status_bar_height()),  # Dynamic height
+            wrap_lines=True,
             style="bg:ansiblack fg:ansiwhite",
         )
 
