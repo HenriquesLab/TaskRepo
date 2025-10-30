@@ -823,5 +823,3 @@ def _handle_sync(task_tui: TaskTUI, config):
     click.echo("\n" + "=" * 50)
     click.secho("Sync complete!", fg="green")
     click.echo("=" * 50)
-    click.echo("\nPress Enter to continue...")
-    input()
