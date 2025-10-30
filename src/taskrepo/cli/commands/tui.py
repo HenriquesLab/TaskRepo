@@ -402,9 +402,6 @@ def _handle_archive_task(task_tui: TaskTUI, config):
         else:
             click.secho(f"\n✓ Archived {archived_count} of {len(selected_tasks)} tasks", fg="green")
 
-    click.echo("Press Enter to continue...")
-    input()
-
     # Clear multi-selection
     task_tui.multi_selected.clear()
 
