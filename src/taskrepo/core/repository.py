@@ -979,6 +979,11 @@ _Last updated: {self._get_timestamp()}_
         archive_gitkeep_path = repo.archive_dir / ".gitkeep"
         archive_gitkeep_path.touch()
 
+        # Create default .gitignore
+        from taskrepo.utils.file_validation import create_default_gitignore
+
+        create_default_gitignore(repo_path)
+
         # Commit initial structure
         repo.git_repo.git.add(A=True)
         repo.git_repo.index.commit("Initial commit: Repository structure")

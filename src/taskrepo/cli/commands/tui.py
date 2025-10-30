@@ -698,6 +698,34 @@ def _handle_sync(task_tui: TaskTUI, config):
         try:
             # Commit local changes
             if git_repo.is_dirty(untracked_files=True):
+                # Check for unexpected files before committing
+                from taskrepo.utils.file_validation import (
+                    add_to_gitignore,
+                    delete_unexpected_files,
+                    detect_unexpected_files,
+                    prompt_unexpected_files,
+                )
+
+                unexpected = detect_unexpected_files(git_repo, repository.path)
+
+                if unexpected:
+                    action = prompt_unexpected_files(unexpected, repository.name)
+
+                    if action == "ignore":
+                        # Add patterns to .gitignore
+                        patterns = list(unexpected.keys())
+                        add_to_gitignore(patterns, repository.path)
+                        # Stage .gitignore change
+                        git_repo.git.add(".gitignore")
+                    elif action == "delete":
+                        # Delete the files
+                        delete_unexpected_files(unexpected, repository.path)
+                    elif action == "skip":
+                        # Skip this repository
+                        click.secho("  ⊗ Skipped repository", fg="yellow")
+                        continue
+                    # If "commit", proceed as normal
+
                 click.echo("  • Committing local changes...")
                 git_repo.git.add(A=True)
                 git_repo.index.commit("Auto-commit: TaskRepo sync")
