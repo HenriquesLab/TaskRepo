@@ -1,13 +1,17 @@
 """Sync command for git operations."""
 
+import re
 import time
+from datetime import datetime
+from pathlib import Path
 
 import click
 from git import GitCommandError
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 
-from taskrepo.core.repository import RepositoryManager
+from taskrepo.core.repository import Repository, RepositoryManager
+from taskrepo.core.task import Task
 from taskrepo.tui.conflict_resolver import resolve_conflict_interactive
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
@@ -223,12 +227,45 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                         progress.console.print("  [green]✓[/green] No conflicts detected")
 
                     # Pull changes
-                    def pull_changes():
-                        origin = git_repo.remotes.origin
-                        # Use --rebase=false to handle divergent branches
-                        git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
+                    pull_succeeded = True
+                    try:
 
-                    run_with_spinner(progress, spinner_task, "Pulling from remote", pull_changes, verbose)
+                        def pull_changes():
+                            origin = git_repo.remotes.origin
+                            # Use --rebase=false to handle divergent branches
+                            git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
+
+                        run_with_spinner(progress, spinner_task, "Pulling from remote", pull_changes, verbose)
+                    except Exception as e:
+                        if "would be overwritten" in str(e) or "conflict" in str(e).lower():
+                            pull_succeeded = False
+                            progress.console.print("  [yellow]⚠[/yellow] Pull created conflicts")
+                        else:
+                            raise
+
+                    # Check for conflict markers after pull
+                    if not pull_succeeded or _has_conflict_markers(repository.path):
+
+                        def resolve_markers():
+                            return _resolve_conflict_markers(repository, progress.console)
+
+                        resolved_files, _ = run_with_spinner(
+                            progress, spinner_task, "Resolving conflict markers", resolve_markers, verbose
+                        )
+
+                        if resolved_files:
+                            progress.console.print(
+                                f"  [green]✓[/green] Auto-resolved {len(resolved_files)} conflicted file(s)"
+                            )
+
+                            def commit_resolutions():
+                                for file_path in resolved_files:
+                                    git_repo.git.add(str(file_path))
+                                git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_files)} conflict marker(s)")
+
+                            run_with_spinner(
+                                progress, spinner_task, "Committing conflict resolutions", commit_resolutions, verbose
+                            )
 
                     # Generate README with all tasks
                     def generate_readme():
@@ -351,3 +388,128 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
         console.print()
 
         display_tasks_table(all_tasks, config, save_cache=False)
+
+
+def _has_conflict_markers(repo_path: Path) -> bool:
+    """Check if any task files contain git conflict markers.
+
+    Args:
+        repo_path: Path to repository
+
+    Returns:
+        True if conflict markers found, False otherwise
+    """
+    tasks_dir = repo_path / "tasks"
+    if not tasks_dir.exists():
+        return False
+
+    for task_file in tasks_dir.rglob("task-*.md"):
+        try:
+            content = task_file.read_text()
+            if "<<<<<<< HEAD" in content:
+                return True
+        except Exception:
+            continue
+
+    return False
+
+
+def _resolve_conflict_markers(repository: Repository, console: Console) -> list[Path]:
+    """Resolve git conflict markers in task files automatically.
+
+    Parses conflicted files, extracts local and remote versions,
+    uses smart merge (keep newer) to resolve, and saves resolved version.
+
+    Args:
+        repository: Repository object
+        console: Rich console for output
+
+    Returns:
+        List of file paths that were resolved
+    """
+    resolved_files = []
+    tasks_dir = repository.path / "tasks"
+
+    if not tasks_dir.exists():
+        return resolved_files
+
+    for task_file in tasks_dir.rglob("task-*.md"):
+        try:
+            content = task_file.read_text()
+
+            # Check for conflict markers
+            if "<<<<<<< HEAD" not in content:
+                continue
+
+            # Parse the conflicted content
+            local_task, remote_task = _parse_conflicted_file(content, task_file, repository.name)
+
+            if not local_task or not remote_task:
+                console.print(f"    [yellow]⚠[/yellow] Could not parse conflict in {task_file.name}")
+                continue
+
+            # Use smart merge: prefer newer modified timestamp
+            if local_task.modified >= remote_task.modified:
+                resolved_task = local_task
+                console.print(f"    • {task_file.name}: Using local (newer)")
+            else:
+                resolved_task = remote_task
+                console.print(f"    • {task_file.name}: Using remote (newer)")
+
+            # Update modified timestamp
+            resolved_task.modified = datetime.now()
+
+            # Save resolved task
+            repository.save_task(resolved_task)
+            resolved_files.append(task_file.relative_to(repository.path))
+
+        except Exception as e:
+            console.print(f"    [red]✗[/red] Error resolving {task_file.name}: {e}")
+            continue
+
+    return resolved_files
+
+
+def _parse_conflicted_file(content: str, file_path: Path, repo_name: str) -> tuple[Task | None, Task | None]:
+    """Parse a file with git conflict markers into local and remote task objects.
+
+    Args:
+        content: File content with conflict markers
+        file_path: Path to the file
+        repo_name: Repository name
+
+    Returns:
+        Tuple of (local_task, remote_task) or (None, None) if parsing fails
+    """
+    try:
+        # Extract task ID from filename
+        task_id = file_path.stem.replace("task-", "")
+
+        # Split by conflict markers
+        # Pattern: <<<<<<< HEAD\n{local}\n=======\n{remote}\n>>>>>>> {commit}
+        pattern = r"<<<<<<< HEAD\n(.*?)\n=======\n(.*?)\n>>>>>>> "
+        match = re.search(pattern, content, re.DOTALL)
+
+        if not match:
+            return None, None
+
+        local_section = match.group(1)
+        remote_section = match.group(2)
+
+        # Get the parts before and after the conflict
+        before_conflict = content[: match.start()]
+        after_match = re.search(r">>>>>>> [^\n]+\n", content[match.start() :])
+        after_conflict = content[match.start() + after_match.end() :] if after_match else ""
+
+        # Reconstruct full local and remote versions
+        local_content = before_conflict + local_section + after_conflict
+        remote_content = before_conflict + remote_section + after_conflict
+
+        # Parse as Task objects
+        local_task = Task.from_markdown(local_content, task_id=task_id, repo=repo_name)
+        remote_task = Task.from_markdown(remote_content, task_id=task_id, repo=repo_name)
+
+        return local_task, remote_task
+
+    except Exception:
+        return None, None

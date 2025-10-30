@@ -973,11 +973,35 @@ def _handle_sync(task_tui: TaskTUI, config):
                         click.secho(f"  ✓ Resolved {resolved_count} conflict(s)", fg="green")
 
                 # Pull from remote
-                click.echo("  • Pulling from remote...")
-                origin = git_repo.remotes.origin
-                # Use --rebase=false to handle divergent branches
-                git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
-                click.secho("  ✓ Pulled from remote", fg="green")
+                pull_succeeded = True
+                try:
+                    click.echo("  • Pulling from remote...")
+                    origin = git_repo.remotes.origin
+                    # Use --rebase=false to handle divergent branches
+                    git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
+                    click.secho("  ✓ Pulled from remote", fg="green")
+                except GitCommandError as e:
+                    if "would be overwritten" in str(e) or "conflict" in str(e).lower():
+                        pull_succeeded = False
+                        click.secho("  ⚠ Pull created conflicts", fg="yellow")
+                    else:
+                        raise
+
+                # Check for conflict markers after pull
+                from taskrepo.cli.commands.sync import _has_conflict_markers, _resolve_conflict_markers
+
+                if not pull_succeeded or _has_conflict_markers(repository.path):
+                    click.echo("  • Resolving conflict markers...")
+                    resolved_files = _resolve_conflict_markers(repository, click)
+
+                    if resolved_files:
+                        click.secho(f"  ✓ Auto-resolved {len(resolved_files)} conflicted file(s)", fg="green")
+
+                        # Commit the resolutions
+                        for file_path in resolved_files:
+                            git_repo.git.add(str(file_path))
+                        git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_files)} conflict marker(s)")
+                        click.secho("  ✓ Committed conflict resolutions", fg="green")
 
                 # Push to remote
                 click.echo("  • Pushing to remote...")
