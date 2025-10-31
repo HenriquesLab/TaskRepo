@@ -571,13 +571,16 @@ def _handle_subtask(task_tui: TaskTUI, config):
         input()
         return
 
-    existing_tasks = repo.list_tasks()
+    # Get existing values for autocomplete
+    existing_projects = repo.get_projects()
+    existing_assignees = repo.get_assignees()
+    existing_tags = repo.get_tags()
 
     # Prompt for other task details
-    project = prompts.prompt_project(existing_tasks, default=parent_task.project)
+    project = prompts.prompt_project(existing_projects, default=parent_task.project)
     priority = prompts.prompt_priority(default=config.default_priority or "M")
-    assignees = prompts.prompt_assignees(existing_tasks, default=parent_task.assignees)
-    tags = prompts.prompt_tags(existing_tasks, default=parent_task.tags)
+    assignees = prompts.prompt_assignees(existing_assignees, default=parent_task.assignees)
+    tags = prompts.prompt_tags(existing_tags, default=parent_task.tags)
     links = prompts.prompt_links()
     due_date = prompts.prompt_due_date()
     description = prompts.prompt_description()
