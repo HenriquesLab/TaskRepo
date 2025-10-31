@@ -6,6 +6,7 @@
 [![PyPI version](https://badge.fury.io/py/taskrepo.svg)](https://badge.fury.io/py/taskrepo)
 [![Python versions](https://img.shields.io/pypi/pyversions/taskrepo.svg)](https://pypi.org/project/taskrepo/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://img.shields.io/badge/docs-taskrepo.henriqueslab.org-blue)](https://taskrepo.henriqueslab.org)
 
 > TaskWarrior-inspired CLI for managing tasks as markdown files in git repositories
 
@@ -149,47 +150,6 @@ tsk sync
 tsk sync --repo work  # Sync specific repository
 ```
 
-## Task File Format
-
-Tasks are stored as markdown files with YAML frontmatter:
-
-```markdown
----
-id: '001'
-title: Fix authentication bug
-status: pending
-priority: H
-project: backend
-assignees:
-- '@alice'
-- '@bob'
-tags:
-- bug
-- security
-links:
-- https://github.com/org/repo/issues/123
-- https://mail.google.com/mail/u/0/#inbox/abc123
-due: '2025-11-15T00:00:00'
-created: '2025-10-20T10:30:00'
-modified: '2025-10-20T14:22:00'
-depends:
-- '002'
----
-
-## Description
-
-The login endpoint is not properly validating JWT tokens.
-
-## Steps to reproduce
-
-1. Attempt to login with expired token
-2. Observe that access is granted
-
-## Solution
-
-Update JWT validation middleware to check expiration.
-```
-
 ## Commands Reference
 
 ### Configuration
@@ -212,23 +172,6 @@ Update JWT validation middleware to check expiration.
 - `tsk sync` - Pull and push all repositories
 - `tsk sync --repo <name>` - Sync specific repository
 - `tsk sync --no-push` - Pull only, don't push
-
-## Task Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique task identifier (auto-generated) |
-| `title` | string | Task title (required) |
-| `status` | string | Task status: `pending`, `in_progress`, `completed`, `cancelled` |
-| `priority` | string | Priority level: `H` (High), `M` (Medium), `L` (Low) |
-| `project` | string | Project name (optional) |
-| `assignees` | list | GitHub user handles (e.g., `@username`) |
-| `tags` | list | Tags for categorization |
-| `due` | datetime | Due date |
-| `created` | datetime | Creation timestamp (auto-generated) |
-| `modified` | datetime | Last modification timestamp (auto-updated) |
-| `depends` | list | Task IDs this task depends on |
-| `description` | string | Markdown description/body |
 
 ## Configuration
 
@@ -272,6 +215,17 @@ When editing tasks with `tsk edit`, the editor is selected in this order:
        tasks/
            task-001.md
 ```
+
+## Documentation
+
+For comprehensive documentation, including:
+- **Complete CLI reference** with all commands and options
+- **Task file format** and field specifications
+- **Advanced features** like conflict resolution, dependencies, and GitHub integration
+- **Configuration guides** and examples
+- **Troubleshooting** and community support
+
+Visit the official documentation at **[taskrepo.henriqueslab.org](https://taskrepo.henriqueslab.org)**
 
 ## Examples
 

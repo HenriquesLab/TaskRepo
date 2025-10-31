@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.12] - 2025-10-31
+
+### Fixed
+
+- **Conflict marker resolution**: Enhanced robustness of automatic conflict resolution
+  - More flexible regex patterns handle various conflict marker formats
+  - Fallback mechanism extracts local version when parsing fails
+  - Validation ensures conflict markers are actually removed after resolution
+  - Better error reporting with debug information for failed resolutions
+  - Lists files requiring manual resolution with actionable guidance
+
+- **Sync progress display**: Progress bar now shows for single repository sync
+  - Per-operation progress tracking (e.g., "5/7 operations")
+  - Consistent visual feedback for both single and multiple repository syncs
+  - Operations task advances as each step completes
+
+### Changed
+
+- Improved conflict resolution error handling
+  - Three-tier resolution strategy: smart merge → partial fallback → simple extraction
+  - Failed files are clearly reported with manual resolution instructions
+  - Better user guidance when conflicts cannot be auto-resolved
+
 ## [0.9.11] - 2025-10-30
 
 ### Added

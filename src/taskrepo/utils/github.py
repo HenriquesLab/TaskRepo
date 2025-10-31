@@ -103,7 +103,11 @@ def create_github_repo(org: str, repo_name: str, visibility: str = "private") ->
         raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
-        raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
+        raise GitHubError(
+            "Not authenticated with GitHub.\n"
+            "Check your auth status: gh auth status\n"
+            "To authenticate, run: gh auth login"
+        )
 
     # Build the repository identifier
     full_repo_name = f"{org}/{repo_name}"
@@ -160,7 +164,11 @@ def clone_github_repo(org: str, repo_name: str, target_path: Path):
         raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
-        raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
+        raise GitHubError(
+            "Not authenticated with GitHub.\n"
+            "Check your auth status: gh auth status\n"
+            "To authenticate, run: gh auth login"
+        )
 
     # Build the repository identifier
     full_repo_name = f"{org}/{repo_name}"
@@ -218,7 +226,11 @@ def list_github_repos(org: str, pattern: str | None = None) -> list[dict]:
         raise GitHubError(get_gh_install_message())
 
     if not check_gh_auth():
-        raise GitHubError("Not authenticated with GitHub. Run: gh auth login")
+        raise GitHubError(
+            "Not authenticated with GitHub.\n"
+            "Check your auth status: gh auth status\n"
+            "To authenticate, run: gh auth login"
+        )
 
     try:
         # Use gh repo list to fetch repositories

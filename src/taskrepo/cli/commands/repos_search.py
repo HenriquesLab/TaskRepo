@@ -7,7 +7,14 @@ from rich.console import Console
 from rich.table import Table
 
 from taskrepo.core.repository import RepositoryManager
-from taskrepo.utils.github import GitHubError, clone_github_repo, list_github_repos
+from taskrepo.utils.github import (
+    GitHubError,
+    check_gh_auth,
+    check_gh_cli_installed,
+    clone_github_repo,
+    get_gh_install_message,
+    list_github_repos,
+)
 
 
 @click.command(name="repos-search")
@@ -29,6 +36,29 @@ def repos_search(ctx, org, list_only):
     """
     config = ctx.obj["config"]
     console = Console()
+
+    # Check prerequisites early
+    if not check_gh_cli_installed():
+        click.secho("✗ GitHub CLI (gh) is not installed.", fg="red", err=True)
+        click.echo()
+        click.echo(get_gh_install_message())
+        click.echo()
+        click.echo("The repos-search command requires gh CLI to search for repositories on GitHub.")
+        ctx.exit(1)
+
+    if not check_gh_auth():
+        click.secho("✗ Not authenticated with GitHub.", fg="red", err=True)
+        click.echo()
+        click.echo("To use the repos-search command, you need to authenticate with GitHub.")
+        click.echo()
+        click.echo("Steps:")
+        click.echo("  1. Check your authentication status:")
+        click.secho("     gh auth status", fg="cyan")
+        click.echo()
+        click.echo("  2. If not authenticated, run:")
+        click.secho("     gh auth login", fg="cyan")
+        click.echo()
+        ctx.exit(1)
 
     # Determine organization to search
     if not org:
