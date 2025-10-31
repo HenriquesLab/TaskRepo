@@ -146,13 +146,23 @@ def _display_conflict_comparison(console: Console, local_task: Task, remote_task
             remote_style = "bold yellow"
             conflict_marker = " ← CONFLICT"
         else:
-            local_style = ""
-            remote_style = ""
+            local_style = None
+            remote_style = None
             conflict_marker = ""
 
         # Escape values to prevent Rich markup interpretation
-        local_table.add_row(field_name, f"[{local_style}]{escape(str(local_val))}[/{local_style}]{conflict_marker}")
-        remote_table.add_row(field_name, f"[{remote_style}]{escape(str(remote_val))}[/{remote_style}]{conflict_marker}")
+        local_val_escaped = escape(str(local_val))
+        remote_val_escaped = escape(str(remote_val))
+
+        if local_style:
+            local_table.add_row(field_name, f"[{local_style}]{local_val_escaped}[/{local_style}]{conflict_marker}")
+        else:
+            local_table.add_row(field_name, f"{local_val_escaped}{conflict_marker}")
+
+        if remote_style:
+            remote_table.add_row(field_name, f"[{remote_style}]{remote_val_escaped}[/{remote_style}]{conflict_marker}")
+        else:
+            remote_table.add_row(field_name, f"{remote_val_escaped}{conflict_marker}")
 
     # Create panels
     local_panel = Panel(
