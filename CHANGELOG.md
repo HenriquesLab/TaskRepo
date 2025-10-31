@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.13] - 2025-10-31
+
+### Fixed
+
+- **TUI display errors**: Fixed XML/HTML parsing errors in task detail display
+  - Added HTML escaping for all user-generated content (titles, descriptions, etc.)
+  - Prevents crashes when task content contains special characters like `<`, `>`, `&`
+  - Applied to TUI task details, header text, and conflict display
+
+- **Conflict resolution display errors**: Fixed Rich markup parsing errors
+  - Removed task ID from conflict display to prevent bracket interpretation issues
+  - Fixed empty style markup creating invalid `[]value[/]` patterns
+  - Improved robustness of side-by-side conflict comparison display
+
+- **Interactive conflict resolution**: Fixed command hanging after user input
+  - Progress bars now stop during interactive prompts
+  - Prevents terminal I/O conflicts that caused hung state
+  - Progress display automatically restarts after user completes interaction
+
+- **Input validation**: Added validation for conflict resolution choices
+  - Users can now only submit valid choices (L/R/N/M/E)
+  - Invalid input shows error message without submitting
+  - Prevents confusion from accidentally submitted typos
+
+- **Unfinished git merge handling**: Sync now detects and resolves incomplete merges
+  - Automatically detects MERGE_HEAD file indicating unfinished merge
+  - Resolves remaining conflict markers before completing merge
+  - Uses git command directly to properly clean up merge state
+  - Prevents "You have not concluded your merge" errors
+
 ## [0.9.12] - 2025-10-31
 
 ### Fixed
