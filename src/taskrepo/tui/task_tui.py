@@ -1,6 +1,7 @@
 """Full-screen TUI for TaskRepo using prompt_toolkit."""
 
 import asyncio
+import html
 import os
 from pathlib import Path
 from typing import Optional
@@ -581,10 +582,10 @@ class TaskTUI:
             current_pos = self.current_view_idx + 2  # +2 because "All" is position 1
 
         total_tabs = len(self.view_items) + 1  # +1 for "All" tab
-        view_info = f"{view_label}: {view_name} ({current_pos}/{total_tabs}) [←/→ items | Tab: view type]"
+        view_info = f"{view_label}: {html.escape(view_name)} ({current_pos}/{total_tabs}) [←/→ items | Tab: view type]"
 
         if self.filter_text:
-            view_info += f" | Filter: '{self.filter_text}'"
+            view_info += f" | Filter: '{html.escape(self.filter_text)}'"
 
         return HTML(f"<b> {view_info} </b>")
 
@@ -614,11 +615,11 @@ class TaskTUI:
         lines = []
 
         # Title header
-        lines.append(f"<b>Task [{display_id_str}]: {task.title}</b>\n\n")
+        lines.append(f"<b>Task [{display_id_str}]: {html.escape(task.title)}</b>\n\n")
 
         # Metadata line 1: Repo, Project, Status, Priority
-        repo = task.repo or "-"
-        project = task.project or "-"
+        repo = html.escape(task.repo) if task.repo else "-"
+        project = html.escape(task.project) if task.project else "-"
 
         # Color-code status
         status_color_map = {
@@ -646,8 +647,8 @@ class TaskTUI:
         lines.append(f"<cyan>Created:</cyan> {created_str} | <cyan>Modified:</cyan> {modified_str}\n")
 
         # Metadata line 3: Assignees, Tags, Due
-        assignees = ", ".join(task.assignees) if task.assignees else "-"
-        tags = ", ".join(task.tags) if task.tags else "-"
+        assignees = ", ".join(html.escape(a) for a in task.assignees) if task.assignees else "-"
+        tags = ", ".join(html.escape(t) for t in task.tags) if task.tags else "-"
         due_str = task.due.strftime("%Y-%m-%d") if task.due else "-"
 
         # Color-code assignees and tags
@@ -661,14 +662,14 @@ class TaskTUI:
         if task.links:
             lines.append("\n<cyan><b>Links:</b></cyan>\n")
             for link in task.links:
-                lines.append(f"  • {link}\n")
+                lines.append(f"  • {html.escape(link)}\n")
 
         # Dependencies section
         deps_info = []
         if task.parent:
-            deps_info.append(f"Parent: {task.parent}")
+            deps_info.append(f"Parent: {html.escape(task.parent)}")
         if task.depends:
-            deps_info.append(f"Depends on: {', '.join(task.depends)}")
+            deps_info.append(f"Depends on: {', '.join(html.escape(d) for d in task.depends)}")
         if deps_info:
             lines.append(f"\n<cyan><b>Dependencies:</b></cyan> {' | '.join(deps_info)}\n")
 
@@ -679,7 +680,7 @@ class TaskTUI:
             desc_lines = task.description.split("\n")
             display_lines = desc_lines[:10]
             for line in display_lines:
-                lines.append(f"{line}\n")
+                lines.append(f"{html.escape(line)}\n")
             if len(desc_lines) > 10:
                 lines.append(f"<dim>... ({len(desc_lines) - 10} more lines)</dim>\n")
 
