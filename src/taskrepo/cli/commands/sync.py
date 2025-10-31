@@ -273,6 +273,41 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     else:
                         progress.console.print("  [green]✓[/green] No conflicts detected")
 
+                    # Check for unfinished merge before pulling
+                    merge_head_file = repository.path / ".git" / "MERGE_HEAD"
+                    if merge_head_file.exists():
+                        progress.console.print("  [yellow]⚠[/yellow] Found unfinished merge")
+
+                        # Check for conflict markers in task files
+                        if _has_conflict_markers(repository.path):
+                            progress.console.print("  [yellow]→[/yellow] Resolving conflict markers...")
+
+                            def resolve_markers():
+                                return _resolve_conflict_markers(repository, progress.console)
+
+                            resolved_files, _ = run_with_spinner(
+                                progress, spinner_task, "Resolving conflict markers", resolve_markers, verbose
+                            )
+
+                            if resolved_files:
+                                # Stage resolved files
+                                for resolved_file in resolved_files:
+                                    git_repo.index.add([str(resolved_file)])
+                                progress.console.print(f"  [green]✓[/green] Resolved {len(resolved_files)} file(s)")
+
+                        # Try to complete the merge
+                        try:
+                            # Use git command directly to properly handle merge state
+                            git_repo.git.commit("-m", "Merge: Completed unfinished merge", "--no-edit")
+                            progress.console.print("  [green]✓[/green] Completed unfinished merge")
+                        except Exception as e:
+                            # Failed to complete, abort the merge
+                            progress.console.print(
+                                f"  [yellow]⚠[/yellow] Cannot complete merge, aborting... ({escape(str(e))})"
+                            )
+                            git_repo.git.merge("--abort")
+                            progress.console.print("  [green]✓[/green] Aborted unfinished merge")
+
                     # Pull changes
                     pull_succeeded = True
                     try:
