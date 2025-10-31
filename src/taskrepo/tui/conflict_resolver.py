@@ -6,6 +6,7 @@ from pathlib import Path
 
 from prompt_toolkit import prompt
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.validation import ValidationError, Validator
 from rich.columns import Columns
 from rich.console import Console
 from rich.markup import escape
@@ -14,6 +15,19 @@ from rich.table import Table
 
 from taskrepo.core.task import Task
 from taskrepo.utils.merge import ConflictInfo
+
+
+class ConflictChoiceValidator(Validator):
+    """Validator for conflict resolution choice input."""
+
+    def validate(self, document):
+        """Validate that input is one of the allowed choices."""
+        text = document.text.strip().upper()
+        if text and text not in ("L", "R", "N", "M", "E"):
+            raise ValidationError(
+                message="Invalid choice. Please enter L, R, N, M, or E.",
+                cursor_position=len(document.text),
+            )
 
 
 def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None) -> Task:
@@ -62,6 +76,8 @@ def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None
                 prompt(
                     HTML("<cyan>Choose [L/R/N/M/E]</cyan> > "),
                     default="N",
+                    validator=ConflictChoiceValidator(),
+                    validate_while_typing=False,
                 )
                 .strip()
                 .upper()
