@@ -218,7 +218,12 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                 progress.console.print(f"    • {conflict.file_path.name}: Using remote version")
                                 resolved_task = conflict.remote_task
                             elif strategy == "interactive":
-                                resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                # Stop progress display for interactive input
+                                progress.stop()
+                                try:
+                                    resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                finally:
+                                    progress.start()
                             elif strategy == "auto" and auto_merge:
                                 # Try smart merge
                                 if conflict.can_auto_merge:
@@ -231,13 +236,27 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                         )
                                     else:
                                         # Fall back to interactive
-                                        resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                        progress.stop()
+                                        try:
+                                            resolved_task = resolve_conflict_interactive(
+                                                conflict, config.default_editor
+                                            )
+                                        finally:
+                                            progress.start()
                                 else:
                                     # Requires manual resolution
-                                    resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                    progress.stop()
+                                    try:
+                                        resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                    finally:
+                                        progress.start()
                             else:
                                 # Default: interactive
-                                resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                progress.stop()
+                                try:
+                                    resolved_task = resolve_conflict_interactive(conflict, config.default_editor)
+                                finally:
+                                    progress.start()
 
                             # Save resolved task
                             if resolved_task:
