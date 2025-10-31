@@ -40,7 +40,7 @@ def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None
     # Display conflict header
     console.print()
     console.print(f"[bold red]Conflict in:[/bold red] {conflict_info.file_path}")
-    console.print(f"[bold]Task:[/bold] [{local_task.id}] {escape(local_task.title)}")
+    console.print(f"[bold]Task:[/bold] {escape(local_task.title)}")
     console.print()
 
     # Display both versions side-by-side
