@@ -242,22 +242,27 @@ def prompt_project(existing_projects: list[str], default: Optional[str] = None) 
         return None
 
 
-def prompt_assignees(existing_assignees: list[str]) -> list[str]:
+def prompt_assignees(existing_assignees: list[str], default: Optional[list[str]] = None) -> list[str]:
     """Prompt user for assignees (comma-separated GitHub handles).
 
     Args:
         existing_assignees: List of existing assignee handles
+        default: Default list of assignees to pre-fill
 
     Returns:
         List of assignee handles
     """
     completer = CommaDelimitedCompleter(existing_assignees) if existing_assignees else None
 
+    # Convert default list to comma-separated string
+    default_str = ", ".join(default) if default else ""
+
     try:
         assignees_str = prompt(
             "Assignees (comma-separated, e.g., @user1,@user2): ",
             completer=completer,
             complete_while_typing=True,
+            default=default_str,
         )
 
         if not assignees_str.strip():
@@ -330,22 +335,27 @@ def prompt_priority(default: str = "M") -> str:
         return default
 
 
-def prompt_tags(existing_tags: list[str]) -> list[str]:
+def prompt_tags(existing_tags: list[str], default: Optional[list[str]] = None) -> list[str]:
     """Prompt user for tags (comma-separated).
 
     Args:
         existing_tags: List of existing tags
+        default: Default list of tags to pre-fill
 
     Returns:
         List of tags
     """
     completer = CommaDelimitedCompleter(existing_tags) if existing_tags else None
 
+    # Convert default list to comma-separated string
+    default_str = ", ".join(default) if default else ""
+
     try:
         tags_str = prompt(
             "Tags (comma-separated): ",
             completer=completer,
             complete_while_typing=True,
+            default=default_str,
         )
 
         if not tags_str.strip():
