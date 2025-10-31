@@ -218,11 +218,12 @@ def prompt_title() -> Optional[str]:
         return None
 
 
-def prompt_project(existing_projects: list[str]) -> Optional[str]:
+def prompt_project(existing_projects: list[str], default: Optional[str] = None) -> Optional[str]:
     """Prompt user for project name with autocomplete.
 
     Args:
         existing_projects: List of existing project names
+        default: Default project name to pre-fill
 
     Returns:
         Project name or None
@@ -234,6 +235,7 @@ def prompt_project(existing_projects: list[str]) -> Optional[str]:
             "Project (optional): ",
             completer=completer,
             complete_while_typing=True,
+            default=default or "",
         )
         return project.strip() or None
     except (KeyboardInterrupt, EOFError):
