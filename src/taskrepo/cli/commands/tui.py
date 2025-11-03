@@ -34,6 +34,9 @@ def tui(ctx, repo):
         d - Mark as done
         p - Toggle in-progress/pending
         c - Mark as cancelled
+        H - Set priority to High
+        M - Set priority to Medium
+        L - Set priority to Low
         a - Archive task
         x - Delete task
 
@@ -107,6 +110,12 @@ def tui(ctx, repo):
             _handle_subtask(task_tui, config)
         elif result == "extend":
             _handle_extend(task_tui, config)
+        elif result == "priority-high":
+            _handle_priority_change(task_tui, "H")
+        elif result == "priority-medium":
+            _handle_priority_change(task_tui, "M")
+        elif result == "priority-low":
+            _handle_priority_change(task_tui, "L")
         elif result == "info":
             _handle_info_task(task_tui)
         elif result == "sync":
@@ -311,6 +320,32 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
             continue
 
         task.status = new_status
+        task.modified = datetime.now()
+        repo.save_task(task)
+
+    # Clear multi-selection (no message, immediate return to TUI)
+    task_tui.multi_selected.clear()
+
+
+def _handle_priority_change(task_tui: TaskTUI, new_priority: str):
+    """Handle changing priority of selected task(s)."""
+    selected_tasks = task_tui._get_selected_tasks()
+    if not selected_tasks:
+        # Silently return if no task selected
+        return
+
+    from datetime import datetime
+
+    # Update each task in its respective repository
+    for task in selected_tasks:
+        # Find the repository for this task by name (works in all view modes)
+        repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
+
+        if not repo:
+            # Skip this task if repo not found
+            continue
+
+        task.priority = new_priority
         task.modified = datetime.now()
         repo.save_task(task)
 

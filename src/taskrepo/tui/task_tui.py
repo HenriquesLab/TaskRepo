@@ -463,6 +463,22 @@ class TaskTUI:
             """Extend task due date."""
             event.app.exit(result="extend")
 
+        # Priority change operations (only when not filtering)
+        @kb.add("H", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Set task(s) priority to High."""
+            event.app.exit(result="priority-high")
+
+        @kb.add("M", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Set task(s) priority to Medium."""
+            event.app.exit(result="priority-medium")
+
+        @kb.add("L", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Set task(s) priority to Low."""
+            event.app.exit(result="priority-low")
+
         # View operations (only when not filtering)
         @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
