@@ -1026,11 +1026,14 @@ def _handle_sync(task_tui: TaskTUI, config):
                         raise
 
                 # Check for conflict markers after pull
+                from rich.console import Console
+
                 from taskrepo.cli.commands.sync import _has_conflict_markers, _resolve_conflict_markers
 
                 if not pull_succeeded or _has_conflict_markers(repository.path):
                     click.echo("  • Resolving conflict markers...")
-                    resolved_files = _resolve_conflict_markers(repository, click)
+                    console = Console()
+                    resolved_files = _resolve_conflict_markers(repository, console)
 
                     if resolved_files:
                         click.secho(f"  ✓ Auto-resolved {len(resolved_files)} conflicted file(s)", fg="green")

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.14] - 2025-11-03
+
+### Fixed
+
+- **TUI sync conflict resolution**: Fixed incorrect parameter type passed to conflict resolution
+  - TUI sync was passing `click` module instead of Rich `Console` object to `_resolve_conflict_markers()`
+  - Caused "Error: print" message and left conflict markers unresolved in task files
+  - Resulted in YAML parsing errors when loading tasks with unresolved conflict markers
+  - Now properly creates Console instance before calling conflict resolution
+
 ## [0.9.13] - 2025-10-31
 
 ### Fixed
