@@ -113,6 +113,48 @@ class TestFindConflictingFields:
         assert "tags" in conflicts
         assert "due" in conflicts
 
+    def test_modified_timestamp_not_conflict(self, base_task):
+        """Test that tasks differing only in modified timestamp have no conflicts."""
+        # Create two identical tasks with different modified timestamps
+        task1 = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status=base_task.status,
+            priority=base_task.priority,
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 20, 10, 0, 0),  # Older
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+        task2 = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status=base_task.status,
+            priority=base_task.priority,
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 21, 14, 30, 0),  # Newer
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        # Should have no conflicts since only modified timestamp differs
+        conflicts = _find_conflicting_fields(task1, task2)
+        assert conflicts == []
+
 
 class TestCanAutoMerge:
     """Tests for _can_auto_merge function."""

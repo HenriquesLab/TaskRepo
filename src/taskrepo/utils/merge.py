@@ -109,6 +109,8 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
             # Compare tasks and find conflicting fields
             conflicting_fields = _find_conflicting_fields(local_task, remote_task)
 
+            # Only report as conflict if there are actual field differences
+            # (tasks differing only in modified/created timestamps are not conflicts)
             if conflicting_fields:
                 # Determine if auto-merge is possible
                 can_auto_merge = _can_auto_merge(local_task, remote_task, conflicting_fields)
@@ -132,16 +134,19 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
 def _find_conflicting_fields(local_task: Task, remote_task: Task) -> list[str]:
     """Find fields that differ between two task versions.
 
+    Note: 'modified' and 'created' timestamps are intentionally excluded from
+    conflict detection as they're expected to differ and handled separately.
+
     Args:
         local_task: Local task version
         remote_task: Remote task version
 
     Returns:
-        List of field names that have different values
+        List of field names that have different values (excluding timestamps)
     """
     conflicting = []
 
-    # Compare simple fields
+    # Compare simple fields (excluding timestamps)
     simple_fields = ["title", "status", "priority", "project", "parent", "description"]
     for field in simple_fields:
         local_val = getattr(local_task, field)
@@ -149,7 +154,7 @@ def _find_conflicting_fields(local_task: Task, remote_task: Task) -> list[str]:
         if local_val != remote_val:
             conflicting.append(field)
 
-    # Compare date fields
+    # Compare date fields (excluding created/modified timestamps)
     date_fields = ["due"]
     for field in date_fields:
         local_val = getattr(local_task, field)
