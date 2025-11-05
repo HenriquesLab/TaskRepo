@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.15] - 2025-11-05
+
+### Added
+
+- **Verbose auto-merge details**: Sync command now displays detailed information about how conflicts were automatically merged
+  - Shows which task version (local/remote) was used as the base
+  - Displays merge strategy for each conflicting field
+  - List fields (assignees, tags, links, depends) show "union" when merged
+  - Status field shows "remote priority" when remote status takes precedence
+  - Simple fields show which version was used
+  - Example output:
+    ```
+    • task-abc123.md: Auto-merged (base: remote)
+      - status: remote priority (in-progress)
+      - assignees: union
+      - tags: union
+    ```
+
 ## [0.9.14] - 2025-11-03
 
 ### Fixed
