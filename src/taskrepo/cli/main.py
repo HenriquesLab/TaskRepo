@@ -10,6 +10,7 @@ from taskrepo.cli.commands.delete import delete
 from taskrepo.cli.commands.done import done
 from taskrepo.cli.commands.edit import edit
 from taskrepo.cli.commands.extend import ext
+from taskrepo.cli.commands.history import history
 from taskrepo.cli.commands.in_progress import in_progress
 from taskrepo.cli.commands.info import info
 from taskrepo.cli.commands.list import list_tasks
@@ -46,7 +47,7 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Repository Operations",
-                ["create-repo", "repos", "repos-search", "sync"],
+                ["create-repo", "repos", "repos-search", "sync", "history"],
             ),
         ]
 
@@ -146,6 +147,7 @@ cli.add_command(edit)
 cli.add_command(done)
 cli.add_command(delete, name="del")  # Register only as "del"
 cli.add_command(ext)
+cli.add_command(history)
 cli.add_command(move)
 cli.add_command(in_progress)
 cli.add_command(info)
