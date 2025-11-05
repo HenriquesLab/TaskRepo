@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-11-05
+
+### Added
+
+- **History command (`tsk history`)**: New command to view task and git repository history with rich timeline display
+  - Shows git commit history with task-specific changes highlighted
+  - Chronological timeline grouping (Today, Yesterday, This Week, Last Week, etc.)
+  - Filters out auto-updates by default, showing only commits with actual task changes
+  - Use `--all` flag to include auto-updates and all commits
+  - Default time range: 7 days (configurable with `--since`)
+  - Task change detection:
+    - Status changes (pending → completed, etc.) with color coding
+    - Priority changes (H → L, etc.) with color coding
+    - Assignee and tag additions/removals
+    - Due date changes
+    - Title and description modifications
+    - Task creation (shows initial priority) and deletion
+  - Display features:
+    - Task titles shown instead of IDs (truncated at 50 characters for readability)
+    - Author name displayed with each commit
+    - Color-coded status and priority values
+    - Emoji categorization (✅ completions, 🎯 new tasks, 👥 assignee changes, 🔄 sync operations, 📝 updates)
+    - Repository name shown when viewing multiple repos
+    - Timestamps (time for Today/Yesterday, date for older commits)
+    - File change counts
+    - Verbose mode (`-v`) shows commit hashes and full commit messages
+  - Filter options:
+    - `--repo, -r`: Filter by specific repository
+    - `--since, -s`: Time range (7d, 2w, 1m, 3m, all)
+    - `--task, -t`: Filter by task ID or title pattern
+  - Example usage:
+    ```bash
+    tsk history                    # Last 7 days, task changes only
+    tsk history --all              # Last 7 days, including auto-updates
+    tsk history --since 2w         # Last 2 weeks
+    tsk history --repo work        # Specific repository
+    tsk history --verbose          # Detailed output with commit hashes
+    ```
+  - Implementation files:
+    - `src/taskrepo/cli/commands/history.py` - Main command
+    - `src/taskrepo/utils/history.py` - History analysis utilities
+
 ## [0.9.15] - 2025-11-05
 
 ### Added
