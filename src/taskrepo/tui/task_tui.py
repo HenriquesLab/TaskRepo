@@ -176,7 +176,7 @@ class TaskTUI:
 
                 # Update ID cache with all current tasks
                 all_tasks = manager.list_all_tasks(include_archived=False)
-                sorted_tasks = sort_tasks(all_tasks, self.config)
+                sorted_tasks = sort_tasks(all_tasks, self.config, all_tasks=all_tasks)
                 save_id_cache(sorted_tasks)
 
                 # Clear multi-selection since task IDs may have changed
@@ -764,11 +764,12 @@ class TaskTUI:
             # Separate top-level and subtasks
             top_level = [t for t in tasks if not t.parent]
             subtasks = [t for t in tasks if t.parent]
-            sorted_top_level = sort_tasks(top_level, self.config)
+            # Pass all tasks for effective due date calculation
+            sorted_top_level = sort_tasks(top_level, self.config, all_tasks=tasks)
             tree_items = build_task_tree(sorted_top_level + subtasks)
             return [item[0] for item in tree_items]
         else:
-            return sort_tasks(tasks, self.config)
+            return sort_tasks(tasks, self.config, all_tasks=tasks)
 
     def _get_task_list_text(self) -> FormattedText:
         """Get formatted task list for viewport display."""

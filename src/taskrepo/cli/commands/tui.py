@@ -68,7 +68,7 @@ def tui(ctx, repo):
     # Update ID cache with all tasks before starting TUI
     manager = RepositoryManager(config.parent_dir)
     all_tasks = manager.list_all_tasks(include_archived=False)
-    sorted_tasks = sort_tasks(all_tasks, config)
+    sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
     save_id_cache(sorted_tasks)
 
     # Create and run TUI in a loop
@@ -123,7 +123,7 @@ def tui(ctx, repo):
 
         # Update ID cache after task operations
         all_tasks = manager.list_all_tasks(include_archived=False)
-        sorted_tasks = sort_tasks(all_tasks, config)
+        sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
         save_id_cache(sorted_tasks)
 
         # Recreate TUI to refresh, restoring view state
@@ -677,6 +677,7 @@ def _handle_extend(task_tui: TaskTUI, config):
     click.echo("\nEnter date or duration:")
     click.echo("  Durations: 1w, 2d, 3m, 1y (extends from current due date)")
     click.echo("  Keywords: today, tomorrow, next week, next month, next year")
+    click.echo("  Weekdays: next monday, this friday, monday")
     click.echo("  ISO dates: 2025-10-30")
     click.echo("  Natural dates: 'Oct 30', 'October 30 2025'")
 

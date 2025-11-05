@@ -211,6 +211,11 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
 
     Uses timestamp-based merging for simple fields and union for list fields.
 
+    **Special Status Priority Rule**:
+    If the remote status is a progress/completion state (in-progress, completed, cancelled),
+    it takes priority over the local status regardless of timestamps. This ensures that
+    important status transitions aren't overwritten by local changes.
+
     Args:
         local_task: Local task version
         remote_task: Remote task version
@@ -263,6 +268,12 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
             description=remote_task.description,
             repo=remote_task.repo,
         )
+
+    # Apply special status priority rule:
+    # If remote status indicates progress/completion, use it regardless of timestamp
+    priority_statuses = ["in-progress", "completed", "cancelled"]
+    if "status" in conflicting_fields and remote_task.status in priority_statuses:
+        merged.status = remote_task.status
 
     # Merge list fields by taking union
     list_fields = ["assignees", "tags", "links", "depends"]

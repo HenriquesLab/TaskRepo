@@ -163,7 +163,7 @@ def update_cache_and_display_repo(manager, repository, config):
     # Update cache with ALL non-archived tasks across all repos (sorted)
     # Use stable mode (rebalance=False) to preserve IDs
     all_tasks_all_repos = manager.list_all_tasks(include_archived=False)
-    sorted_tasks = sort_tasks(all_tasks_all_repos, config)
+    sorted_tasks = sort_tasks(all_tasks_all_repos, config, all_tasks=all_tasks_all_repos)
     save_id_cache(sorted_tasks, rebalance=False)
 
     # Display tasks from this repository only (filtered view, excluding archived)

@@ -293,7 +293,8 @@ def display_tasks_table(
         subtasks = [t for t in tasks if t.parent]
 
         # Sort top-level tasks using centralized sorting utility
-        sorted_top_level = sort_tasks(top_level, config)
+        # Pass all tasks for effective due date calculation (includes subtasks)
+        sorted_top_level = sort_tasks(top_level, config, all_tasks=tasks)
 
         # Build tree structure
         tree_items = build_task_tree(sorted_top_level + subtasks)
@@ -302,7 +303,7 @@ def display_tasks_table(
         display_tasks = [item[0] for item in tree_items]
     else:
         # Flat view: sort all tasks normally using centralized sorting utility
-        sorted_tasks = sort_tasks(tasks, config)
+        sorted_tasks = sort_tasks(tasks, config, all_tasks=tasks)
         display_tasks = sorted_tasks
         tree_items = [(task, 0, False, []) for task in sorted_tasks]
 

@@ -299,6 +299,196 @@ class TestSmartMergeTasks:
         assert set(merged.assignees) == {"@alice"}  # Union: task1's assignees
         assert set(merged.tags) == {"bug", "urgent"}  # Union of both
 
+    def test_remote_completed_status_takes_priority(self, base_task):
+        """Test that remote 'completed' status overrides local changes."""
+        # Local task: newer, status=pending
+        local = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="pending",  # Local keeps it pending
+            priority="H",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 25, 10, 0, 0),  # Newer
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        # Remote task: older, but status=completed
+        remote = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="completed",  # Remote completed it
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 24, 10, 0, 0),  # Older
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        conflicts = ["status", "priority"]
+        merged = smart_merge_tasks(local, remote, conflicts)
+
+        assert merged is not None
+        # Remote status should win even though local is newer
+        assert merged.status == "completed"
+        # But other fields should use local (newer)
+        assert merged.priority == "H"
+
+    def test_remote_in_progress_status_takes_priority(self, base_task):
+        """Test that remote 'in-progress' status overrides local changes."""
+        # Local task: newer, status=pending
+        local = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="pending",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 25, 10, 0, 0),  # Newer
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        # Remote task: older, but status=in-progress
+        remote = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="in-progress",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 24, 10, 0, 0),  # Older
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        conflicts = ["status"]
+        merged = smart_merge_tasks(local, remote, conflicts)
+
+        assert merged is not None
+        # Remote status should win
+        assert merged.status == "in-progress"
+
+    def test_remote_cancelled_status_takes_priority(self, base_task):
+        """Test that remote 'cancelled' status overrides local changes."""
+        # Local task: newer, status=in-progress
+        local = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="in-progress",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 25, 10, 0, 0),  # Newer
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        # Remote task: older, but status=cancelled
+        remote = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="cancelled",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 24, 10, 0, 0),  # Older
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        conflicts = ["status"]
+        merged = smart_merge_tasks(local, remote, conflicts)
+
+        assert merged is not None
+        # Remote status should win
+        assert merged.status == "cancelled"
+
+    def test_remote_pending_status_does_not_override(self, base_task):
+        """Test that remote 'pending' status does NOT override local changes."""
+        # Local task: newer, status=in-progress
+        local = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="in-progress",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 25, 10, 0, 0),  # Newer
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        # Remote task: older, status=pending (not a priority status)
+        remote = Task(
+            id=base_task.id,
+            title=base_task.title,
+            status="pending",
+            priority="M",
+            project=base_task.project,
+            assignees=base_task.assignees.copy(),
+            tags=base_task.tags.copy(),
+            links=base_task.links.copy(),
+            due=base_task.due,
+            created=base_task.created,
+            modified=datetime(2025, 10, 24, 10, 0, 0),  # Older
+            depends=base_task.depends.copy(),
+            parent=base_task.parent,
+            description=base_task.description,
+            repo=base_task.repo,
+        )
+
+        conflicts = ["status"]
+        merged = smart_merge_tasks(local, remote, conflicts)
+
+        assert merged is not None
+        # Local status should win (normal timestamp-based merge)
+        assert merged.status == "in-progress"
+
 
 class TestConflictInfo:
     """Tests for ConflictInfo dataclass."""

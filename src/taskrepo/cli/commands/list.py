@@ -46,6 +46,9 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
     # Track if any filters are applied
     has_filters = bool(repo or project or status or priority or assignee or tag or archived)
 
+    # Keep reference to all tasks for effective due date calculation
+    all_tasks = tasks.copy()
+
     # Apply filters (no automatic exclusion of completed tasks)
 
     if project:
@@ -76,7 +79,7 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
         from taskrepo.utils.id_mapping import save_id_cache
         from taskrepo.utils.sorting import sort_tasks
 
-        sorted_tasks = sort_tasks(tasks, config)
+        sorted_tasks = sort_tasks(tasks, config, all_tasks=all_tasks)
         save_id_cache(sorted_tasks, rebalance=True)
 
     display_tasks_table(tasks, config, save_cache=False)

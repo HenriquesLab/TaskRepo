@@ -231,8 +231,23 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                         conflict.local_task, conflict.remote_task, conflict.conflicting_fields
                                     )
                                     if resolved_task:
+                                        # Show detailed merge information
+                                        base_version = (
+                                            "local"
+                                            if conflict.local_task.modified >= conflict.remote_task.modified
+                                            else "remote"
+                                        )
                                         progress.console.print(
-                                            f"    • {conflict.file_path.name}: Auto-merged (using newer timestamp)"
+                                            f"    • {conflict.file_path.name}: Auto-merged (base: {base_version})"
+                                        )
+
+                                        # Show what was merged for each field
+                                        _show_merge_details(
+                                            progress.console,
+                                            conflict.local_task,
+                                            conflict.remote_task,
+                                            conflict.conflicting_fields,
+                                            base_version,
                                         )
                                     else:
                                         # Fall back to interactive
@@ -491,13 +506,54 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
         from taskrepo.utils.id_mapping import save_id_cache
         from taskrepo.utils.sorting import sort_tasks
 
-        sorted_tasks = sort_tasks(all_tasks, config)
+        sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
         save_id_cache(sorted_tasks, rebalance=True)
 
         console.print("[cyan]IDs rebalanced to sequential order[/cyan]")
         console.print()
 
         display_tasks_table(all_tasks, config, save_cache=False)
+
+
+def _show_merge_details(
+    console: Console, local_task: Task, remote_task: Task, conflicting_fields: list[str], base_version: str
+) -> None:
+    """Display detailed information about how fields were merged.
+
+    Args:
+        console: Rich console for output
+        local_task: Local task version
+        remote_task: Remote task version
+        conflicting_fields: List of conflicting field names
+        base_version: Which version was used as base ("local" or "remote")
+    """
+    # Define field categories
+    list_fields = {"assignees", "tags", "links", "depends"}
+    priority_statuses = ["in-progress", "completed", "cancelled"]
+
+    # Track merge strategies for display
+    merge_info = []
+
+    for field in conflicting_fields:
+        if field in list_fields:
+            # List fields are merged by union
+            local_set = set(getattr(local_task, field))
+            remote_set = set(getattr(remote_task, field))
+            if local_set != remote_set:
+                merge_info.append(f"{field}: union")
+        elif field == "status":
+            # Check if remote status has priority
+            if remote_task.status in priority_statuses:
+                merge_info.append(f"status: remote priority ({remote_task.status})")
+            else:
+                merge_info.append(f"status: {base_version}")
+        else:
+            # Simple fields use base version
+            merge_info.append(f"{field}: {base_version}")
+
+    if merge_info:
+        for info in merge_info:
+            console.print(f"      - {info}")
 
 
 def _has_conflict_markers(repo_path: Path) -> bool:

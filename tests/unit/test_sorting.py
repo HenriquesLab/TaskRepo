@@ -345,3 +345,346 @@ def test_sort_tasks_matches_display_order():
         assert sorted_tasks1[2].id == "003"  # tomorrow
         assert sorted_tasks1[3].id == "004"  # next week
         assert sorted_tasks1[4].id == "005"  # no due date (last)
+
+
+# Recursive due date sorting tests
+
+
+def test_effective_due_date_with_subtasks():
+    """Test that parent task uses earliest subtask due date."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Parent task with later due date
+    parent = Task(
+        id="parent",
+        title="Parent Task",
+        due=now + timedelta(days=10),
+    )
+
+    # Subtask with earlier due date
+    subtask = Task(
+        id="subtask",
+        title="Subtask",
+        parent="parent",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [parent, subtask]
+
+    # Parent's effective due date should be subtask's due date (earlier)
+    effective = get_effective_due_date(parent, all_tasks)
+    assert effective == subtask.due
+
+
+def test_effective_due_date_with_dependencies():
+    """Test that task uses earliest dependency due date."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Task with later due date
+    task1 = Task(
+        id="task1",
+        title="Task 1",
+        due=now + timedelta(days=10),
+        depends=["task2"],
+    )
+
+    # Dependency with earlier due date
+    task2 = Task(
+        id="task2",
+        title="Task 2",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [task1, task2]
+
+    # Task1's effective due date should be task2's due date (earlier)
+    effective = get_effective_due_date(task1, all_tasks)
+    assert effective == task2.due
+
+
+def test_effective_due_date_inherits_from_subtasks():
+    """Test that parent without due date inherits from subtask."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Parent task with NO due date
+    parent = Task(
+        id="parent",
+        title="Parent Task",
+        due=None,
+    )
+
+    # Subtask with due date
+    subtask = Task(
+        id="subtask",
+        title="Subtask",
+        parent="parent",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [parent, subtask]
+
+    # Parent should inherit subtask's due date
+    effective = get_effective_due_date(parent, all_tasks)
+    assert effective == subtask.due
+
+
+def test_effective_due_date_multi_level_subtasks():
+    """Test recursive traversal through multiple subtask levels."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Parent (no due date)
+    parent = Task(id="parent", title="Parent", due=None)
+
+    # Child (no due date)
+    child = Task(id="child", title="Child", parent="parent", due=None)
+
+    # Grandchild (has due date)
+    grandchild = Task(
+        id="grandchild",
+        title="Grandchild",
+        parent="child",
+        due=now + timedelta(days=3),
+    )
+
+    all_tasks = [parent, child, grandchild]
+
+    # Parent should inherit due date from grandchild
+    effective = get_effective_due_date(parent, all_tasks)
+    assert effective == grandchild.due
+
+    # Child should also inherit from grandchild
+    effective_child = get_effective_due_date(child, all_tasks)
+    assert effective_child == grandchild.due
+
+
+def test_effective_due_date_circular_dependency():
+    """Test that circular dependencies don't cause infinite loops."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Create circular dependency: task1 -> task2 -> task1
+    task1 = Task(
+        id="task1",
+        title="Task 1",
+        due=now + timedelta(days=5),
+        depends=["task2"],
+    )
+
+    task2 = Task(
+        id="task2",
+        title="Task 2",
+        due=now + timedelta(days=10),
+        depends=["task1"],
+    )
+
+    all_tasks = [task1, task2]
+
+    # Should not crash due to cycle detection
+    effective1 = get_effective_due_date(task1, all_tasks)
+    effective2 = get_effective_due_date(task2, all_tasks)
+
+    # Each should return their own due date (cycle detection prevents recursion)
+    assert effective1 == task1.due
+    assert effective2 == task2.due
+
+
+def test_effective_due_date_mixed_subtasks_and_dependencies():
+    """Test combination of subtasks and dependencies."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Parent with late due date
+    parent = Task(
+        id="parent",
+        title="Parent",
+        due=now + timedelta(days=15),
+        depends=["dep"],
+    )
+
+    # Subtask with medium due date
+    subtask = Task(
+        id="subtask",
+        title="Subtask",
+        parent="parent",
+        due=now + timedelta(days=10),
+    )
+
+    # Dependency with earliest due date
+    dep = Task(
+        id="dep",
+        title="Dependency",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [parent, subtask, dep]
+
+    # Parent should use earliest (dependency's due date)
+    effective = get_effective_due_date(parent, all_tasks)
+    assert effective == dep.due
+
+
+def test_sort_tasks_with_recursive_due_dates():
+    """Test that sort_tasks uses effective due dates."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, sort_tasks
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    # Parent with late due date (day 10)
+    parent = Task(
+        id="parent",
+        title="Parent Task",
+        priority="M",
+        due=now + timedelta(days=10),
+    )
+
+    # Subtask with early due date (day 3)
+    subtask = Task(
+        id="subtask",
+        title="Subtask",
+        parent="parent",
+        priority="M",
+        due=now + timedelta(days=3),
+    )
+
+    # Regular task with medium due date (day 5)
+    regular = Task(
+        id="regular",
+        title="Regular Task",
+        priority="M",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [parent, subtask, regular]
+
+    with TemporaryDirectory() as tmpdir:
+        config_path = Path(tmpdir) / "config"
+        config = Config(config_path)
+        config.sort_by = ["due"]
+
+        # Sort with all_tasks context
+        sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
+
+        # Parent should come first (effective due = day 3 from subtask)
+        # Then regular task (day 5)
+        # Then subtask (day 3, but appears after parent in tree)
+        # Note: We're sorting ALL tasks, not just top-level
+        assert sorted_tasks[0].id == "parent"  # effective due day 3
+        assert sorted_tasks[1].id == "subtask"  # actual due day 3
+        assert sorted_tasks[2].id == "regular"  # due day 5
+
+
+def test_effective_due_date_no_related_tasks():
+    """Test task with no subtasks or dependencies uses own due date."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    now = datetime.now()
+
+    task = Task(
+        id="task",
+        title="Solo Task",
+        due=now + timedelta(days=5),
+    )
+
+    all_tasks = [task]
+
+    # Should return task's own due date
+    effective = get_effective_due_date(task, all_tasks)
+    assert effective == task.due
+
+
+def test_effective_due_date_all_none():
+    """Test task and all related tasks have no due dates."""
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    # Clear cache to ensure test isolation
+    _effective_due_date_cache.clear()
+
+    # Parent with no due date
+    parent = Task(id="parent", title="Parent", due=None)
+
+    # Subtask with no due date
+    subtask = Task(id="subtask", title="Subtask", parent="parent", due=None)
+
+    all_tasks = [parent, subtask]
+
+    # Should return None
+    effective = get_effective_due_date(parent, all_tasks)
+    assert effective is None
+
+
+def test_effective_due_date_caching():
+    """Test that effective due dates are cached for performance."""
+    from datetime import datetime, timedelta
+
+    from taskrepo.utils.sorting import _effective_due_date_cache, get_effective_due_date
+
+    now = datetime.now()
+
+    parent = Task(id="parent", title="Parent", due=now + timedelta(days=10))
+    subtask = Task(id="subtask", title="Subtask", parent="parent", due=now + timedelta(days=5))
+
+    all_tasks = [parent, subtask]
+
+    # Clear cache
+    _effective_due_date_cache.clear()
+
+    # First call should cache the result
+    effective1 = get_effective_due_date(parent, all_tasks)
+
+    # Cache should now contain the parent's effective due date
+    assert "parent" in _effective_due_date_cache
+
+    # Second call should return cached value
+    effective2 = get_effective_due_date(parent, all_tasks)
+
+    assert effective1 == effective2

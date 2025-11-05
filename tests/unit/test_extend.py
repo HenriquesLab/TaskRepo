@@ -10,6 +10,7 @@ import pytest
 from taskrepo.core.config import Config
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.core.task import Task
+from taskrepo.utils.date_parser import parse_date_or_duration
 from taskrepo.utils.duration import format_duration, parse_duration
 
 
@@ -253,3 +254,128 @@ def test_various_duration_formats(config, manager, test_repo):
         delta = parse_duration(duration_str)
         result = base_date + delta
         assert result == expected_date, f"Duration {duration_str} failed: got {result}, expected {expected_date}"
+
+
+# Date parser tests (weekday references)
+
+
+def test_parse_next_monday():
+    """Test parsing 'next monday'."""
+    # Test from Wednesday (2025-11-05)
+    today = datetime(2025, 11, 5)  # Wednesday
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    result = _parse_weekday_reference("next monday", today)
+    # Should be Monday of next week (Nov 10)
+    assert result == datetime(2025, 11, 10)
+
+
+def test_parse_this_friday():
+    """Test parsing 'this friday'."""
+    # Test from Wednesday (2025-11-05)
+    today = datetime(2025, 11, 5)  # Wednesday
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    result = _parse_weekday_reference("this friday", today)
+    # Should be Friday of this week (Nov 7)
+    assert result == datetime(2025, 11, 7)
+
+
+def test_parse_just_monday():
+    """Test parsing just 'monday'."""
+    # Test from Wednesday (2025-11-05)
+    today = datetime(2025, 11, 5)  # Wednesday
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    result = _parse_weekday_reference("monday", today)
+    # Should be next Monday (Nov 10)
+    assert result == datetime(2025, 11, 10)
+
+
+def test_parse_same_weekday():
+    """Test parsing a weekday when today is that weekday."""
+    # Test from Monday (2025-11-03)
+    today = datetime(2025, 11, 3)  # Monday
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    # Just "monday" should give next Monday (7 days ahead)
+    result = _parse_weekday_reference("monday", today)
+    assert result == datetime(2025, 11, 10)
+
+    # "next monday" should also give next Monday (7 days ahead)
+    result = _parse_weekday_reference("next monday", today)
+    assert result == datetime(2025, 11, 10)
+
+
+def test_parse_all_weekdays():
+    """Test parsing all weekday names."""
+    today = datetime(2025, 11, 5)  # Wednesday
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    expected_dates = {
+        "monday": datetime(2025, 11, 10),  # Next Monday
+        "tuesday": datetime(2025, 11, 11),  # Next Tuesday
+        "wednesday": datetime(2025, 11, 12),  # Next Wednesday (7 days ahead)
+        "thursday": datetime(2025, 11, 6),  # This Thursday
+        "friday": datetime(2025, 11, 7),  # This Friday
+        "saturday": datetime(2025, 11, 8),  # This Saturday
+        "sunday": datetime(2025, 11, 9),  # This Sunday
+    }
+
+    for weekday, expected in expected_dates.items():
+        result = _parse_weekday_reference(weekday, today)
+        assert result == expected, f"Weekday {weekday} failed: got {result}, expected {expected}"
+
+
+def test_parse_invalid_weekday_reference():
+    """Test that invalid weekday references return None."""
+    today = datetime(2025, 11, 5)
+    from taskrepo.utils.date_parser import _parse_weekday_reference
+
+    # Invalid patterns
+    assert _parse_weekday_reference("invalid", today) is None
+    assert _parse_weekday_reference("next week monday", today) is None
+    assert _parse_weekday_reference("monday next", today) is None
+    assert _parse_weekday_reference("prev monday", today) is None
+
+
+def test_date_or_duration_parser_weekdays():
+    """Test the main parse_date_or_duration function with weekday references."""
+    # Mock today as Wednesday (2025-11-05)
+    import unittest.mock
+
+    with unittest.mock.patch("taskrepo.utils.date_parser.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2025, 11, 5, 12, 30, 0)
+        mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
+
+        # Test "next monday"
+        result, is_absolute = parse_date_or_duration("next monday")
+        assert is_absolute is True
+        assert result == datetime(2025, 11, 10)
+
+        # Test "this friday"
+        result, is_absolute = parse_date_or_duration("this friday")
+        assert is_absolute is True
+        assert result == datetime(2025, 11, 7)
+
+        # Test just "monday"
+        result, is_absolute = parse_date_or_duration("monday")
+        assert is_absolute is True
+        assert result == datetime(2025, 11, 10)
+
+
+def test_date_or_duration_parser_case_insensitive():
+    """Test that weekday parsing is case-insensitive."""
+    import unittest.mock
+
+    with unittest.mock.patch("taskrepo.utils.date_parser.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2025, 11, 5, 12, 30, 0)
+        mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
+
+        # Different case variations
+        result1, _ = parse_date_or_duration("Next Monday")
+        result2, _ = parse_date_or_duration("next MONDAY")
+        result3, _ = parse_date_or_duration("NEXT MONDAY")
+
+        # All should give same result
+        assert result1 == result2 == result3 == datetime(2025, 11, 10)

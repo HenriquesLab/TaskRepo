@@ -6,6 +6,90 @@ from typing import Any, Optional
 from taskrepo.core.config import Config
 from taskrepo.core.task import Task
 
+# Cache for effective due dates during a sort operation
+# Format: {task_id: effective_due_date}
+_effective_due_date_cache: dict[str, Optional[datetime]] = {}
+
+
+def get_effective_due_date(
+    task: Task,
+    all_tasks: list[Task],
+    visited: Optional[set[str]] = None,
+) -> Optional[datetime]:
+    """Get the earliest due date from a task, its subtasks, and dependencies.
+
+    This function recursively traverses:
+    1. All subtasks (tasks that have this task as parent)
+    2. All dependencies (tasks referenced in the depends field)
+
+    It finds the earliest due date among all related tasks. If the task itself
+    has no due date but any subtask/dependency does, it inherits that earliest date.
+
+    Args:
+        task: The task to get effective due date for
+        all_tasks: All tasks in the system (for lookup)
+        visited: Set of task IDs already visited (for cycle detection)
+
+    Returns:
+        Earliest due date among task and all related tasks, or None if none have due dates
+
+    Examples:
+        >>> # Parent due 2025-11-15, subtask due 2025-11-10
+        >>> get_effective_due_date(parent_task, all_tasks)
+        datetime(2025, 11, 10)  # Returns earliest
+
+        >>> # Parent has no due date, subtask due 2025-11-10
+        >>> get_effective_due_date(parent_task, all_tasks)
+        datetime(2025, 11, 10)  # Inherits from subtask
+    """
+    # Check cache first (for performance)
+    if task.id in _effective_due_date_cache:
+        return _effective_due_date_cache[task.id]
+
+    # Initialize visited set for cycle detection
+    if visited is None:
+        visited = set()
+
+    # Detect cycles - if we've seen this task before, skip it
+    if task.id in visited:
+        return None
+
+    # Mark this task as visited
+    visited.add(task.id)
+
+    # Start with this task's due date
+    earliest_due = task.due
+
+    # Build a map of all tasks by ID for fast lookup
+    task_map = {t.id: t for t in all_tasks}
+
+    # Find all subtasks (tasks where parent == this task's id)
+    subtasks = [t for t in all_tasks if t.parent == task.id]
+
+    # Find all dependency tasks (tasks referenced in depends field)
+    dependency_tasks = []
+    for dep_id in task.depends:
+        dep_task = task_map.get(dep_id)
+        if dep_task:
+            dependency_tasks.append(dep_task)
+
+    # Recursively get effective due dates for subtasks and dependencies
+    related_tasks = subtasks + dependency_tasks
+
+    for related_task in related_tasks:
+        # Recursively get the effective due date for this related task
+        related_due = get_effective_due_date(related_task, all_tasks, visited.copy())
+
+        # Update earliest_due if this related task has an earlier date
+        if related_due:
+            if earliest_due is None or related_due < earliest_due:
+                earliest_due = related_due
+
+    # Cache the result
+    _effective_due_date_cache[task.id] = earliest_due
+
+    return earliest_due
+
 
 def get_due_date_cluster(due_date: Optional[datetime]) -> int:
     """Convert due date to cluster bucket for sorting.
@@ -66,16 +150,29 @@ def get_due_date_cluster(due_date: Optional[datetime]) -> int:
     return 2 + weeks  # 3 (1w) through 20 (18w+)
 
 
-def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
+def sort_tasks(tasks: list[Task], config: Config, all_tasks: Optional[list[Task]] = None) -> list[Task]:
     """Sort tasks according to configuration settings.
+
+    When sorting by 'due' date, this function considers not just the task's own due date,
+    but also the earliest due date from all its subtasks and dependencies. This ensures
+    that parent tasks with urgent subtasks appear higher in the list.
 
     Args:
         tasks: List of tasks to sort
         config: Configuration object containing sort_by settings
+        all_tasks: All tasks in the system (for calculating effective due dates).
+                   If not provided, defaults to tasks (no cross-task context).
 
     Returns:
         Sorted list of tasks
     """
+    # Clear the effective due date cache for this sort operation
+    global _effective_due_date_cache
+    _effective_due_date_cache.clear()
+
+    # If all_tasks not provided, use tasks (for backward compatibility)
+    if all_tasks is None:
+        all_tasks = tasks
 
     def get_field_value(task: Task, field: str) -> tuple[bool, Any]:
         """Get sortable value for a field.
@@ -95,12 +192,15 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
             priority_order = {"H": 0, "M": 1, "L": 2}
             value = priority_order.get(task.priority, 3)
         elif field_name == "due":
+            # Get effective due date (considering subtasks and dependencies)
+            effective_due = get_effective_due_date(task, all_tasks)
+
             if config.cluster_due_dates:
                 # Use cluster bucket instead of exact timestamp
-                value = get_due_date_cluster(task.due)
+                value = get_due_date_cluster(effective_due)
             else:
                 # Use exact timestamp
-                value = task.due.timestamp() if task.due else float("inf")
+                value = effective_due.timestamp() if effective_due else float("inf")
         elif field_name == "created":
             value = task.created.timestamp()
         elif field_name == "modified":
@@ -169,7 +269,9 @@ def sort_tasks(tasks: list[Task], config: Config) -> list[Task]:
             # When clustering is enabled and this is the 'due' field,
             # remember it for adding timestamp tiebreaker at the end
             if config.cluster_due_dates and field.lstrip("-") == "due":
-                due_field_info = (field, task.due)
+                # Use effective due date for tiebreaker as well
+                effective_due = get_effective_due_date(task, all_tasks)
+                due_field_info = (field, effective_due)
 
         # Add exact timestamp as final tiebreaker when clustering is enabled
         # This ensures all configured sort fields take precedence within same bucket

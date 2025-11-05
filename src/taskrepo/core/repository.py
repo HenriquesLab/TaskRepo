@@ -688,8 +688,11 @@ class Repository:
         # Get archived tasks only
         archived_tasks = self.list_archived_tasks()
 
+        # Get all tasks (archived + non-archived) for effective due date context
+        all_tasks = self.list_tasks(include_archived=True)
+
         # Sort using config sort order
-        sorted_archived = sort_tasks(archived_tasks, config)
+        sorted_archived = sort_tasks(archived_tasks, config, all_tasks=all_tasks)
 
         # Build README content
         lines = [

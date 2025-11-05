@@ -29,6 +29,7 @@ def ext(ctx, task_ids: Tuple[str, ...], date_or_duration, repo):
     DATE_OR_DURATION: Target date or duration
         Durations: 1w, 2d, 3m, 1y
         Keywords: today, tomorrow, yesterday, next week, next month, next year
+        Weekdays: next monday, this friday, monday
         ISO dates: 2025-10-30
         Natural dates: "Oct 30", "October 30 2025"
 
