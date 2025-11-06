@@ -412,8 +412,15 @@ class Repository:
 
         Returns:
             Path to the generated README file
+
+        Note:
+            This function uses centralized sorting from utils/sorting.py to ensure
+            README task order matches 'tsk list' command output. When modifying
+            sorting logic, verify README generation still works correctly.
         """
         from datetime import datetime
+
+        from taskrepo.utils.sorting import sort_tasks
 
         def get_countdown_text(due_date: datetime) -> tuple[str, str]:
             """Calculate countdown text and emoji from a due date.
@@ -480,47 +487,6 @@ class Repository:
         # Get all non-archived tasks (including completed)
         all_tasks = self.list_tasks(include_archived=False)
 
-        # Sort using config sort order (same as list command)
-        def get_field_value(task, field):
-            """Get sortable value for a field."""
-            descending = field.startswith("-")
-            field_name = field[1:] if descending else field
-
-            if field_name == "priority":
-                priority_order = {"H": 0, "M": 1, "L": 2}
-                value = priority_order.get(task.priority, 3)
-            elif field_name == "due":
-                value = task.due.timestamp() if task.due else float("inf")
-            elif field_name == "created":
-                value = task.created.timestamp()
-            elif field_name == "modified":
-                value = task.modified.timestamp()
-            elif field_name == "status":
-                status_order = {"pending": 0, "in-progress": 1, "completed": 2, "cancelled": 3}
-                value = status_order.get(task.status, 4)
-            elif field_name == "title":
-                value = task.title.lower()
-            elif field_name == "project":
-                value = (task.project or "").lower()
-            else:
-                value = ""
-
-            if descending:
-                if isinstance(value, (int, float)):
-                    value = -value if value != float("inf") else float("-inf")
-                elif isinstance(value, str):
-                    return (True, value)
-
-            return (False, value) if not descending else (True, value)
-
-        def get_sort_key(task):
-            sort_fields = config.sort_by
-            key_parts = []
-            for field in sort_fields:
-                is_desc, value = get_field_value(task, field)
-                key_parts.append(value)
-            return tuple(key_parts)
-
         # Build tree structure for all tasks (including completed)
         def build_tree_for_readme(tasks):
             """Build tree structure and return tasks in display order."""
@@ -577,14 +543,16 @@ class Repository:
         def count_children(task_id, tasks):
             return sum(1 for t in tasks if t.parent == task_id)
 
-        # Sort top-level tasks, keep subtasks with parents
+        # Sort top-level tasks using centralized sorting logic from utils/sorting.py
+        # NOTE: all_tasks parameter is critical for recursive due date calculations
+        # (parent tasks inherit earliest due dates from subtasks/dependencies)
         top_level_tasks = [t for t in all_tasks if not t.parent]
-        top_level_tasks.sort(key=get_sort_key)
+        sorted_top_level = sort_tasks(top_level_tasks, config, all_tasks=all_tasks)
 
-        # Rebuild all_tasks list with all tasks (including subtasks)
+        # Rebuild all_tasks list with sorted top-level tasks and their subtasks
         all_task_ids = {t.id for t in all_tasks}
         subtasks = [t for t in all_tasks if t.parent and t.parent in all_task_ids]
-        sorted_all = top_level_tasks + subtasks
+        sorted_all = sorted_top_level + subtasks
 
         tree_items = build_tree_for_readme(sorted_all)
 
@@ -680,6 +648,11 @@ class Repository:
 
         Returns:
             Path to the generated README file
+
+        Note:
+            This function uses centralized sorting from utils/sorting.py to ensure
+            archive README task order matches 'tsk list' command output. When modifying
+            sorting logic, verify README generation still works correctly.
         """
         from datetime import datetime
 
@@ -691,7 +664,9 @@ class Repository:
         # Get all tasks (archived + non-archived) for effective due date context
         all_tasks = self.list_tasks(include_archived=True)
 
-        # Sort using config sort order
+        # Sort using centralized sorting logic from utils/sorting.py
+        # NOTE: all_tasks parameter is critical for recursive due date calculations
+        # (parent tasks inherit earliest due dates from subtasks/dependencies)
         sorted_archived = sort_tasks(archived_tasks, config, all_tasks=all_tasks)
 
         # Build README content

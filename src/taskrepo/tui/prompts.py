@@ -761,3 +761,91 @@ def prompt_parent_task(existing_tasks: list) -> Optional[str]:
 
     except (KeyboardInterrupt, EOFError):
         return None
+
+
+def confirm_single_key(message: str) -> bool:
+    """Prompt for yes/no confirmation with single-key input (no Enter required).
+
+    Args:
+        message: The confirmation message to display
+
+    Returns:
+        True if user confirmed (pressed 'y'), False otherwise
+    """
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import Layout, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+
+    result = [False]  # Use list to allow modification in nested function
+
+    kb = KeyBindings()
+
+    @kb.add("y")
+    @kb.add("Y")
+    def yes(event):
+        result[0] = True
+        event.app.exit()
+
+    @kb.add("n")
+    @kb.add("N")
+    @kb.add("escape")
+    def no(event):
+        result[0] = False
+        event.app.exit()
+
+    # Create a simple layout with the message
+    layout = Layout(Window(content=FormattedTextControl(HTML(f"<b>{message}</b> (y/n): "))))
+
+    # Create and run application
+    app: Application[None] = Application(
+        layout=layout,
+        key_bindings=kb,
+        full_screen=False,
+    )
+
+    app.run()
+    return result[0]
+
+
+def prompt_yes_no(message: str, default: str = "y") -> bool:
+    """Reusable yes/no confirmation prompt.
+
+    This function centralizes the common yes/no prompt pattern used throughout
+    the CLI commands, providing consistent validation and user experience.
+
+    Args:
+        message: The question to ask the user (should not include "(y/n)")
+        default: Default value - "y" for yes (default), "n" for no
+
+    Returns:
+        True if user answered yes, False if user answered no
+
+    Example:
+        >>> if prompt_yes_no("Delete this task?"):
+        ...     delete_task()
+        >>> if prompt_yes_no("Archive subtasks?", default="y"):
+        ...     archive_subtasks()
+    """
+    # Create validator for y/n input
+    yn_validator = Validator.from_callable(
+        lambda text: text.lower() in ["y", "n", "yes", "no"],
+        error_message="Please enter 'y' or 'n'",
+        move_cursor_to_end=True,
+    )
+
+    # Add (Y/n) or (y/N) suffix based on default
+    if default.lower() == "y":
+        prompt_suffix = " (Y/n) "
+    else:
+        prompt_suffix = " (y/N) "
+
+    # Get user response
+    response = prompt(
+        message + prompt_suffix,
+        default=default,
+        validator=yn_validator,
+    ).lower()
+
+    return response in ["y", "yes"]

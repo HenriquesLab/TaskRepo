@@ -1,5 +1,7 @@
 """Helper utility functions for TaskRepo."""
 
+from typing import Any, Callable, List, Optional, Tuple
+
 import click
 from prompt_toolkit.shortcuts import prompt
 from prompt_toolkit.validation import Validator
@@ -139,6 +141,123 @@ def select_task_from_result(ctx, result, task_identifier):
         task, repository = result
 
     return task, repository
+
+
+def process_tasks_batch(
+    ctx,
+    manager,
+    task_ids: Tuple[str, ...],
+    repo: Optional[str],
+    task_handler: Callable[[Any, Any], Tuple[bool, Optional[str]]],
+    operation_name: str = "processed",
+) -> Tuple[List[Tuple[Any, Any]], List[str]]:
+    """Generic batch task processor that centralizes common patterns.
+
+    This function handles the common batch processing pattern used across multiple commands:
+    - Flattens comma-separated task IDs
+    - Finds tasks by ID or title
+    - Handles not found / multiple matches
+    - Batch mode error handling
+    - Success/failure tracking
+
+    Args:
+        ctx: Click context (for exit)
+        manager: RepositoryManager instance
+        task_ids: Tuple of task IDs from command argument
+        repo: Optional repository name to limit search
+        task_handler: Callback function that processes each task.
+                     Should take (task, repository) and return (success: bool, message: Optional[str])
+                     If success=False, the message is shown as an error.
+        operation_name: Name of operation for summary messages (e.g., "completed", "deleted")
+
+    Returns:
+        Tuple of (successful_results, failed_ids) where:
+        - successful_results: List of (task, repository) tuples that were processed
+        - failed_ids: List of task_id strings that failed
+
+    Example:
+        def mark_as_done(task, repository):
+            task.status = "completed"
+            repository.save_task(task)
+            return True, None
+
+        results, failures = process_tasks_batch(
+            ctx, manager, task_ids, repo,
+            task_handler=mark_as_done,
+            operation_name="completed"
+        )
+    """
+    # Flatten comma-separated task IDs (supports both "4 5 6" and "4,5,6")
+    task_id_list = []
+    for task_id in task_ids:
+        task_id_list.extend([tid.strip() for tid in task_id.split(",")])
+
+    is_batch = len(task_id_list) > 1
+
+    # Track results
+    successful_results = []
+    failed_tasks = []
+
+    for task_id in task_id_list:
+        try:
+            # Try to find task by ID or title
+            result = find_task_by_title_or_id(manager, task_id, repo)
+
+            # Handle not found
+            if result[0] is None:
+                if is_batch:
+                    click.secho(f"✗ No task found matching '{task_id}'", fg="red")
+                    failed_tasks.append(task_id)
+                    continue
+                else:
+                    click.secho(f"Error: No task found matching '{task_id}'", fg="red", err=True)
+                    ctx.exit(1)
+
+            # Handle multiple matches
+            elif isinstance(result[0], list):
+                if is_batch:
+                    click.secho(f"✗ Multiple tasks found matching '{task_id}' - skipping", fg="red")
+                    failed_tasks.append(task_id)
+                    continue
+                else:
+                    # Let select_task_from_result handle the interactive selection
+                    task, repository = select_task_from_result(ctx, result, task_id)
+            else:
+                # Single match found
+                task, repository = result
+
+            # Execute the task-specific handler
+            success, error_msg = task_handler(task, repository)
+
+            if success:
+                successful_results.append((task, repository))
+            else:
+                failed_tasks.append(task_id)
+                if error_msg:
+                    if is_batch:
+                        click.secho(f"✗ {error_msg}", fg="red")
+                    else:
+                        click.secho(f"Error: {error_msg}", fg="red", err=True)
+                        ctx.exit(1)
+
+        except Exception as e:
+            # Unexpected error - show message and continue with next task
+            failed_tasks.append(task_id)
+            if is_batch:
+                click.secho(f"✗ Could not process task '{task_id}': {e}", fg="red")
+            else:
+                click.secho(f"Error: Could not process task '{task_id}': {e}", fg="red", err=True)
+                ctx.exit(1)
+
+    # Show summary for batch operations
+    if is_batch and successful_results:
+        click.echo()
+        click.secho(
+            f"{operation_name.capitalize()} {len(successful_results)} of {len(task_id_list)} tasks",
+            fg="green",
+        )
+
+    return successful_results, failed_tasks
 
 
 def update_cache_and_display_repo(manager, repository, config):
@@ -287,3 +406,72 @@ def prompt_for_subtask_unarchiving(manager, task, new_status, batch_mode=False):
         return updated_count
 
     return 0
+
+
+def parse_assignees(assignees_str: str) -> List[str]:
+    """Parse comma-separated assignees string into list with @ prefix.
+
+    Args:
+        assignees_str: Comma-separated assignees (e.g., "alice,@bob,charlie")
+
+    Returns:
+        List of assignees with @ prefix (e.g., ["@alice", "@bob", "@charlie"])
+
+    Example:
+        >>> parse_assignees("alice,@bob")
+        ['@alice', '@@bob']
+        >>> parse_assignees("@alice, bob, charlie")
+        ['@alice', '@bob', '@charlie']
+    """
+    if not assignees_str:
+        return []
+
+    assignees_list = [a.strip() for a in assignees_str.split(",") if a.strip()]
+    # Ensure @ prefix
+    assignees_list = [a if a.startswith("@") else f"@{a}" for a in assignees_list]
+    return assignees_list
+
+
+def parse_tags(tags_str: str) -> List[str]:
+    """Parse comma-separated tags string into list.
+
+    Args:
+        tags_str: Comma-separated tags (e.g., "urgent,bug,frontend")
+
+    Returns:
+        List of tags (e.g., ["urgent", "bug", "frontend"])
+
+    Example:
+        >>> parse_tags("urgent, bug, frontend")
+        ['urgent', 'bug', 'frontend']
+        >>> parse_tags("")
+        []
+    """
+    if not tags_str:
+        return []
+
+    return [t.strip() for t in tags_str.split(",") if t.strip()]
+
+
+def parse_links(links_str: str) -> List[str]:
+    """Parse comma-separated links string into list.
+
+    Note: This function does NOT validate URLs. Validation should be done
+    separately using Task.validate_url() if needed.
+
+    Args:
+        links_str: Comma-separated URLs (e.g., "https://github.com/...,https://...")
+
+    Returns:
+        List of URLs (e.g., ["https://github.com/...", "https://..."])
+
+    Example:
+        >>> parse_links("https://github.com/user/repo, https://example.com")
+        ['https://github.com/user/repo', 'https://example.com']
+        >>> parse_links("")
+        []
+    """
+    if not links_str:
+        return []
+
+    return [link.strip() for link in links_str.split(",") if link.strip()]

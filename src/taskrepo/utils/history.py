@@ -64,13 +64,38 @@ def get_commit_history(
                 diffs = parent.diff(commit)
 
                 for diff in diffs:
-                    # Check if this is a task file
-                    if diff.a_path and diff.a_path.startswith("tasks/task-"):
-                        files_changed.append(diff.a_path)
+                    # Check if this is a task file (in tasks/ or archive/)
+                    is_task_file = False
+                    task_id = None
 
-                        # Extract task ID from filename
+                    # Check for moves between tasks/ and archive/ (archive/unarchive operations)
+                    if diff.a_path and diff.b_path:
+                        # Archive: tasks/ -> archive/
+                        if diff.a_path.startswith("tasks/task-") and diff.b_path.startswith("archive/task-"):
+                            is_task_file = True
+                            task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
+                            files_changed.append(f"{diff.a_path} → {diff.b_path}")
+                        # Unarchive: archive/ -> tasks/
+                        elif diff.a_path.startswith("archive/task-") and diff.b_path.startswith("tasks/task-"):
+                            is_task_file = True
+                            task_id = diff.b_path.replace("tasks/task-", "").replace(".md", "")
+                            files_changed.append(f"{diff.a_path} → {diff.b_path}")
+                        # Regular task file change
+                        elif diff.a_path.startswith("tasks/task-"):
+                            is_task_file = True
+                            task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
+                            files_changed.append(diff.a_path)
+                    # Task file added or deleted
+                    elif diff.a_path and diff.a_path.startswith("tasks/task-"):
+                        is_task_file = True
                         task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
+                        files_changed.append(diff.a_path)
+                    elif diff.b_path and diff.b_path.startswith("tasks/task-"):
+                        is_task_file = True
+                        task_id = diff.b_path.replace("tasks/task-", "").replace(".md", "")
+                        files_changed.append(diff.b_path)
 
+                    if is_task_file and task_id:
                         # Parse task changes
                         changes = parse_task_changes(diff, parent, commit)
                         if changes:
@@ -144,6 +169,43 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
     changes = []
 
     try:
+        # Check for archive/unarchive operations (file moves between directories)
+        if diff.a_path and diff.b_path:
+            # Archive: tasks/ -> archive/
+            if diff.a_path.startswith("tasks/task-") and diff.b_path.startswith("archive/task-"):
+                task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
+                # Get task content to extract title
+                if diff.a_blob:
+                    content = diff.a_blob.data_stream.read().decode("utf-8")
+                    task = Task.from_markdown(content, task_id)
+                    changes.append(
+                        TaskChange(
+                            field="archived",
+                            old_value="active",
+                            new_value="archived",
+                            change_type="archived",
+                            task_title=task.title,
+                        )
+                    )
+                return changes
+            # Unarchive: archive/ -> tasks/
+            elif diff.a_path.startswith("archive/task-") and diff.b_path.startswith("tasks/task-"):
+                task_id = diff.b_path.replace("tasks/task-", "").replace(".md", "")
+                # Get task content to extract title
+                if diff.b_blob:
+                    content = diff.b_blob.data_stream.read().decode("utf-8")
+                    task = Task.from_markdown(content, task_id)
+                    changes.append(
+                        TaskChange(
+                            field="unarchived",
+                            old_value="archived",
+                            new_value="active",
+                            change_type="unarchived",
+                            task_title=task.title,
+                        )
+                    )
+                return changes
+
         # Get old and new content
         old_content = None
         new_content = None
@@ -435,6 +497,14 @@ def categorize_commit(commit: CommitEvent) -> str:
                 return "✅"
             if change.field == "created":
                 return "🎯"
+
+    # Check for archive/unarchive operations
+    for changes in commit.task_changes.values():
+        for change in changes:
+            if change.change_type == "archived":
+                return "📦"
+            if change.change_type == "unarchived":
+                return "📤"
 
     # Check for assignee changes
     for changes in commit.task_changes.values():

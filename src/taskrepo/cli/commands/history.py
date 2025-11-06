@@ -126,8 +126,8 @@ def history(ctx, repo, since, task, verbose, all):
     console.print("━" * console.width)
     console.print()
 
-    # Display each timeline group
-    for group_name, commits in timeline_groups.items():
+    # Display each timeline group (reversed so most recent appears last)
+    for group_name, commits in reversed(list(timeline_groups.items())):
         # Create a tree for this group
         tree = Tree(f"[bold]{group_name}[/bold]", guide_style="dim")
 
@@ -267,5 +267,9 @@ def format_task_change(change, task_id: str) -> str:
             return f"• {task_display}: removed assignee [dim]{change.old_value}[/dim]"
         elif change.field == "tags":
             return f"• {task_display}: removed tag [dim]{change.old_value}[/dim]"
+    elif change.change_type == "archived":
+        return f"[yellow]• {task_display} [dim](archived)[/dim][/yellow]"
+    elif change.change_type == "unarchived":
+        return f"[cyan]• {task_display} [dim](unarchived)[/dim][/cyan]"
 
     return f"• {task_display}: {change.field} changed"

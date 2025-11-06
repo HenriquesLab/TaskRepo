@@ -62,14 +62,24 @@ class TaskTUI:
         self.filter_active = False
         self.show_detail_panel = True  # Always show detail panel
 
-        # Viewport scrolling state
-        self.viewport_top = 0  # First task visible in viewport
-        self.viewport_size = self._calculate_viewport_size()  # Dynamic based on terminal size
-        self.scroll_trigger = min(5, max(2, self.viewport_size // 3))  # Start scrolling at 1/3 of viewport
-
         # Auto-reload state
         self.last_mtime = self._get_repositories_mtime()
         self.auto_reload_task: Optional[asyncio.Task] = None
+        self.last_reload_time: Optional[float] = None  # timestamp of last reload
+
+        # Background sync state (must be initialized before _calculate_viewport_size)
+        self.sync_status = "idle"  # "idle", "syncing", "success", "error"
+        self.last_sync_time: Optional[float] = None  # timestamp of last sync
+        self.next_sync_time: Optional[float] = None  # timestamp of next scheduled sync
+        self.conflicted_repos: set[str] = set()  # repos needing manual resolution
+        self.background_sync_task: Optional[asyncio.Task] = None
+        self.sync_message: Optional[str] = None  # temporary status bar message
+
+        # Viewport scrolling state (depends on sync state for height calculation)
+        self.viewport_top = 0  # First task visible in viewport
+        self.viewport_size = self._calculate_viewport_size()  # Dynamic based on terminal size
+        self.scroll_trigger = min(5, max(2, self.viewport_size // 3))  # Start scrolling at 1/3 of viewport
+        self.sync_message_time: Optional[float] = None  # when message was set
 
         # Create filter input widget
         self.filter_input = TextArea(
@@ -163,10 +173,15 @@ class TaskTUI:
 
     async def _auto_reload_loop(self):
         """Background task that periodically checks for file changes and reloads."""
+        import time
+
         while True:
             await asyncio.sleep(2)  # Check every 2 seconds
 
             if self._check_for_changes():
+                # Track reload time
+                self.last_reload_time = time.time()
+
                 # Reload repositories from disk
                 manager = RepositoryManager(self.config.parent_dir)
                 self.repositories = manager.discover_repositories()
@@ -189,6 +204,121 @@ class TaskTUI:
 
                 # Invalidate the display to trigger a redraw
                 self.app.invalidate()
+
+    async def _background_sync_loop(self):
+        """Background task that periodically syncs repositories."""
+        import time
+
+        while True:
+            await asyncio.sleep(self.config.auto_sync_interval)
+
+            # Skip if user is busy (editing or in a modal)
+            if self._should_skip_sync():
+                continue
+
+            # Start sync
+            self.sync_status = "syncing"
+            self.app.invalidate()
+
+            # Sync each repository
+            success_count = 0
+            error_count = 0
+            conflict_count = 0
+
+            for repo in self.repositories:
+                # Skip repos already marked as conflicted
+                if repo.name in self.conflicted_repos:
+                    continue
+
+                success, error_msg, has_conflicts = await self._sync_repository_async(repo)
+
+                if success:
+                    success_count += 1
+                elif has_conflicts:
+                    conflict_count += 1
+                    self.conflicted_repos.add(repo.name)
+                else:
+                    error_count += 1
+
+            # Update sync status and message
+            self.last_sync_time = time.time()
+            self.next_sync_time = time.time() + self.config.auto_sync_interval
+
+            if error_count > 0 or conflict_count > 0:
+                self.sync_status = "error"
+                if conflict_count > 0:
+                    self._set_sync_message(f"⚠ {conflict_count} repo(s) need manual sync")
+                else:
+                    self._set_sync_message(f"⚠ Sync failed for {error_count} repo(s)")
+            else:
+                self.sync_status = "success"
+                if success_count > 0:
+                    self._set_sync_message(f"✓ Synced {success_count} repo(s)")
+
+            # Reload repositories after sync
+            if success_count > 0:
+                manager = RepositoryManager(self.config.parent_dir)
+                self.repositories = manager.discover_repositories()
+                self.view_items = self._build_view_items()
+
+                # Update ID cache
+                all_tasks = manager.list_all_tasks(include_archived=False)
+                sorted_tasks = sort_tasks(all_tasks, self.config, all_tasks=all_tasks)
+                save_id_cache(sorted_tasks)
+
+            self.app.invalidate()
+
+    async def _sync_repository_async(self, repository) -> tuple[bool, str, bool]:
+        """Async wrapper for repository sync.
+
+        Args:
+            repository: Repository to sync
+
+        Returns:
+            Tuple of (success, error_message, has_conflicts)
+        """
+        from taskrepo.utils.async_sync import sync_repository_background
+
+        # Run sync in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, sync_repository_background, repository, self.config.auto_sync_strategy)
+
+    def _should_skip_sync(self) -> bool:
+        """Check if background sync should be skipped.
+
+        Returns:
+            True if sync should be skipped
+        """
+        # Skip if user is editing a task or in a modal
+        # We can detect this by checking if the app is showing a dialog
+        # For now, we'll always allow sync since we invalidate after
+        return False
+
+    def _set_sync_message(self, message: str):
+        """Set a temporary status bar message.
+
+        Args:
+            message: Message to display
+        """
+        import time
+
+        self.sync_message = message
+        self.sync_message_time = time.time()
+
+    def _get_sync_indicator(self) -> str:
+        """Get sync status indicator for header.
+
+        Returns:
+            Sync status string (emoji + text)
+        """
+        if self.sync_status == "syncing":
+            return "🔄"
+        elif self.sync_status == "success":
+            return "✓"
+        elif self.sync_status == "error":
+            return "⚠"
+        else:
+            return ""
 
     def _get_terminal_size(self):
         """Get current terminal size."""
@@ -240,22 +370,42 @@ class TaskTUI:
         return detail_height
 
     def _calculate_status_bar_height(self) -> int:
-        """Calculate status bar height based on content length and terminal width."""
+        """Calculate status bar height based on content and terminal width.
+
+        Returns 2 for wide terminals (>=120 cols) when status info is present,
+        otherwise returns 1 (or more if wrapping occurs on very narrow terminals).
+        """
+        import re
+
         _, terminal_width = self._get_terminal_size()
 
-        # Get the status bar text content
-        shortcuts = (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l] "
-            "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space | Auto-reload: ON"
-        )
+        # Build status info to check if we have any
+        status_info = self._build_status_info()
 
-        # Add padding (1 space at start and end)
-        content_length = len(shortcuts) + 2
+        # Two-line layout for medium/wide terminals with status info
+        if terminal_width >= 120 and status_info:
+            return 2
 
-        # Calculate lines needed (round up)
+        # Single-line layout - check if wrapping is needed
+        # Get the actual combined content length
+        shortcuts = self._get_shortcuts_text(terminal_width)
+
+        # Strip HTML tags to get visible character count
+        def strip_html(text):
+            return re.sub(r"<[^>]+>", "", text)
+
+        if status_info:
+            # Combined: "status | shortcuts"
+            visible_status = strip_html(status_info)
+            content_length = len(visible_status) + 3 + len(shortcuts) + 2  # +3 for " | ", +2 for padding
+        else:
+            # Just shortcuts
+            content_length = len(shortcuts) + 2  # +2 for padding
+
+        # Calculate lines needed for wrapping (round up)
         lines_needed = (content_length + terminal_width - 1) // terminal_width
 
-        # Ensure at least 1 line, max 3 lines
+        # Ensure at least 1 line, max 3 lines (in case of very narrow terminal)
         return max(1, min(3, lines_needed))
 
     def _create_style(self) -> Style:
@@ -603,15 +753,114 @@ class TaskTUI:
         if self.filter_text:
             view_info += f" | Filter: '{html.escape(self.filter_text)}'"
 
+        # Add sync status indicator if auto-sync is enabled
+        if self.config.auto_sync_enabled:
+            sync_indicator = self._get_sync_indicator()
+            if sync_indicator:
+                view_info += f" | {sync_indicator}"
+
         return HTML(f"<b> {view_info} </b>")
 
-    def _get_status_bar_text(self) -> FormattedText:
-        """Get the status bar text with keyboard shortcuts."""
-        shortcuts = (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l] "
-            "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space | Auto-reload: ON"
+    def _build_status_info(self) -> str:
+        """Build status information string with sync/reload/conflict info.
+
+        Returns:
+            HTML-formatted status string with priority information
+        """
+        from taskrepo.utils.time_format import format_interval, format_time_ago
+
+        parts = []
+
+        # Priority 1: Conflict warnings (highest priority)
+        if self.conflicted_repos:
+            count = len(self.conflicted_repos)
+            parts.append(f"<yellow>⚠ {count} repo{'s' if count > 1 else ''} need manual sync</yellow>")
+
+        # Priority 2: Active sync status
+        if self.sync_status == "syncing":
+            parts.append("<cyan>🔄 Syncing...</cyan>")
+        elif self.sync_status == "error" and not self.conflicted_repos:
+            # Only show generic error if not already showing conflicts
+            parts.append("<red>✗ Sync error</red>")
+
+        # Priority 3: Last sync time
+        if self.config.auto_sync_enabled and self.last_sync_time:
+            sync_time_str = format_time_ago(self.last_sync_time)
+            parts.append(f"<green>Synced {sync_time_str}</green>")
+        elif self.config.auto_sync_enabled:
+            parts.append("<dim>Not synced yet</dim>")
+
+        # Priority 4: Last reload time
+        if self.last_reload_time:
+            reload_time_str = format_time_ago(self.last_reload_time)
+            parts.append(f"<blue>Reloaded {reload_time_str}</blue>")
+
+        # Priority 5: Auto-sync status (if enabled)
+        if self.config.auto_sync_enabled:
+            interval_str = format_interval(self.config.auto_sync_interval)
+            parts.append(f"<dim>Auto-sync: ON ({interval_str})</dim>")
+
+        return " | ".join(parts) if parts else ""
+
+    def _get_shortcuts_text(self, terminal_width: int) -> str:
+        """Get keyboard shortcuts based on terminal width.
+
+        Args:
+            terminal_width: Current terminal width in columns
+
+        Returns:
+            HTML-formatted shortcuts string responsive to width
+        """
+        # Very narrow (<80 cols): Just help hint
+        if terminal_width < 80:
+            return "[?]help"
+
+        # Narrow (80-120 cols): Minimal shortcuts
+        if terminal_width < 120:
+            return "[a]dd [e]dit [d]one [s]ync [/]filter [q]uit"
+
+        # Medium (120-160 cols): Standard shortcuts
+        if terminal_width < 160:
+            return (
+                "[a]dd [e]dit [d]one [p]rogress [c]cancelled [v]archive [m]ove [l]delete "
+                "[s]ync [/]filter [r]tree [q]uit"
+            )
+
+        # Wide (>=160 cols): Full shortcuts
+        return (
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete "
+            "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space"
         )
-        return HTML(f" {shortcuts} ")
+
+    def _get_status_bar_text(self) -> FormattedText:
+        """Get status bar with sync/reload info and responsive shortcuts.
+
+        Returns a two-line status bar (when terminal is wide enough):
+        - Line 1: Status info (sync/reload times, conflicts, auto-sync status)
+        - Line 2: Keyboard shortcuts (responsive to terminal width)
+
+        For narrow terminals (<120 cols), combines both into single line.
+        """
+        # Get terminal width for responsive layout
+        _, terminal_width = self._get_terminal_size()
+
+        # Build status information (always priority)
+        status_info = self._build_status_info()
+
+        # Get shortcuts based on terminal width
+        shortcuts = self._get_shortcuts_text(terminal_width)
+
+        # Two-line layout for medium/wide terminals (>=120 cols)
+        if terminal_width >= 120 and status_info:
+            return HTML(f" {status_info}\n {shortcuts} ")
+
+        # Single-line layout for narrow terminals
+        # Combine status and minimal shortcuts
+        if status_info:
+            return HTML(f" {status_info} | {shortcuts} ")
+        else:
+            # Fallback to just shortcuts if no status info
+            return HTML(f" {shortcuts} ")
 
     def _get_task_detail_text(self) -> FormattedText:
         """Get formatted details for the currently selected task."""
@@ -942,7 +1191,7 @@ class TaskTUI:
 
             # Format countdown with color
             if task.due:
-                countdown_text, countdown_color = get_countdown_text(task.due)
+                countdown_text, countdown_color = get_countdown_text(task.due, task.status)
                 countdown_text = countdown_text[:max_countdown_width]
                 # Map colors to style classes
                 countdown_style_map = {
@@ -1063,14 +1312,18 @@ class TaskTUI:
         """
 
         # Run the application with async support for background tasks
-        async def run_with_auto_reload():
+        async def run_with_background_tasks():
             # Start auto-reload background task
             self.auto_reload_task = asyncio.create_task(self._auto_reload_loop())
+
+            # Start background sync task if enabled
+            if self.config.auto_sync_enabled:
+                self.background_sync_task = asyncio.create_task(self._background_sync_loop())
 
             try:
                 return await self.app.run_async()
             finally:
-                # Cancel the background task when exiting
+                # Cancel background tasks when exiting
                 if self.auto_reload_task:
                     self.auto_reload_task.cancel()
                     try:
@@ -1078,5 +1331,12 @@ class TaskTUI:
                     except asyncio.CancelledError:
                         pass
 
+                if self.background_sync_task:
+                    self.background_sync_task.cancel()
+                    try:
+                        await self.background_sync_task
+                    except asyncio.CancelledError:
+                        pass
+
         # Run the async function
-        return asyncio.run(run_with_auto_reload())
+        return asyncio.run(run_with_background_tasks())

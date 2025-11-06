@@ -1,9 +1,13 @@
 """List command for displaying tasks."""
 
+from pathlib import Path
+
 import click
+from rich.console import Console
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
+from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all_repositories
 
 
 @click.command(name="list")
@@ -23,6 +27,12 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Check for unresolved merge conflicts and warn user
+    conflicts = scan_all_repositories(Path(config.parent_dir).expanduser())
+    if conflicts:
+        console = Console()
+        display_conflict_warning(conflicts, console)
 
     # Get tasks (including or excluding archived based on flag)
     if repo:

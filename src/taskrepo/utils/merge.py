@@ -178,9 +178,10 @@ def _can_auto_merge(local_task: Task, remote_task: Task, conflicting_fields: lis
     """Determine if tasks can be automatically merged.
 
     Auto-merge is possible when:
-    1. One task is definitively newer (modified timestamp differs by >1 second)
-    2. Only list fields conflict (can be unioned)
-    3. Description is not modified
+    1. Description conflict can be auto-resolved (one empty, or both same)
+    2. Status/priority conflicts can use semantic resolution
+    3. Other simple field conflicts with clear timestamp winner
+    4. List fields can be unioned
 
     Args:
         local_task: Local task version
@@ -190,31 +191,170 @@ def _can_auto_merge(local_task: Task, remote_task: Task, conflicting_fields: lis
     Returns:
         True if tasks can be auto-merged, False otherwise
     """
-    # If description conflicts, need manual resolution
+    # Check description conflicts - only block if both have content and differ
     if "description" in conflicting_fields:
-        return False
+        local_desc = local_task.description.strip()
+        remote_desc = remote_task.description.strip()
+        # If one is empty, can auto-merge (use non-empty one)
+        # If both have content and differ, need manual resolution
+        if local_desc and remote_desc and local_desc != remote_desc:
+            return False
+        # Otherwise can auto-merge (one is empty or both are same)
 
-    # Check if timestamps differ significantly (>1 second)
-    time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
-    if time_diff > 1:
-        return True  # Can use newer timestamp
+    # Status and priority conflicts can always be resolved semantically
+    semantic_fields = {"status", "priority"}
 
-    # If only list fields conflict, can merge by union
+    # List fields can always be merged by union
     list_fields = {"assignees", "tags", "links", "depends"}
-    only_list_conflicts = all(field in list_fields for field in conflicting_fields)
 
-    return only_list_conflicts
+    # Date fields (due) can be resolved if one is None
+    date_fields = {"due"}
+
+    # Simple fields need timestamp resolution
+    simple_fields = {"title", "project", "parent"}
+
+    # Check if we can auto-resolve all conflicts
+    for field in conflicting_fields:
+        if field in semantic_fields:
+            continue  # Always resolvable
+        elif field in list_fields:
+            continue  # Always resolvable by union
+        elif field in date_fields:
+            # Can resolve if one is None
+            local_val = getattr(local_task, field)
+            remote_val = getattr(remote_task, field)
+            if local_val is None or remote_val is None:
+                continue  # Resolvable - use non-None value
+            # Both have values - need timestamp to decide
+            time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
+            if time_diff <= 1:
+                return False  # Too close to call
+        elif field in simple_fields:
+            # Need clear timestamp winner
+            time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
+            if time_diff <= 1:
+                return False  # Too close to call
+        elif field == "description":
+            # Already handled above
+            pass
+        else:
+            # Unknown field - be conservative
+            return False
+
+    return True
+
+
+def get_status_priority(status: str) -> int:
+    """Get semantic priority of a status (higher = more progress).
+
+    Args:
+        status: Task status (pending, in-progress, completed, cancelled)
+
+    Returns:
+        Priority level: 0 (pending) < 1 (in-progress) < 2 (completed/cancelled)
+    """
+    priority_map = {
+        "pending": 0,
+        "in-progress": 1,
+        "completed": 2,
+        "cancelled": 2,  # Equal to completed (both are terminal states)
+    }
+    return priority_map.get(status, 0)
+
+
+def resolve_status_conflict(status_a: str, status_b: str, newer_is_a: bool) -> str:
+    """Choose status with more semantic progress.
+
+    Args:
+        status_a: First status to compare
+        status_b: Second status to compare
+        newer_is_a: Whether status_a is from the newer task
+
+    Returns:
+        The status that represents more progress, or newer if equal
+
+    Examples:
+        >>> resolve_status_conflict("pending", "completed", newer_is_a=True)
+        "completed"  # More progress wins, even if older
+
+        >>> resolve_status_conflict("completed", "cancelled", newer_is_a=False)
+        "cancelled"  # Equal progress, newer wins
+    """
+    priority_a = get_status_priority(status_a)
+    priority_b = get_status_priority(status_b)
+
+    if priority_a > priority_b:
+        return status_a
+    elif priority_b > priority_a:
+        return status_b
+    else:
+        # Equal progress - use timestamp
+        return status_a if newer_is_a else status_b
+
+
+def get_priority_level(priority: str) -> int:
+    """Get urgency level of a priority (higher = more urgent).
+
+    Args:
+        priority: Task priority (H, M, L)
+
+    Returns:
+        Urgency level: 3 (H) > 2 (M) > 1 (L)
+    """
+    priority_map = {"H": 3, "M": 2, "L": 1}
+    return priority_map.get(priority, 0)
+
+
+def resolve_priority_conflict(priority_a: str, priority_b: str, newer_is_a: bool) -> str:
+    """Choose priority with more urgency.
+
+    Args:
+        priority_a: First priority to compare
+        priority_b: Second priority to compare
+        newer_is_a: Whether priority_a is from the newer task
+
+    Returns:
+        The more urgent priority, or newer if equal
+
+    Examples:
+        >>> resolve_priority_conflict("M", "H", newer_is_a=True)
+        "H"  # Higher urgency wins, even if older
+
+        >>> resolve_priority_conflict("H", "H", newer_is_a=False)
+        "H"  # Equal urgency, newer wins (but same result)
+    """
+    level_a = get_priority_level(priority_a)
+    level_b = get_priority_level(priority_b)
+
+    if level_a > level_b:
+        return priority_a
+    elif level_b > level_a:
+        return priority_b
+    else:
+        # Equal urgency - use timestamp
+        return priority_a if newer_is_a else priority_b
 
 
 def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: list[str]) -> Optional[Task]:
-    """Automatically merge two conflicting task versions.
+    """Automatically merge two conflicting task versions using semantic understanding.
 
-    Uses timestamp-based merging for simple fields and union for list fields.
+    **Semantic Merging Strategy**:
 
-    **Special Status Priority Rule**:
-    If the remote status is a progress/completion state (in-progress, completed, cancelled),
-    it takes priority over the local status regardless of timestamps. This ensures that
-    important status transitions aren't overwritten by local changes.
+    - **Status**: Progress wins (completed/cancelled > in-progress > pending).
+      If equal progress, newer timestamp wins.
+
+    - **Priority**: Higher urgency wins (H > M > L). If equal, newer wins.
+
+    - **Description**: If one is empty, use non-empty. If both differ, manual resolution needed.
+
+    - **Due date**: If one is None, use non-None. If both differ, newer wins.
+
+    - **List fields** (assignees, tags, links, depends): Union of both versions.
+
+    - **Other fields**: Newer timestamp wins.
+
+    This ensures that actual progress (e.g., marking as "done") isn't overwritten
+    by unchanged fields from a newer edit.
 
     Args:
         local_task: Local task version
@@ -269,11 +409,34 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
             repo=remote_task.repo,
         )
 
-    # Apply special status priority rule:
-    # If remote status indicates progress/completion, use it regardless of timestamp
-    priority_statuses = ["in-progress", "completed", "cancelled"]
-    if "status" in conflicting_fields and remote_task.status in priority_statuses:
-        merged.status = remote_task.status
+    # Apply semantic resolution for status conflicts
+    # Status with more progress wins (completed/cancelled > in-progress > pending)
+    if "status" in conflicting_fields:
+        merged.status = resolve_status_conflict(local_task.status, remote_task.status, newer_is_a=use_local)
+
+    # Apply semantic resolution for priority conflicts
+    # Higher urgency wins (H > M > L)
+    if "priority" in conflicting_fields:
+        merged.priority = resolve_priority_conflict(local_task.priority, remote_task.priority, newer_is_a=use_local)
+
+    # Handle description conflicts - use non-empty if one is empty
+    if "description" in conflicting_fields:
+        local_desc = local_task.description.strip()
+        remote_desc = remote_task.description.strip()
+        if not local_desc and remote_desc:
+            merged.description = remote_task.description
+        elif local_desc and not remote_desc:
+            merged.description = local_task.description
+        # else: both have content (should have been caught by _can_auto_merge)
+        # or both empty - keep merged value as-is
+
+    # Handle due date conflicts - use non-None if one is None
+    if "due" in conflicting_fields:
+        if local_task.due is None and remote_task.due is not None:
+            merged.due = remote_task.due
+        elif local_task.due is not None and remote_task.due is None:
+            merged.due = local_task.due
+        # else: both have values - use newer (already set in merged)
 
     # Merge list fields by taking union
     list_fields = ["assignees", "tags", "links", "depends"]

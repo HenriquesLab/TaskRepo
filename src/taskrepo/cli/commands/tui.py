@@ -5,11 +5,12 @@ import tempfile
 from pathlib import Path
 
 import click
-from prompt_toolkit.shortcuts import confirm
+from rich.console import Console
 
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui import prompts
 from taskrepo.tui.task_tui import TaskTUI
+from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all_repositories
 from taskrepo.utils.id_mapping import save_id_cache
 from taskrepo.utils.sorting import sort_tasks
 
@@ -55,6 +56,15 @@ def tui(ctx, repo):
         click.secho("No repositories found.", fg="red", err=True)
         click.echo("Create one with: tsk create-repo")
         ctx.exit(1)
+
+    # Check for unresolved merge conflicts before starting TUI
+    conflicts = scan_all_repositories(Path(config.parent_dir).expanduser())
+    if conflicts:
+        console = Console()
+        display_conflict_warning(conflicts, console)
+        if not click.confirm("Continue anyway?", default=False):
+            click.echo("Aborted. Please resolve conflicts first with: tsk sync")
+            ctx.exit(1)
 
     # If repo specified, find its index and start there
     start_repo_idx = -1  # Default to "All" tab
@@ -151,8 +161,6 @@ def _handle_new_task(task_tui: TaskTUI, config):
         repo = prompts.prompt_repository(task_tui.repositories)
         if not repo:
             click.echo("Cancelled.")
-            click.echo("Press Enter to continue...")
-            input()
             return
 
     # Use existing interactive prompts
@@ -196,23 +204,16 @@ def _handle_new_task(task_tui: TaskTUI, config):
 
     repo.save_task(task)
     click.secho(f"\n✓ Created task: {task.title}", fg="green")
-    click.echo("\nPress Enter to continue...")
-    input()
 
 
 def _handle_edit_task(task_tui: TaskTUI, config):
     """Handle editing selected task(s)."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     if len(selected_tasks) > 1:
         click.secho("\n⚠ Cannot edit multiple tasks at once. Select only one task.", fg="yellow")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     task = selected_tasks[0]
@@ -224,8 +225,6 @@ def _handle_edit_task(task_tui: TaskTUI, config):
         repo = next((r for r in task_tui.repositories if r.name == task.repo), None)
         if not repo:
             click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
-            click.echo("Press Enter to continue...")
-            input()
             return
 
     # Open task in editor
@@ -265,9 +264,6 @@ def _handle_edit_task(task_tui: TaskTUI, config):
     finally:
         # Clean up temp file
         Path(temp_path).unlink(missing_ok=True)
-
-    click.echo("Press Enter to continue...")
-    input()
 
 
 def _handle_in_progress_toggle(task_tui: TaskTUI):
@@ -357,9 +353,6 @@ def _handle_delete_task(task_tui: TaskTUI):
     """Handle deleting selected task(s)."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Confirm deletion
@@ -369,10 +362,8 @@ def _handle_delete_task(task_tui: TaskTUI):
         message = f"Delete {len(selected_tasks)} tasks?"
 
     click.echo(f"\n{message}")
-    if not confirm("Confirm deletion?"):
+    if not prompts.confirm_single_key("Confirm deletion?"):
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Delete each task from its respective repository
@@ -391,9 +382,6 @@ def _handle_delete_task(task_tui: TaskTUI):
     else:
         click.secho(f"\n✓ Deleted {len(selected_tasks)} tasks", fg="green")
 
-    click.echo("Press Enter to continue...")
-    input()
-
     # Clear multi-selection
     task_tui.multi_selected.clear()
 
@@ -402,9 +390,6 @@ def _handle_archive_task(task_tui: TaskTUI, config):
     """Handle archiving selected task(s)."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Confirm archiving
@@ -414,10 +399,8 @@ def _handle_archive_task(task_tui: TaskTUI, config):
         message = f"Archive {len(selected_tasks)} tasks?"
 
     click.echo(f"\n{message}")
-    if not confirm("Confirm archiving?"):
+    if not prompts.confirm_single_key("Confirm archiving?"):
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Archive each task from its respective repository
@@ -454,9 +437,6 @@ def _handle_move_task(task_tui: TaskTUI, config):
 
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Prompt for target repository
@@ -467,8 +447,6 @@ def _handle_move_task(task_tui: TaskTUI, config):
     target_repo = prompts.prompt_repository(task_tui.repositories)
     if not target_repo:
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Confirm move
@@ -478,10 +456,8 @@ def _handle_move_task(task_tui: TaskTUI, config):
         message = f"Move {len(selected_tasks)} tasks to repository '{target_repo.name}'?"
 
     click.echo(f"\n{message}")
-    if not confirm("Confirm move?"):
+    if not prompts.confirm_single_key("Confirm move?"):
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Initialize manager for subtask checking
@@ -508,7 +484,7 @@ def _handle_move_task(task_tui: TaskTUI, config):
 
             if subtasks_with_repos:
                 click.echo(f"\nTask '{task.title}' has {len(subtasks_with_repos)} subtask(s).")
-                if confirm("Move subtasks as well?"):
+                if prompts.confirm_single_key("Move subtasks as well?"):
                     move_subtasks = True
 
             # Check for dependencies
@@ -556,9 +532,6 @@ def _handle_move_task(task_tui: TaskTUI, config):
         else:
             click.secho(f"\n✓ Moved {moved_count} of {len(selected_tasks)} tasks to '{target_repo.name}'", fg="green")
 
-    click.echo("Press Enter to continue...")
-    input()
-
     # Clear multi-selection
     task_tui.multi_selected.clear()
 
@@ -573,15 +546,10 @@ def _handle_subtask(task_tui: TaskTUI, config):
     """Handle creating a subtask under the selected task."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     if len(selected_tasks) > 1:
         click.secho("\n⚠ Cannot create subtask under multiple tasks. Select only one task.", fg="yellow")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     parent_task = selected_tasks[0]
@@ -590,8 +558,6 @@ def _handle_subtask(task_tui: TaskTUI, config):
     repo = next((r for r in task_tui.repositories if r.name == parent_task.repo), None)
     if not repo:
         click.secho(f"\n✗ Could not find repository for task: {parent_task.repo}", fg="red")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Use existing interactive prompts
@@ -602,8 +568,6 @@ def _handle_subtask(task_tui: TaskTUI, config):
     title = prompts.prompt_title()
     if not title:
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Get existing values for autocomplete
@@ -653,9 +617,6 @@ def _handle_extend(task_tui: TaskTUI, config):
     """Handle extending task due date(s)."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     click.echo("\n" + "=" * 50)
@@ -684,8 +645,6 @@ def _handle_extend(task_tui: TaskTUI, config):
     date_input = click.prompt("\nDate or duration", type=str, default="")
     if not date_input:
         click.echo("Cancelled.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Parse date or duration
@@ -695,8 +654,6 @@ def _handle_extend(task_tui: TaskTUI, config):
         parsed_value, is_absolute_date = parse_date_or_duration(date_input)
     except ValueError as e:
         click.secho(f"\n✗ Error: {e}", fg="red")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     # Apply to all selected tasks
@@ -744,15 +701,10 @@ def _handle_info_task(task_tui: TaskTUI):
     """Handle viewing task info."""
     selected_tasks = task_tui._get_selected_tasks()
     if not selected_tasks:
-        click.echo("\nNo task selected.")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     if len(selected_tasks) > 1:
         click.secho("\n⚠ Select only one task to view details.", fg="yellow")
-        click.echo("Press Enter to continue...")
-        input()
         return
 
     task = selected_tasks[0]
@@ -819,8 +771,6 @@ def _handle_sort_change(task_tui: TaskTUI, config):
         choice = input("\nSort by: ").strip()
         if not choice:
             click.echo("Cancelled.")
-            click.echo("Press Enter to continue...")
-            input()
             return
 
         # Parse choice
@@ -864,9 +814,6 @@ def _handle_sort_change(task_tui: TaskTUI, config):
     except (KeyboardInterrupt, EOFError):
         click.echo("\nCancelled.")
 
-    click.echo("Press Enter to continue...")
-    input()
-
 
 def _handle_sync(task_tui: TaskTUI, config):
     """Handle syncing with git."""
@@ -889,8 +836,6 @@ def _handle_sync(task_tui: TaskTUI, config):
             repo = task_tui._get_current_repo()
             if not repo:
                 click.echo("\nNo repository selected.")
-                click.echo("Press Enter to continue...")
-                input()
                 return
             repositories_to_sync = [repo]
             click.echo("\n" + "=" * 50)

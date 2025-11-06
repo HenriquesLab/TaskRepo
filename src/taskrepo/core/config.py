@@ -26,6 +26,9 @@ class Config:
         "sort_by": ["due", "priority"],
         "cluster_due_dates": False,
         "tui_view_mode": "repo",  # Options: "repo", "project", "assignee"
+        "auto_sync_enabled": True,  # Enable background sync in TUI
+        "auto_sync_interval": 300,  # Sync every 5 minutes (in seconds)
+        "auto_sync_strategy": "auto",  # Auto-merge strategy for background sync
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -326,6 +329,74 @@ class Config:
         if value not in valid_modes:
             raise ValueError(f"Invalid TUI view mode: {value}. Must be one of {valid_modes}")
         self._data["tui_view_mode"] = value
+        self.save()
+
+    @property
+    def auto_sync_enabled(self) -> bool:
+        """Get automatic sync enabled status.
+
+        Returns:
+            True if background sync is enabled in TUI
+        """
+        return self._data.get("auto_sync_enabled", True)
+
+    @auto_sync_enabled.setter
+    def auto_sync_enabled(self, value: bool):
+        """Set automatic sync enabled status.
+
+        Args:
+            value: True to enable background sync in TUI
+        """
+        self._data["auto_sync_enabled"] = bool(value)
+        self.save()
+
+    @property
+    def auto_sync_interval(self) -> int:
+        """Get automatic sync interval in seconds.
+
+        Returns:
+            Sync interval in seconds (default: 300 = 5 minutes)
+        """
+        return self._data.get("auto_sync_interval", 300)
+
+    @auto_sync_interval.setter
+    def auto_sync_interval(self, value: int):
+        """Set automatic sync interval.
+
+        Args:
+            value: Sync interval in seconds (minimum: 60)
+
+        Raises:
+            ValueError: If interval is less than 60 seconds
+        """
+        if value < 60:
+            raise ValueError("Sync interval must be at least 60 seconds")
+        self._data["auto_sync_interval"] = int(value)
+        self.save()
+
+    @property
+    def auto_sync_strategy(self) -> str:
+        """Get automatic sync strategy.
+
+        Returns:
+            Sync strategy for background sync (default: "auto")
+        """
+        return self._data.get("auto_sync_strategy", "auto")
+
+    @auto_sync_strategy.setter
+    def auto_sync_strategy(self, value: str):
+        """Set automatic sync strategy.
+
+        Args:
+            value: Sync strategy ("auto", "local", or "remote")
+
+        Raises:
+            ValueError: If invalid strategy provided
+        """
+        valid_strategies = {"auto", "local", "remote"}
+        if value not in valid_strategies:
+            raise ValueError(f"Invalid sync strategy: {value}. Must be one of {valid_strategies}")
+        self._data["auto_sync_strategy"] = value
         self.save()
 
     def get(self, key: str, default=None):

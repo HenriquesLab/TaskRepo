@@ -46,10 +46,23 @@ def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None
     Raises:
         KeyboardInterrupt: If user cancels resolution
     """
+    import sys
+
     console = Console()
 
     local_task = conflict_info.local_task
     remote_task = conflict_info.remote_task
+
+    # Check if stdin is available and interactive
+    if not sys.stdin.isatty():
+        # Non-interactive mode - use newer version as fallback
+        console.print("[yellow]⚠ Non-interactive terminal detected, using newer version[/yellow]")
+        if local_task.modified >= remote_task.modified:
+            resolved = local_task
+        else:
+            resolved = remote_task
+        resolved.modified = datetime.now()
+        return resolved
 
     # Display conflict header
     console.print()
@@ -120,6 +133,16 @@ def resolve_conflict_interactive(conflict_info: ConflictInfo, editor: str = None
         except (KeyboardInterrupt, EOFError) as e:
             console.print("\n[red]✗ Resolution cancelled[/red]")
             raise KeyboardInterrupt("User cancelled conflict resolution") from e
+        except (IOError, OSError) as e:
+            # Handle stdin/terminal errors (like [Errno 22] Invalid argument)
+            console.print(f"\n[red]✗ Error: {e}[/red]")
+            console.print("[yellow]Falling back to newer version[/yellow]")
+            if local_task.modified >= remote_task.modified:
+                resolved = local_task
+            else:
+                resolved = remote_task
+            resolved.modified = datetime.now()
+            return resolved
 
 
 def _display_conflict_comparison(console: Console, local_task: Task, remote_task: Task, conflicting_fields: list[str]):
@@ -306,6 +329,11 @@ def _manual_merge_fields(console: Console, local_task: Task, remote_task: Task, 
             except (KeyboardInterrupt, EOFError) as e:
                 console.print("\n[red]✗ Resolution cancelled[/red]")
                 raise KeyboardInterrupt("User cancelled conflict resolution") from e
+            except (IOError, OSError) as e:
+                # Handle stdin/terminal errors
+                console.print(f"\n[red]✗ Error: {e}[/red]")
+                console.print("[yellow]Using local value as fallback[/yellow]")
+                break  # Keep local value (already set)
 
         console.print()
 

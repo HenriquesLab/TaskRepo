@@ -95,34 +95,38 @@ def pad_to_width(text: str, target_width: int, align: str = "left") -> str:
         return text + padding
 
 
-def get_countdown_text(due_date: datetime) -> tuple[str, str]:
+def get_countdown_text(due_date: datetime, status: str = None) -> tuple[str, str]:
     """Calculate countdown text and color from a due date.
 
     Args:
         due_date: The due date to calculate countdown for
+        status: Task status (if completed/cancelled, return neutral text)
 
     Returns:
         Tuple of (countdown_text, color_name)
         Format: "2 days", "1 week", "3 months"
     """
+    # For completed or cancelled tasks, show neutral status instead of countdown
+    if status == "completed":
+        return "✓", "green"
+    elif status == "cancelled":
+        return "-", "red"
+
     now = datetime.now()
     diff = due_date - now
     days = diff.days
     hours = diff.seconds // 3600
 
-    # Handle overdue
+    # Handle overdue (use negative numbers for compactness)
     if days < 0:
         abs_days = abs(days)
-        if abs_days == 1:
-            text = "overdue 1 day"
-        elif abs_days < 7:
-            text = f"overdue {abs_days} days"
+        if abs_days < 7:
+            # Show in days: -1d, -3d, etc.
+            text = f"-{abs_days}d"
         else:
+            # Show in weeks: -1w, -2w, etc.
             weeks = abs_days // 7
-            if weeks == 1:
-                text = "overdue 1 week"
-            else:
-                text = f"overdue {weeks} weeks"
+            text = f"-{weeks}w"
         return text, "red"
 
     # Handle today
@@ -390,7 +394,7 @@ def display_tasks_table(
         else:
             # Show countdown (existing logic)
             if task.due:
-                countdown_text, countdown_color = get_countdown_text(task.due)
+                countdown_text, countdown_color = get_countdown_text(task.due, task.status)
                 countdown_str = f"[{countdown_color}]{countdown_text}[/{countdown_color}]"
             else:
                 countdown_str = "-"

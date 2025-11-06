@@ -1,4 +1,16 @@
-"""Sorting utilities for tasks."""
+"""Sorting utilities for tasks.
+
+⚠️ IMPORTANT: This module is the single source of truth for task sorting logic.
+The following components depend on this module:
+- CLI list command (cli/commands/list.py)
+- TUI display (tui/display.py, tui/task_tui.py)
+- README generation (core/repository.py: generate_readme, generate_archive_readme)
+- Archive display (cli/commands/archive.py)
+- Sync operations (cli/commands/sync.py)
+
+When modifying sorting logic here, verify that README generation still works correctly.
+README files should display tasks in the same order as 'tsk list' command.
+"""
 
 from datetime import datetime
 from typing import Any, Optional
@@ -63,14 +75,16 @@ def get_effective_due_date(
     # Build a map of all tasks by ID for fast lookup
     task_map = {t.id: t for t in all_tasks}
 
-    # Find all subtasks (tasks where parent == this task's id)
-    subtasks = [t for t in all_tasks if t.parent == task.id]
+    # Find all active subtasks (tasks where parent == this task's id)
+    # Exclude completed/cancelled subtasks as their due dates shouldn't affect parent urgency
+    subtasks = [t for t in all_tasks if t.parent == task.id and t.status not in ("completed", "cancelled")]
 
-    # Find all dependency tasks (tasks referenced in depends field)
+    # Find all active dependency tasks (tasks referenced in depends field)
+    # Exclude completed/cancelled dependencies as they're no longer blocking
     dependency_tasks = []
     for dep_id in task.depends:
         dep_task = task_map.get(dep_id)
-        if dep_task:
+        if dep_task and dep_task.status not in ("completed", "cancelled"):
             dependency_tasks.append(dep_task)
 
     # Recursively get effective due dates for subtasks and dependencies
@@ -192,15 +206,19 @@ def sort_tasks(tasks: list[Task], config: Config, all_tasks: Optional[list[Task]
             priority_order = {"H": 0, "M": 1, "L": 2}
             value = priority_order.get(task.priority, 3)
         elif field_name == "due":
-            # Get effective due date (considering subtasks and dependencies)
-            effective_due = get_effective_due_date(task, all_tasks)
-
-            if config.cluster_due_dates:
-                # Use cluster bucket instead of exact timestamp
-                value = get_due_date_cluster(effective_due)
+            # Completed/cancelled tasks should sort to bottom (treat as no due date)
+            if task.status in ("completed", "cancelled"):
+                value = float("inf") if not config.cluster_due_dates else 99
             else:
-                # Use exact timestamp
-                value = effective_due.timestamp() if effective_due else float("inf")
+                # Get effective due date (considering subtasks and dependencies)
+                effective_due = get_effective_due_date(task, all_tasks)
+
+                if config.cluster_due_dates:
+                    # Use cluster bucket instead of exact timestamp
+                    value = get_due_date_cluster(effective_due)
+                else:
+                    # Use exact timestamp
+                    value = effective_due.timestamp() if effective_due else float("inf")
         elif field_name == "created":
             value = task.created.timestamp()
         elif field_name == "modified":

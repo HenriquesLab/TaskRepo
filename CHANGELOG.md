@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2025-11-06
+
+### Improved
+
+- **TUI status bar enhancements**: Status bar now shows persistent sync and reload timing information
+  - Always displays last sync time (e.g., "Synced 2m ago") when auto-sync is enabled
+  - Shows last reload time (e.g., "Reloaded 15s ago") to verify file watching is working
+  - Displays auto-sync interval and status (e.g., "Auto-sync: ON (5m)")
+  - Shows conflict warnings with count when manual resolution needed
+  - Responsive layout adapts to terminal width:
+    - Two-line layout for terminals ≥120 columns (status info on line 1, shortcuts on line 2)
+    - Single-line layout for narrower terminals with condensed shortcuts
+    - Breakpoints at 80, 120, 160 columns for optimal shortcut visibility
+  - Implementation:
+    - New `src/taskrepo/utils/time_format.py` with human-readable time formatting
+    - Refactored status bar generation into modular helper methods
+    - Accurate height calculation accounting for HTML markup
+    - State tracking for reload and sync timestamps
+
+- **Compact overdue format**: Overdue tasks now use negative numbers for space efficiency
+  - Displays as "-3d" instead of "overdue 3 days"
+  - Displays as "-2w" instead of "overdue 2 weeks"
+  - Saves significant horizontal space in task lists and TUI
+  - Maintains red color for visibility
+  - Affects both TUI and CLI list views
+
 ## [0.10.0] - 2025-11-05
 
 ### Added

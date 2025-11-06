@@ -168,6 +168,54 @@ def parse_date_or_duration(input_str: str) -> tuple[Union[datetime, timedelta], 
         ) from e
 
 
+def parse_date_with_error_handling(date_str: str, field_name: str = "date") -> datetime:
+    """Parse date string with user-friendly error handling for CLI commands.
+
+    This function wraps parse_date_or_duration() to provide consistent error
+    messages across all CLI commands. It only supports absolute dates (not durations).
+
+    Args:
+        date_str: Date string to parse
+        field_name: Name of field for error messages (e.g., "due date", "date")
+
+    Returns:
+        Parsed datetime object
+
+    Raises:
+        ValueError: If the date string cannot be parsed, with a user-friendly message
+
+    Examples:
+        >>> parse_date_with_error_handling("tomorrow")
+        datetime(2025, 10, 24, 0, 0)
+        >>> parse_date_with_error_handling("2025-12-31")
+        datetime(2025, 12, 31, 0, 0)
+        >>> parse_date_with_error_handling("invalid")
+        ValueError: Could not parse date 'invalid'
+    """
+    try:
+        parsed_value, is_absolute = parse_date_or_duration(date_str)
+
+        if not is_absolute:
+            # If it's a duration (timedelta), reject it for date fields
+            raise ValueError(
+                f"Expected a date, got a duration: '{date_str}'. "
+                f"Use absolute dates like 'tomorrow', '2025-12-31', or 'Oct 30'"
+            )
+
+        return parsed_value
+    except ValueError as e:
+        # Re-raise with a more concise error message for CLI
+        error_msg = (
+            f"Could not parse {field_name}: '{date_str}'\n"
+            f"Supported formats:\n"
+            f"  - Keywords: today, tomorrow, yesterday, next week, next month, next year\n"
+            f"  - Weekdays: next monday, this friday, monday\n"
+            f"  - ISO dates: 2025-12-31\n"
+            f"  - Natural dates: Oct 30, October 30 2025, Dec 1"
+        )
+        raise ValueError(error_msg) from e
+
+
 def format_date_input(input_str: str, parsed_value: Union[datetime, timedelta], is_absolute: bool) -> str:
     """Format date or duration input for display.
 
