@@ -194,14 +194,14 @@ class TestCanAutoMerge:
         conflicts = ["assignees", "tags"]
         assert _can_auto_merge(task1, task2, conflicts) is True
 
-    def test_cannot_merge_same_timestamp_non_list(self, base_task):
-        """Test cannot auto-merge simple fields with same timestamp."""
+    def test_can_merge_same_timestamp_with_semantic_fields(self, base_task):
+        """Test CAN auto-merge status/priority with semantic resolution even with same timestamp."""
         task1 = base_task
         task2 = Task(
             id=base_task.id,
             title=base_task.title,
-            status="in-progress",  # Different
-            priority="H",  # Different
+            status="in-progress",  # Different - higher progress
+            priority="H",  # Different - higher urgency
             project=base_task.project,
             assignees=base_task.assignees.copy(),
             tags=base_task.tags.copy(),
@@ -215,21 +215,23 @@ class TestCanAutoMerge:
             repo=base_task.repo,
         )
         conflicts = ["status", "priority"]
-        assert _can_auto_merge(task1, task2, conflicts) is False
+        # With semantic merging, status/priority conflicts can be auto-merged
+        assert _can_auto_merge(task1, task2, conflicts) is True
 
 
 class TestSmartMergeTasks:
     """Tests for smart_merge_tasks function."""
 
-    def test_merge_uses_newer_task(self, local_task, remote_task):
-        """Test merge uses newer task as base."""
+    def test_merge_uses_semantic_resolution(self, local_task, remote_task):
+        """Test merge uses semantic resolution for status/priority, not just timestamps."""
         conflicts = ["status", "priority", "due", "assignees", "tags"]
         merged = smart_merge_tasks(local_task, remote_task, conflicts)
 
         assert merged is not None
-        # Local is newer, so should use local values for simple fields
-        assert merged.status == local_task.status
-        assert merged.priority == local_task.priority  # From newer (local)
+        # Status: local="in-progress" (higher progress) vs remote="pending" → use in-progress
+        assert merged.status == local_task.status  # Higher progress wins
+        # Priority: local="M" vs remote="H" → use H (higher urgency wins, not newer timestamp)
+        assert merged.priority == remote_task.priority  # Higher urgency wins
 
     def test_merge_unions_list_fields(self, local_task, remote_task):
         """Test merge creates union of list fields."""
@@ -558,8 +560,9 @@ class TestEdgeCases:
             repo=base_task.repo,
         )
         conflicts = ["status", "assignees"]
-        # Should be able to merge because assignees is a list
-        # But status conflict with same timestamp might not auto-merge
+        # Should be able to merge:
+        # - assignees is a list field (union)
+        # - status uses semantic resolution (progress priority)
         can_merge = _can_auto_merge(task1, task2, conflicts)
-        # With identical timestamp and non-list conflict, should not auto-merge
-        assert can_merge is False
+        # With semantic merging, status can be auto-merged even with identical timestamp
+        assert can_merge is True
