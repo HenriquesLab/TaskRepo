@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2025-11-10
+
+### Improved
+
+- **Simplified sorting configuration** (`tsk config` option 9)
+  - Replaced 40+ lines of technical documentation with 6 simple preset choices
+  - New presets: "By due date", "By priority", "My tasks first", "Newest first", etc.
+  - Advanced custom options still available but hidden behind "custom" choice
+  - Makes configuration accessible to all users, not just power users
+
+- **Crystal clear exit feedback** (`tsk config`)
+  - Prompt now shows "Ctrl+C to exit" hint
+  - Exit confirmation changed from plain text to bold green "✓ Configuration saved. Exiting."
+  - No more confusion about whether you've exited or just cancelled a submenu
+
+- **Improved clustering toggle** (`tsk config` option 10)
+  - Current state shown in bold: "is currently: ON" or "OFF"
+  - Context-aware prompts: "Turn OFF clustering?" when ON, "Turn ON?" when OFF
+  - Clear feedback: "Clustering turned ON/OFF" or "No changes made."
+  - Eliminates confusion about current state and action being taken
+
 ## [0.10.2] - 2025-11-10
 
 ### Fixed
