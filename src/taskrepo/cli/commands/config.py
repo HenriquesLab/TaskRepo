@@ -306,18 +306,32 @@ def config_cmd(ctx, show):
 
         elif choice == "10":
             # Toggle due date clustering
-            current_status = "enabled" if config.cluster_due_dates else "disabled"
-            click.echo(f"\nDue date clustering: {current_status}")
+            is_enabled = config.cluster_due_dates
+            status_text = "ON" if is_enabled else "OFF"
+            click.secho(f"\nDue date clustering is currently: {status_text}", bold=True)
+
             click.echo("\nGroups tasks into time buckets (today, this week, etc.) instead of")
             click.echo("exact timestamps. Useful when you want priority to matter within each bucket.")
             click.echo("\nExample: With 'due,priority' sorting")
-            click.echo("  Disabled: Tasks sorted by exact due date/time")
-            click.echo("  Enabled:  All 'today' tasks grouped, high priority first")
+            click.echo("  OFF: Tasks sorted by exact due date/time")
+            click.echo("  ON:  All 'today' tasks grouped, high priority first")
+
             try:
-                new_value = confirm("\nEnable clustering?")
-                config.cluster_due_dates = new_value
-                new_status = "enabled" if new_value else "disabled"
-                click.secho(f"✓ Clustering {new_status}", fg="green")
+                # Make the prompt match the action that will be taken
+                if is_enabled:
+                    should_change = confirm("\nTurn OFF clustering?")
+                    if should_change:
+                        config.cluster_due_dates = False
+                        click.secho("✓ Clustering turned OFF", fg="green")
+                    else:
+                        click.echo("No changes made.")
+                else:
+                    should_change = confirm("\nTurn ON clustering?")
+                    if should_change:
+                        config.cluster_due_dates = True
+                        click.secho("✓ Clustering turned ON", fg="green")
+                    else:
+                        click.echo("No changes made.")
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
