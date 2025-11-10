@@ -78,11 +78,12 @@ def config_cmd(ctx, show):
 
         try:
             choice = prompt(
-                "\nEnter choice (1-13): ",
+                "\nEnter choice (1-13 or Ctrl+C to exit): ",
                 completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]),
             )
         except (KeyboardInterrupt, EOFError):
-            click.echo("\nExiting configuration.")
+            click.echo()
+            click.secho("✓ Configuration saved. Exiting.", fg="green", bold=True)
             break
 
         choice = choice.strip()
@@ -356,7 +357,8 @@ def config_cmd(ctx, show):
 
         elif choice == "13":
             # Exit
-            click.echo("\nExiting configuration.")
+            click.echo()
+            click.secho("✓ Configuration saved. Exiting.", fg="green", bold=True)
             break
 
         else:
