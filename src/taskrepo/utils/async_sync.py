@@ -6,7 +6,7 @@ from taskrepo.core.repository import Repository
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 
-def sync_repository_background(repository: Repository, strategy: str = "auto") -> tuple[bool, str, bool]:
+def sync_repository_background(repository: Repository, strategy: str = "auto", config=None) -> tuple[bool, str, bool]:
     """Sync a repository in background without user interaction.
 
     This is a simplified, non-interactive version of the sync command
@@ -15,6 +15,7 @@ def sync_repository_background(repository: Repository, strategy: str = "auto") -
     Args:
         repository: Repository to sync
         strategy: Merge strategy ("auto", "local", "remote")
+        config: TaskRepo configuration (required for README generation)
 
     Returns:
         Tuple of (success, error_message, has_conflicts)
@@ -121,14 +122,25 @@ def sync_repository_background(repository: Repository, strategy: str = "auto") -
                 git_repo.git.add(str(file_path))
             git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_files)} conflict marker(s)")
 
-        # Step 5: Update README files
-        repository.generate_readme()
-        repository.generate_archive_readme()
+        # Step 5: Update README files (skip if no config provided)
+        if config:
+            repository.generate_readme(config)
+            repository.generate_archive_readme(config)
 
-        # Step 6: Commit README changes if any
-        if git_repo.is_dirty():
-            git_repo.git.add("README.md", "archive/README.md")
-            git_repo.index.commit("Auto-update: README with tasks and archive")
+            # Step 6: Commit README changes if any
+            if git_repo.is_dirty():
+                # Add README files that exist and are modified
+                readme_path = repository.path / "README.md"
+                archive_readme_path = repository.path / "tasks" / "archive" / "README.md"
+
+                if readme_path.exists():
+                    git_repo.git.add("README.md")
+                if archive_readme_path.exists():
+                    git_repo.git.add("tasks/archive/README.md")
+
+                # Only commit if something was actually staged
+                if git_repo.is_dirty(index=True, working_tree=False, untracked_files=False):
+                    git_repo.index.commit("Auto-update: README with tasks and archive")
 
         # Step 7: Push changes
         try:

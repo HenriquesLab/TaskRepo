@@ -117,8 +117,10 @@ def ext(ctx, task_ids: Tuple[str, ...], date_or_duration, repo):
                 # Extend from existing due date
                 new_due = task.due + parsed_value
             else:
-                # Extend from today
-                new_due = datetime.now() + parsed_value
+                # Extend from today at midnight
+                now = datetime.now()
+                today_midnight = datetime(now.year, now.month, now.day)
+                new_due = today_midnight + parsed_value
 
         # Update task
         task.due = new_due

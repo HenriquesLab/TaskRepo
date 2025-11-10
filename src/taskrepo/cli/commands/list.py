@@ -83,13 +83,15 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
         click.echo("No tasks found.")
         return
 
-    # Display tasks using shared display function
+    # Sort tasks before display (always sort, regardless of filters)
+    from taskrepo.utils.id_mapping import save_id_cache
+    from taskrepo.utils.sorting import sort_tasks
+
+    sorted_tasks = sort_tasks(tasks, config, all_tasks=all_tasks)
+
     # Only rebalance IDs for unfiltered views (like sync does)
     if not has_filters:
-        from taskrepo.utils.id_mapping import save_id_cache
-        from taskrepo.utils.sorting import sort_tasks
-
-        sorted_tasks = sort_tasks(tasks, config, all_tasks=all_tasks)
         save_id_cache(sorted_tasks, rebalance=True)
 
-    display_tasks_table(tasks, config, save_cache=False)
+    # Display sorted tasks
+    display_tasks_table(sorted_tasks, config, save_cache=False)

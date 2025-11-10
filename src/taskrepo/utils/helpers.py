@@ -289,7 +289,9 @@ def update_cache_and_display_repo(manager, repository, config):
     repo_tasks = repository.list_tasks(include_archived=False)
 
     if repo_tasks:
-        display_tasks_table(repo_tasks, config, save_cache=False)
+        # Sort the repo tasks before displaying (using same sort order as global cache)
+        sorted_repo_tasks = sort_tasks(repo_tasks, config, all_tasks=all_tasks_all_repos)
+        display_tasks_table(sorted_repo_tasks, config, save_cache=False)
 
 
 def prompt_for_subtask_archiving(manager, task, batch_mode=False):

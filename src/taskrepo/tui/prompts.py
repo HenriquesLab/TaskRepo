@@ -199,8 +199,11 @@ def prompt_repository(repositories: list[Repository], default: Optional[str] = N
         return None
 
 
-def prompt_title() -> Optional[str]:
+def prompt_title(default: Optional[str] = None) -> Optional[str]:
     """Prompt user for task title.
+
+    Args:
+        default: Default title to pre-fill
 
     Returns:
         Task title or None if cancelled
@@ -212,7 +215,7 @@ def prompt_title() -> Optional[str]:
                 raise ValidationError(message="Title cannot be empty")
 
     try:
-        title = prompt("Title: ", validator=TitleValidator())
+        title = prompt("Title: ", validator=TitleValidator(), default=default or "")
         return title.strip()
     except (KeyboardInterrupt, EOFError):
         return None
@@ -368,8 +371,11 @@ def prompt_tags(existing_tags: list[str], default: Optional[list[str]] = None) -
         return []
 
 
-def prompt_links() -> list[str]:
+def prompt_links(default: Optional[list[str]] = None) -> list[str]:
     """Prompt user for associated links/URLs (comma-separated).
+
+    Args:
+        default: Default list of links to pre-fill
 
     Returns:
         List of validated URLs
@@ -388,10 +394,14 @@ def prompt_links() -> list[str]:
                 if not Task.validate_url(url):
                     raise ValidationError(message=f"Invalid URL: {url}. URLs must start with http:// or https://")
 
+    # Convert default list to comma-separated string
+    default_str = ", ".join(default) if default else ""
+
     try:
         links_str = prompt(
             "Links (comma-separated URLs, optional): ",
             validator=LinksValidator(),
+            default=default_str,
         )
 
         if not links_str.strip():
@@ -404,35 +414,122 @@ def prompt_links() -> list[str]:
         return []
 
 
-def prompt_due_date() -> Optional[datetime]:
+def prompt_due_date(default: Optional[datetime] = None) -> Optional[datetime]:
     """Prompt user for due date.
+
+    Args:
+        default: Default due date to pre-fill
 
     Returns:
         Due date or None
     """
+    # Format default datetime to YYYY-MM-DD string
+    default_str = default.strftime("%Y-%m-%d") if default else ""
+
     try:
         due_str = prompt(
             "Due date (optional, e.g., 2025-12-31 or 'next friday'): ",
             validator=DateValidator(),
+            default=default_str,
         )
 
         if not due_str.strip():
             return None
 
-        import dateparser
+        from datetime import datetime, timedelta
 
-        return dateparser.parse(due_str, settings={"PREFER_DATES_FROM": "future"})
+        from taskrepo.utils.date_parser import parse_date_or_duration
+
+        # Parse the input - can be either a date or duration
+        parsed_value, is_absolute_date = parse_date_or_duration(due_str.strip())
+
+        if is_absolute_date:
+            # Return the parsed datetime directly
+            assert isinstance(parsed_value, datetime)
+            return parsed_value
+        else:
+            # It's a duration (timedelta) - add to today at midnight
+            assert isinstance(parsed_value, timedelta)
+            now = datetime.now()
+            today_midnight = datetime(now.year, now.month, now.day)
+            return today_midnight + parsed_value
+
     except (KeyboardInterrupt, EOFError):
         return None
 
 
-def prompt_description() -> str:
+def prompt_parent(default: Optional[str] = None) -> Optional[str]:
+    """Prompt user for parent task ID (for subtasks).
+
+    Args:
+        default: Default parent task ID to pre-fill
+
+    Returns:
+        Parent task ID or None
+    """
+    try:
+        parent = prompt(
+            "Parent task ID (optional, for subtasks): ",
+            default=default or "",
+        )
+        return parent.strip() or None
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
+def prompt_depends(default: Optional[list[str]] = None) -> list[str]:
+    """Prompt user for task dependencies (comma-separated task IDs).
+
+    Args:
+        default: Default list of dependencies to pre-fill
+
+    Returns:
+        List of task IDs
+    """
+    # Convert default list to comma-separated string
+    default_str = ", ".join(default) if default else ""
+
+    try:
+        depends_str = prompt(
+            "Dependencies (comma-separated task IDs, optional): ",
+            default=default_str,
+        )
+
+        if not depends_str.strip():
+            return []
+
+        # Parse and filter dependencies
+        depends = [dep.strip() for dep in depends_str.split(",") if dep.strip()]
+        return depends
+    except (KeyboardInterrupt, EOFError):
+        return []
+
+
+def prompt_description(default: str = "") -> str:
     """Prompt user for task description.
+
+    Args:
+        default: Default description to show and optionally keep
 
     Returns:
         Task description
     """
-    print("\nDescription (press Ctrl+D or Ctrl+Z when done):")
+    # Show current description if it exists
+    if default:
+        print("\nCurrent description:")
+        print("-" * 40)
+        print(default)
+        print("-" * 40)
+
+        # Ask if they want to keep or replace
+        try:
+            choice = prompt("Keep current description? (y/n, default=y): ", default="y").strip().lower()
+            if choice in ["y", "yes", ""]:
+                return default
+        except (KeyboardInterrupt, EOFError):
+            return default
+
+    print("\nEnter new description (press Ctrl+D or Ctrl+Z when done):")
     try:
         lines = []
         while True:
@@ -443,7 +540,7 @@ def prompt_description() -> str:
                 break
         return "\n".join(lines)
     except KeyboardInterrupt:
-        return ""
+        return default if default else ""
 
 
 def prompt_status(default: str = "pending") -> str:
@@ -849,3 +946,62 @@ def prompt_yes_no(message: str, default: str = "y") -> bool:
     ).lower()
 
     return response in ["y", "yes"]
+
+
+def prompt_field_selection(task) -> Optional[str]:
+    """Prompt user to select which task field to edit.
+
+    Args:
+        task: The Task object being edited
+
+    Returns:
+        Field name to edit ('title', 'status', 'priority', etc.), 'all', 'done', or None if cancelled
+    """
+    print("\n" + "=" * 60)
+    print("Edit Task - Field Selection")
+    print("=" * 60)
+    print(f"\nTask: {task.title}")
+    print("\nSelect field to edit:")
+    print()
+
+    # Show all fields with current values
+    fields = {
+        "1": ("title", f"Title: {task.title}"),
+        "2": ("status", f"Status: {task.status}"),
+        "3": ("priority", f"Priority: {task.priority}"),
+        "4": ("project", f"Project: {task.project or '(none)'}"),
+        "5": ("assignees", f"Assignees: {', '.join(task.assignees) if task.assignees else '(none)'}"),
+        "6": ("tags", f"Tags: {', '.join(task.tags) if task.tags else '(none)'}"),
+        "7": ("links", f"Links: {len(task.links)} link(s)"),
+        "8": ("due", f"Due date: {task.due.strftime('%Y-%m-%d') if task.due else '(none)'}"),
+        "9": ("parent", f"Parent: {task.parent or '(none)'}"),
+        "10": ("depends", f"Dependencies: {len(task.depends)} task(s)"),
+        "11": (
+            "description",
+            f"Description: {(task.description[:50] + '...') if len(task.description) > 50 else task.description if task.description else '(none)'}",
+        ),
+        "a": ("all", "Edit all fields"),
+        "d": ("done", "Done editing"),
+    }
+
+    for key, (_field_name, display) in fields.items():
+        if key.isdigit():
+            print(f"  [{key}]  {display}")
+        else:
+            print()
+            print(f"  [{key}]  {display}")
+
+    print()
+
+    try:
+        choice = prompt("Choose field (1-11, a=all, d=done): ").strip().lower()
+
+        if choice in fields:
+            field_name, _ = fields[choice]
+            return field_name
+        else:
+            print("Invalid choice. Please try again.")
+            return prompt_field_selection(task)
+
+    except (KeyboardInterrupt, EOFError):
+        return None

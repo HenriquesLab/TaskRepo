@@ -131,7 +131,8 @@ def history(ctx, repo, since, task, verbose, all):
         # Create a tree for this group
         tree = Tree(f"[bold]{group_name}[/bold]", guide_style="dim")
 
-        for commit in commits:
+        # Reverse commits within group so oldest appears first, newest last
+        for commit in reversed(commits):
             # Build commit description
             emoji = categorize_commit(commit)
             commit_time = commit.timestamp.strftime("%H:%M")

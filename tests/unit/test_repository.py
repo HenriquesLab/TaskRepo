@@ -257,7 +257,7 @@ def test_repository_generate_readme():
 
         # Check countdown (could be "tomorrow" or "2 days" depending on exact time)
         assert "⏰" in readme_content  # Urgent countdown emoji
-        assert "📅 1 month" in readme_content  # Future countdown
+        assert "📅 2 months" in readme_content  # Future countdown (60 days rounds up to 2 months)
 
         # Check footer
         assert "_Last updated:" in readme_content

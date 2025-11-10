@@ -2,6 +2,7 @@
 
 import re
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +19,171 @@ from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 console = Console()
+
+
+def _log_sync_error(repo_name: str, error: Exception):
+    """Log sync error to ~/.TaskRepo/sync_error.log.
+
+    Args:
+        repo_name: Name of repository that encountered error
+        error: Exception that occurred
+    """
+    log_path = Path.home() / ".TaskRepo" / "sync_error.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_path, "a") as f:
+        f.write(f"\n{'=' * 80}\n")
+        f.write(f"Timestamp: {timestamp}\n")
+        f.write(f"Repository: {repo_name}\n")
+        f.write(f"Error Type: {type(error).__name__}\n")
+        f.write(f"Error Message: {str(error)}\n")
+        f.write("\nTraceback:\n")
+        f.write(traceback.format_exc())
+        f.write(f"{'=' * 80}\n")
+
+
+# Pre-compile regex patterns for conflict markers (optimization)
+CONFLICT_MARKER_PATTERN = re.compile(r"<<<<<<< HEAD\s*\n(.*?)\n=======\s*\n(.*?)\n>>>>>>> [^\n]*", re.DOTALL)
+CONFLICT_MARKER_ALT_PATTERN = re.compile(r"<<<<<<< HEAD(.*?)=======(.*?)>>>>>>> ", re.DOTALL)
+CONFLICT_MARKER_EXTRACT_PATTERN = re.compile(r"<<<<<<< HEAD\s*\n(.*?)\n=======\s*\n.*?\n>>>>>>> [^\n]*\n?", re.DOTALL)
+
+
+class TaskCache:
+    """Cache for parsed Task objects to avoid redundant parsing during sync.
+
+    This cache stores Task objects keyed by their file path, allowing
+    multiple sync operations to reuse already-parsed tasks instead of
+    re-parsing the same files multiple times.
+    """
+
+    def __init__(self):
+        """Initialize empty cache."""
+        self._cache: dict[Path, Task] = {}
+        self._file_hashes: dict[Path, int] = {}  # Track content hashes to detect changes
+
+    def get(self, file_path: Path, content: str | None = None) -> Task | None:
+        """Get cached task if available and content hasn't changed.
+
+        Args:
+            file_path: Path to task file
+            content: Optional file content to verify cache validity
+
+        Returns:
+            Cached Task object or None if not cached or content changed
+        """
+        if file_path not in self._cache:
+            return None
+
+        # If content provided, verify it hasn't changed
+        if content is not None:
+            content_hash = hash(content)
+            if self._file_hashes.get(file_path) != content_hash:
+                # Content changed, invalidate cache entry
+                self._cache.pop(file_path, None)
+                self._file_hashes.pop(file_path, None)
+                return None
+
+        return self._cache.get(file_path)
+
+    def set(self, file_path: Path, task: Task, content: str) -> None:
+        """Cache a parsed task.
+
+        Args:
+            file_path: Path to task file
+            task: Parsed Task object
+            content: File content used for parsing (for hash verification)
+        """
+        self._cache[file_path] = task
+        self._file_hashes[file_path] = hash(content)
+
+    def invalidate(self, file_path: Path) -> None:
+        """Invalidate cache entry for a specific file.
+
+        Args:
+            file_path: Path to task file
+        """
+        self._cache.pop(file_path, None)
+        self._file_hashes.pop(file_path, None)
+
+    def clear(self) -> None:
+        """Clear all cached tasks."""
+        self._cache.clear()
+        self._file_hashes.clear()
+
+
+class SyncChangeTracker:
+    """Track changes during sync to enable smart operations.
+
+    Tracks what changed during sync (commits, conflicts, README updates)
+    to avoid redundant operations and provide better user feedback.
+    """
+
+    def __init__(self):
+        """Initialize change tracker."""
+        self.had_uncommitted = False
+        self.resolved_conflicts = 0
+        self.resolved_markers = 0
+        self.pulled_changes = False
+        self.readme_changed = False
+        self.changes_to_commit: list[str] = []  # List of change descriptions
+
+    def record_uncommitted(self) -> None:
+        """Record that there were uncommitted changes."""
+        self.had_uncommitted = True
+        self.changes_to_commit.append("uncommitted changes")
+
+    def record_conflict_resolution(self, count: int) -> None:
+        """Record conflict resolution.
+
+        Args:
+            count: Number of conflicts resolved
+        """
+        self.resolved_conflicts = count
+        if count > 0:
+            self.changes_to_commit.append(f"{count} conflict(s) resolved")
+
+    def record_marker_resolution(self, count: int) -> None:
+        """Record conflict marker resolution.
+
+        Args:
+            count: Number of files with markers resolved
+        """
+        self.resolved_markers = count
+        if count > 0:
+            self.changes_to_commit.append(f"{count} conflict marker(s) fixed")
+
+    def record_pull(self) -> None:
+        """Record that pull brought changes."""
+        self.pulled_changes = True
+
+    def record_readme_change(self) -> None:
+        """Record that README was updated."""
+        self.readme_changed = True
+        self.changes_to_commit.append("README updated")
+
+    def should_regenerate_readme(self) -> bool:
+        """Determine if README should be regenerated.
+
+        Returns:
+            True if README regeneration is needed, False otherwise
+        """
+        # Regenerate if:
+        # - Tasks were modified (conflicts resolved or markers fixed)
+        # - Pull brought changes (may include task changes)
+        return self.resolved_conflicts > 0 or self.resolved_markers > 0 or self.pulled_changes
+
+    def get_commit_message(self) -> str:
+        """Generate consolidated commit message based on changes.
+
+        Returns:
+            Commit message describing all changes
+        """
+        if not self.changes_to_commit:
+            return "Auto-sync: TaskRepo sync"
+
+        # Create descriptive message
+        return f"Auto-sync: {', '.join(self.changes_to_commit)}"
 
 
 def run_with_spinner(
@@ -141,6 +307,10 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
             repo_start_time = time.perf_counter()
             git_repo = repository.git_repo
 
+            # Create cache and change tracker for this repository
+            task_cache = TaskCache()
+            change_tracker = SyncChangeTracker()
+
             # Display repository with URL or local path
             progress.console.print()
             if git_repo.remotes:
@@ -185,19 +355,20 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             continue
                         # If "commit", proceed as normal
 
-                    def commit_changes():
+                    # Stage all changes but don't commit yet (will consolidate commits later)
+                    def stage_changes():
                         git_repo.git.add(A=True)
-                        git_repo.index.commit("Auto-commit: TaskRepo sync")
 
                     run_with_spinner(
-                        progress, spinner_task, "Committing local changes", commit_changes, verbose, operations_task
+                        progress, spinner_task, "Staging local changes", stage_changes, verbose, operations_task
                     )
+                    change_tracker.record_uncommitted()
 
                 # Check if remote exists
                 if git_repo.remotes:
-                    # Detect conflicts before pulling
+                    # Detect conflicts before pulling (pass cache to avoid redundant parsing)
                     def check_conflicts():
-                        return detect_conflicts(git_repo, repository.path)
+                        return detect_conflicts(git_repo, repository.path, task_cache=task_cache)
 
                     conflicts, _ = run_with_spinner(
                         progress, spinner_task, "Checking for conflicts", check_conflicts, verbose, operations_task
@@ -276,14 +447,16 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             # Save resolved task
                             if resolved_task:
                                 repository.save_task(resolved_task)
+                                # Invalidate cache since task was modified
+                                task_cache.invalidate(repository.path / conflict.file_path)
                                 git_repo.git.add(str(conflict.file_path))
                                 resolved_count += 1
 
-                        # Commit resolved conflicts
+                        # Track conflict resolution (don't commit yet - will consolidate later)
                         if resolved_count > 0:
-                            git_repo.index.commit(f"Merge: Resolved {resolved_count} task conflict(s)")
+                            change_tracker.record_conflict_resolution(resolved_count)
                             progress.console.print(
-                                f"  [green]✓[/green] Resolved and committed {resolved_count} conflict(s)"
+                                f"  [green]✓[/green] Resolved and staged {resolved_count} conflict(s)"
                             )
                     else:
                         progress.console.print("  [green]✓[/green] No conflicts detected")
@@ -298,7 +471,7 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             progress.console.print("  [yellow]→[/yellow] Resolving conflict markers...")
 
                             def resolve_markers():
-                                return _resolve_conflict_markers(repository, progress.console)
+                                return _resolve_conflict_markers(repository, progress.console, task_cache)
 
                             resolved_files, _ = run_with_spinner(
                                 progress, spinner_task, "Resolving conflict markers", resolve_markers, verbose
@@ -323,17 +496,20 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             git_repo.git.merge("--abort")
                             progress.console.print("  [green]✓[/green] Aborted unfinished merge")
 
-                    # Pull changes
+                    # Merge remote changes (we already fetched during conflict detection, so use merge not pull)
                     pull_succeeded = True
                     try:
 
-                        def pull_changes():
+                        def merge_changes():
+                            # Get the remote branch name (usually origin/main or origin/master)
                             origin = git_repo.remotes.origin
-                            # Use --rebase=false to handle divergent branches
-                            git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
+                            remote_branch = origin.refs[0].name  # e.g., 'origin/main'
+                            # Use merge instead of pull since we already fetched
+                            # Note: git merge doesn't have --no-rebase flag (that's for pull)
+                            git_repo.git.merge(remote_branch)
 
                         run_with_spinner(
-                            progress, spinner_task, "Pulling from remote", pull_changes, verbose, operations_task
+                            progress, spinner_task, "Merging remote changes", merge_changes, verbose, operations_task
                         )
                     except Exception as e:
                         if "would be overwritten" in str(e) or "conflict" in str(e).lower():
@@ -342,11 +518,15 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                         else:
                             raise
 
+                    # Mark that pull occurred (affects README generation decision)
+                    if pull_succeeded:
+                        change_tracker.record_pull()
+
                     # Check for conflict markers after pull
                     if not pull_succeeded or _has_conflict_markers(repository.path):
 
                         def resolve_markers():
-                            return _resolve_conflict_markers(repository, progress.console)
+                            return _resolve_conflict_markers(repository, progress.console, task_cache)
 
                         resolved_files, _ = run_with_spinner(
                             progress,
@@ -362,56 +542,84 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                 f"  [green]✓[/green] Auto-resolved {len(resolved_files)} conflicted file(s)"
                             )
 
-                            def commit_resolutions():
+                            # Stage resolved files (don't commit yet - will consolidate later)
+                            def stage_resolutions():
                                 for file_path in resolved_files:
                                     git_repo.git.add(str(file_path))
-                                git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_files)} conflict marker(s)")
 
                             run_with_spinner(
                                 progress,
                                 spinner_task,
-                                "Committing conflict resolutions",
-                                commit_resolutions,
+                                "Staging conflict resolutions",
+                                stage_resolutions,
                                 verbose,
                                 operations_task,
                             )
 
-                    # Generate README with all tasks
-                    def generate_readme():
-                        task_count = len(repository.list_tasks(include_archived=False))
-                        repository.generate_readme(config)
-                        return task_count
+                            change_tracker.record_marker_resolution(len(resolved_files))
 
-                    task_count, _ = run_with_spinner(
-                        progress, spinner_task, "Updating README", generate_readme, verbose, operations_task
-                    )
-                    if verbose:
-                        progress.console.print(f"    [dim]({task_count} tasks)[/dim]")
+                    # Smart README generation - only regenerate if tasks may have changed
+                    if change_tracker.should_regenerate_readme():
 
-                    # Generate archive README with archived tasks
-                    def generate_archive_readme():
-                        repository.generate_archive_readme(config)
+                        def generate_readme():
+                            task_count = len(repository.list_tasks(include_archived=False))
+                            repository.generate_readme(config)
+                            return task_count
 
-                    run_with_spinner(
-                        progress,
-                        spinner_task,
-                        "Updating archive README",
-                        generate_archive_readme,
-                        verbose,
-                        operations_task,
-                    )
+                        task_count, _ = run_with_spinner(
+                            progress, spinner_task, "Updating README", generate_readme, verbose, operations_task
+                        )
+                        if verbose:
+                            progress.console.print(f"    [dim]({task_count} tasks)[/dim]")
 
-                    # Check if README was changed and commit it
-                    if git_repo.is_dirty(untracked_files=True):
-
-                        def commit_readme():
-                            git_repo.git.add("README.md")
-                            git_repo.git.add("tasks/archive/README.md")
-                            git_repo.index.commit("Auto-update: README with tasks and archive")
+                        # Generate archive README with archived tasks
+                        def generate_archive_readme():
+                            repository.generate_archive_readme(config)
 
                         run_with_spinner(
-                            progress, spinner_task, "Committing README changes", commit_readme, verbose, operations_task
+                            progress,
+                            spinner_task,
+                            "Updating archive README",
+                            generate_archive_readme,
+                            verbose,
+                            operations_task,
                         )
+
+                        # Check if README was actually changed and stage it (don't commit yet)
+                        if git_repo.is_dirty(untracked_files=True):
+
+                            def stage_readme():
+                                git_repo.git.add("README.md")
+                                git_repo.git.add("tasks/archive/README.md")
+
+                            run_with_spinner(
+                                progress, spinner_task, "Staging README changes", stage_readme, verbose, operations_task
+                            )
+
+                            change_tracker.record_readme_change()
+                    else:
+                        progress.console.print("  [dim]→ Skipping README generation (no task changes)[/dim]")
+                        if verbose:
+                            progress.console.print("    [dim](Use sync with task changes to update README)[/dim]")
+
+                    # Consolidated commit: Combine all staged changes into a single commit
+                    if git_repo.is_dirty(index=True, working_tree=False, untracked_files=False):
+                        # We have staged changes, create consolidated commit
+                        def create_consolidated_commit():
+                            commit_message = change_tracker.get_commit_message()
+                            git_repo.index.commit(commit_message)
+
+                        run_with_spinner(
+                            progress,
+                            spinner_task,
+                            "Creating consolidated commit",
+                            create_consolidated_commit,
+                            verbose,
+                            operations_task,
+                        )
+                    elif change_tracker.changes_to_commit:
+                        # We tracked changes but nothing is staged (unusual, but possible)
+                        progress.console.print("  [dim]→ No changes to commit[/dim]")
 
                     # Push changes
                     if push:
@@ -426,7 +634,10 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                 else:
                     progress.console.print("  • No remote configured (local repository only)")
 
-                    # Generate README for local repo
+                    # For local repos, always regenerate README (no pull to track)
+                    # But use same smart generation logic
+                    change_tracker.record_pull()  # Simulate that "changes occurred" to trigger README generation
+
                     def generate_readme():
                         task_count = len(repository.list_tasks(include_archived=False))
                         repository.generate_readme(config)
@@ -451,16 +662,33 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                         operations_task,
                     )
 
-                    # Check if README was changed and commit it
+                    # Check if README was changed and stage it
                     if git_repo.is_dirty(untracked_files=True):
 
-                        def commit_readme():
+                        def stage_readme():
                             git_repo.git.add("README.md")
                             git_repo.git.add("tasks/archive/README.md")
-                            git_repo.index.commit("Auto-update: README with tasks and archive")
 
                         run_with_spinner(
-                            progress, spinner_task, "Committing README changes", commit_readme, verbose, operations_task
+                            progress, spinner_task, "Staging README changes", stage_readme, verbose, operations_task
+                        )
+
+                        change_tracker.record_readme_change()
+
+                    # Consolidated commit for local repo
+                    if git_repo.is_dirty(index=True, working_tree=False, untracked_files=False):
+
+                        def create_consolidated_commit():
+                            commit_message = change_tracker.get_commit_message()
+                            git_repo.index.commit(commit_message)
+
+                        run_with_spinner(
+                            progress,
+                            spinner_task,
+                            "Creating consolidated commit",
+                            create_consolidated_commit,
+                            verbose,
+                            operations_task,
                         )
 
                 # Record timing for this repository
@@ -472,12 +700,14 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     progress.update(overall_task, advance=1)
 
             except GitCommandError as e:
+                _log_sync_error(repository.name, e)
                 progress.console.print(f"  [red]✗[/red] Git error: {escape(str(e))}", style="red")
                 repo_timings[repository.name] = time.perf_counter() - repo_start_time
                 if overall_task is not None:
                     progress.update(overall_task, advance=1)
                 continue
             except Exception as e:
+                _log_sync_error(repository.name, e)
                 progress.console.print(f"  [red]✗[/red] Error: {escape(str(e))}", style="red")
                 repo_timings[repository.name] = time.perf_counter() - repo_start_time
                 if overall_task is not None:
@@ -580,7 +810,9 @@ def _has_conflict_markers(repo_path: Path) -> bool:
     return False
 
 
-def _resolve_conflict_markers(repository: Repository, console: Console) -> list[Path]:
+def _resolve_conflict_markers(
+    repository: Repository, console: Console, task_cache: "TaskCache | None" = None
+) -> list[Path]:
     """Resolve git conflict markers in task files automatically.
 
     Parses conflicted files, extracts local and remote versions,
@@ -590,6 +822,7 @@ def _resolve_conflict_markers(repository: Repository, console: Console) -> list[
     Args:
         repository: Repository object
         console: Rich console for output
+        task_cache: Optional TaskCache to avoid redundant parsing and invalidate on changes
 
     Returns:
         List of file paths that were resolved
@@ -658,6 +891,10 @@ def _resolve_conflict_markers(repository: Repository, console: Console) -> list[
                 # Save and validate
                 repository.save_task(resolved_task)
 
+                # Invalidate cache since task was modified
+                if task_cache:
+                    task_cache.invalidate(task_file)
+
                 # Verify conflict markers are gone
                 verified_content = task_file.read_text()
                 if "<<<<<<< HEAD" in verified_content:
@@ -696,10 +933,8 @@ def _extract_local_from_markers(content: str) -> str | None:
         Content with local version only, or None if extraction fails
     """
     try:
-        # Pattern to extract everything except the remote section
-        # Matches: <<<<<<< HEAD\n{local}\n=======\n{remote}\n>>>>>>> {commit}
-        pattern = r"<<<<<<< HEAD\s*\n(.*?)\n=======\s*\n.*?\n>>>>>>> [^\n]*\n?"
-        result = re.sub(pattern, r"\1\n", content, flags=re.DOTALL)
+        # Use pre-compiled pattern to extract everything except the remote section
+        result = CONFLICT_MARKER_EXTRACT_PATTERN.sub(r"\1\n", content)
 
         # Verify markers are removed
         if "<<<<<<< HEAD" not in result and "=======" not in result and ">>>>>>>" not in result:
@@ -724,16 +959,12 @@ def _parse_conflicted_file(content: str, file_path: Path, repo_name: str) -> tup
         # Extract task ID from filename
         task_id = file_path.stem.replace("task-", "")
 
-        # Split by conflict markers
-        # Pattern: <<<<<<< HEAD\n{local}\n=======\n{remote}\n>>>>>>> {commit}
-        # More flexible pattern to handle various formats
-        pattern = r"<<<<<<< HEAD\s*\n(.*?)\n=======\s*\n(.*?)\n>>>>>>> [^\n]*"
-        match = re.search(pattern, content, re.DOTALL)
+        # Use pre-compiled pattern to split by conflict markers
+        match = CONFLICT_MARKER_PATTERN.search(content)
 
         if not match:
             # Try alternative pattern without strict newline requirements
-            pattern_alt = r"<<<<<<< HEAD(.*?)=======(.*?)>>>>>>> "
-            match = re.search(pattern_alt, content, re.DOTALL)
+            match = CONFLICT_MARKER_ALT_PATTERN.search(content)
             if not match:
                 return None, None
 

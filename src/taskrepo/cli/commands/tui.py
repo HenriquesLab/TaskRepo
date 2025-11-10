@@ -2,6 +2,7 @@
 
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 import click
@@ -14,12 +15,112 @@ from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all
 from taskrepo.utils.id_mapping import save_id_cache
 from taskrepo.utils.sorting import sort_tasks
 
+# Global flag to track background sync status
+_background_sync_completed = False
+_background_sync_running = False
+_background_sync_completion_time = None
+_background_sync_error = False
+
+
+def _mark_as_not_synced(task_tui: TaskTUI):
+    """Mark TUI as having unsaved changes after local modifications and clear task cache."""
+    from taskrepo.core.repository import clear_task_cache
+
+    task_tui.sync_status = "idle"
+    task_tui.has_unsaved_changes = True  # Track that there are local changes
+    task_tui.sync_message = None
+    # Note: We preserve last_sync_time so the status bar can show "Synced X ago (unsaved)"
+
+    # Clear task cache so modified tasks are re-loaded with fresh data
+    clear_task_cache()
+
+
+def _background_sync(config):
+    """Run sync in background thread using subprocess to avoid terminal interference."""
+    import time
+
+    from taskrepo.utils.sync_history import SyncHistory
+
+    global \
+        _background_sync_completed, \
+        _background_sync_running, \
+        _background_sync_completion_time, \
+        _background_sync_error
+
+    _background_sync_running = True
+    _background_sync_completed = False
+    _background_sync_completion_time = None
+    _background_sync_error = False
+
+    # Load sync history for recording
+    sync_history = SyncHistory()
+
+    try:
+        # Find the taskrepo executable (might be 'tsk' or 'taskrepo')
+        import shutil
+
+        tsk_cmd = shutil.which("tsk") or shutil.which("taskrepo")
+        if not tsk_cmd:
+            # Fallback: try to use python module invocation
+            tsk_cmd = None
+
+        # Run sync as subprocess with output suppressed to avoid interfering with TUI
+        if tsk_cmd:
+            result = subprocess.run(
+                [tsk_cmd, "sync"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=300,  # 5 minute timeout
+            )
+        else:
+            # Fallback: invoke as python module
+            import sys
+
+            result = subprocess.run(
+                [sys.executable, "-m", "taskrepo.cli.main", "sync"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=300,  # 5 minute timeout
+            )
+
+        if result.returncode == 0:
+            _background_sync_completed = True
+            _background_sync_completion_time = time.time()
+            # Record successful sync to history (repo details not available from subprocess)
+            sync_history.add_entry(success=True, repos_synced=["all"], repos_failed=[])
+        else:
+            # Sync command failed (non-zero exit code)
+            _background_sync_error = True
+            # Record failed sync to history
+            sync_history.add_entry(
+                success=False,
+                repos_synced=[],
+                repos_failed=["unknown"],
+                error_message="Sync subprocess returned non-zero exit code",
+            )
+    except subprocess.TimeoutExpired:
+        # Timeout error
+        _background_sync_error = True
+        sync_history.add_entry(
+            success=False, repos_synced=[], repos_failed=["unknown"], error_message="Sync timed out after 5 minutes"
+        )
+    except Exception as e:
+        # Other error
+        _background_sync_error = True
+        sync_history.add_entry(success=False, repos_synced=[], repos_failed=["unknown"], error_message=str(e))
+    finally:
+        _background_sync_running = False
+
 
 @click.command()
 @click.option("--repo", "-r", help="Start in specific repository")
+@click.option("--no-sync", is_flag=True, help="Disable automatic background sync on startup")
 @click.pass_context
-def tui(ctx, repo):
+def tui(ctx, repo, no_sync):
     """Launch interactive TUI for task management.
+
+    By default, a background sync runs automatically on startup.
+    Use --no-sync to disable this behavior.
 
     The TUI provides a full-screen interface for managing tasks with keyboard shortcuts:
 
@@ -57,14 +158,42 @@ def tui(ctx, repo):
         click.echo("Create one with: tsk create-repo")
         ctx.exit(1)
 
-    # Check for unresolved merge conflicts before starting TUI
-    conflicts = scan_all_repositories(Path(config.parent_dir).expanduser())
-    if conflicts:
+    # Clear sync error log at start of TUI session
+    sync_error_log = Path.home() / ".TaskRepo" / "sync_error.log"
+    if sync_error_log.exists():
+        sync_error_log.unlink()
+
+    # Initialize sync history (loads existing history from disk)
+    from taskrepo.utils.sync_history import SyncHistory
+
+    SyncHistory()  # Load existing history from disk to initialize the singleton
+
+    # Check for merge conflicts and auto-resolve if possible
+    parent_path = Path(config.parent_dir).expanduser()
+
+    # First scan to count total conflicts
+    all_conflicts = scan_all_repositories(parent_path, auto_resolve=False)
+    total_conflicts = sum(len(files) for files in all_conflicts.values())
+
+    # Scan again with auto-resolve enabled
+    unresolved_conflicts = scan_all_repositories(parent_path, auto_resolve=True)
+    auto_resolved_count = total_conflicts - sum(len(files) for files in unresolved_conflicts.values())
+
+    # Show warning if there are conflicts (resolved or unresolved)
+    if total_conflicts > 0:
         console = Console()
-        display_conflict_warning(conflicts, console)
-        if not click.confirm("Continue anyway?", default=False):
-            click.echo("Aborted. Please resolve conflicts first with: tsk sync")
-            ctx.exit(1)
+        display_conflict_warning(unresolved_conflicts, console, auto_resolved=auto_resolved_count)
+
+        # Only prompt if there are still unresolved conflicts
+        if unresolved_conflicts:
+            if not click.confirm("Continue anyway?", default=False):
+                click.echo("Aborted. Please resolve conflicts first with: tsk sync")
+                ctx.exit(1)
+
+    # Start background sync unless disabled
+    if not no_sync:
+        sync_thread = threading.Thread(target=_background_sync, args=(config,), daemon=True)
+        sync_thread.start()
 
     # If repo specified, find its index and start there
     start_repo_idx = -1  # Default to "All" tab
@@ -203,6 +332,8 @@ def _handle_new_task(task_tui: TaskTUI, config):
     )
 
     repo.save_task(task)
+    _mark_as_not_synced(task_tui)
+    task_tui._force_reload()
     click.secho(f"\n✓ Created task: {task.title}", fg="green")
 
 
@@ -213,7 +344,7 @@ def _handle_edit_task(task_tui: TaskTUI, config):
         return
 
     if len(selected_tasks) > 1:
-        click.secho("\n⚠ Cannot edit multiple tasks at once. Select only one task.", fg="yellow")
+        click.secho("\n⚠ Cannot edit multiple tasks. Select only one.", fg="yellow")
         return
 
     task = selected_tasks[0]
@@ -227,43 +358,70 @@ def _handle_edit_task(task_tui: TaskTUI, config):
             click.secho(f"\n✗ Could not find repository for task: {task.repo}", fg="red")
             return
 
-    # Open task in editor
-    editor = config.default_editor or "nano"
-
-    # Create temp file with task content
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write(task.to_markdown())
-        temp_path = f.name
+    # Ask user to choose edit mode
+    click.echo("\n" + "=" * 50)
+    click.echo(f"Edit Task: {task.title}")
+    click.echo("=" * 50)
+    click.echo("\nEdit mode:")
+    click.echo("  (i) Interactive prompts (default)")
+    click.echo("  (e) Text editor")
 
     try:
-        # Open editor
-        subprocess.run([editor, temp_path], check=True)
+        mode = click.prompt("\nChoose mode", type=str, default="i").lower()
+    except (click.Abort, EOFError):
+        click.echo("\nCancelled.")
+        return
 
-        # Read back the modified content
-        with open(temp_path) as f:
-            content = f.read()
+    if mode == "e":
+        # Use editor mode
+        editor = config.default_editor or "nano"
 
-        # Parse and save
-        from taskrepo.core.task import Task
+        # Create temp file with task content
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(task.to_markdown())
+            temp_path = f.name
 
-        updated_task = Task.from_markdown(content, task_id=task.id, repo=repo.name)
-        updated_task.modified = task.modified  # Preserve original modified time initially
+        try:
+            # Open editor
+            subprocess.run([editor, temp_path], check=True)
 
-        # Update modified time if content changed
-        if updated_task.to_markdown() != task.to_markdown():
-            from datetime import datetime
+            # Read back the modified content
+            with open(temp_path) as f:
+                content = f.read()
 
-            updated_task.modified = datetime.now()
-            repo.save_task(updated_task)
-            click.secho(f"\n✓ Updated task: {updated_task.title}", fg="green")
-        else:
-            click.echo("\nNo changes made.")
+            # Parse and save
+            from taskrepo.core.task import Task
 
-    except Exception as e:
-        click.secho(f"\n✗ Error editing task: {e}", fg="red")
-    finally:
-        # Clean up temp file
-        Path(temp_path).unlink(missing_ok=True)
+            updated_task = Task.from_markdown(content, task_id=task.id, repo=repo.name)
+            updated_task.modified = task.modified  # Preserve original modified time initially
+
+            # Update modified time if content changed
+            if updated_task.to_markdown() != task.to_markdown():
+                from datetime import datetime
+
+                updated_task.modified = datetime.now()
+                repo.save_task(updated_task)
+                _mark_as_not_synced(task_tui)
+                click.secho(f"\n✓ Updated task: {updated_task.title}", fg="green")
+                # Force immediate reload to show changes
+                task_tui._force_reload()
+            else:
+                click.echo("\nNo changes made.")
+
+        except Exception as e:
+            click.secho(f"\n✗ Error editing task: {e}", fg="red")
+        finally:
+            # Clean up temp file
+            Path(temp_path).unlink(missing_ok=True)
+    else:
+        # Use interactive prompts (default)
+        from taskrepo.cli.commands.edit import _edit_task_interactive
+
+        changed = _edit_task_interactive(task, repo)
+        if changed:
+            _mark_as_not_synced(task_tui)
+            # Force immediate reload to show changes
+            task_tui._force_reload()
 
 
 def _handle_in_progress_toggle(task_tui: TaskTUI):
@@ -293,6 +451,12 @@ def _handle_in_progress_toggle(task_tui: TaskTUI):
         task.modified = datetime.now()
         repo.save_task(task)
 
+    # Mark TUI as not synced since we made local changes
+    _mark_as_not_synced(task_tui)
+
+    # Force immediate reload to show changes
+    task_tui._force_reload()
+
     # Clear multi-selection (no message, immediate return to TUI)
     task_tui.multi_selected.clear()
 
@@ -319,6 +483,14 @@ def _handle_status_change(task_tui: TaskTUI, new_status: str):
         task.modified = datetime.now()
         repo.save_task(task)
 
+    # Mark TUI as not synced since we made local changes
+    _mark_as_not_synced(task_tui)
+
+    # Force immediate reload to show changes
+    # If status change removes task from view (completed/cancelled), select task above
+    removes_from_view = new_status in ["completed", "cancelled"]
+    task_tui._force_reload(select_above=removes_from_view)
+
     # Clear multi-selection (no message, immediate return to TUI)
     task_tui.multi_selected.clear()
 
@@ -344,6 +516,12 @@ def _handle_priority_change(task_tui: TaskTUI, new_priority: str):
         task.priority = new_priority
         task.modified = datetime.now()
         repo.save_task(task)
+
+    # Mark TUI as not synced since we made local changes
+    _mark_as_not_synced(task_tui)
+
+    # Force immediate reload to show changes
+    task_tui._force_reload()
 
     # Clear multi-selection (no message, immediate return to TUI)
     task_tui.multi_selected.clear()
@@ -376,6 +554,11 @@ def _handle_delete_task(task_tui: TaskTUI):
             continue
 
         repo.delete_task(task.id)
+
+    # Mark TUI as not synced since we made local changes
+    _mark_as_not_synced(task_tui)
+    # Select task above after deleting
+    task_tui._force_reload(select_above=True)
 
     if len(selected_tasks) == 1:
         click.secho(f"\n✓ Deleted task: {selected_tasks[0].title}", fg="green")
@@ -419,6 +602,11 @@ def _handle_archive_task(task_tui: TaskTUI, config):
             click.secho(f"\n✗ Could not archive task: {task.title}", fg="red")
 
     if archived_count > 0:
+        # Mark TUI as not synced since we made local changes
+        _mark_as_not_synced(task_tui)
+        # Select task above after archiving
+        task_tui._force_reload(select_above=True)
+
         if len(selected_tasks) == 1:
             click.secho(f"\n✓ Archived task: {selected_tasks[0].title}", fg="green")
         else:
@@ -527,6 +715,10 @@ def _handle_move_task(task_tui: TaskTUI, config):
             click.secho(f"\n✗ Failed to move task '{task.title}': {str(e)}", fg="red")
 
     if moved_count > 0:
+        # Mark TUI as not synced since we made local changes
+        _mark_as_not_synced(task_tui)
+        task_tui._force_reload()
+
         if len(selected_tasks) == 1:
             click.secho(f"\n✓ Moved task to '{target_repo.name}': {selected_tasks[0].title}", fg="green")
         else:
@@ -607,6 +799,8 @@ def _handle_subtask(task_tui: TaskTUI, config):
     )
 
     repo.save_task(task)
+    _mark_as_not_synced(task_tui)
+    task_tui._force_reload()
     click.secho(f"\n✓ Created subtask: {task.title}", fg="green")
 
     # Clear multi-selection
@@ -685,6 +879,10 @@ def _handle_extend(task_tui: TaskTUI, config):
 
     # Show result
     if extended_count > 0:
+        # Mark TUI as not synced since we made local changes
+        _mark_as_not_synced(task_tui)
+        task_tui._force_reload()
+
         action_verb = "Updated" if is_absolute_date else "Extended"
         if len(selected_tasks) == 1:
             click.secho(f"\n✓ {action_verb} task: {selected_tasks[0].title}", fg="green")
@@ -821,6 +1019,12 @@ def _handle_sync(task_tui: TaskTUI, config):
 
     from taskrepo.tui.conflict_resolver import resolve_conflict_interactive
     from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
+    from taskrepo.utils.sync_history import SyncHistory
+
+    # Track sync results for history
+    repos_synced = []
+    repos_failed = []
+    error_messages = []
 
     # Determine which repositories to sync based on current view
     if task_tui.current_view_idx == -1:
@@ -997,11 +1201,37 @@ def _handle_sync(task_tui: TaskTUI, config):
             else:
                 click.secho("  ℹ No remote configured (local-only repository)", fg="cyan")
 
+            # Record successful sync
+            repos_synced.append(repository.name)
+
         except GitCommandError as e:
             click.secho(f"  ✗ Git error: {e}", fg="red")
+            repos_failed.append(repository.name)
+            error_messages.append(f"{repository.name}: Git error - {str(e)}")
         except Exception as e:
             click.secho(f"  ✗ Error: {e}", fg="red")
+            repos_failed.append(repository.name)
+            error_messages.append(f"{repository.name}: {str(e)}")
 
     click.echo("\n" + "=" * 50)
     click.secho("Sync complete!", fg="green")
     click.echo("=" * 50)
+
+    # Record sync to history
+    import time
+
+    sync_history = SyncHistory()
+    overall_success = len(repos_failed) == 0
+    error_summary = "; ".join(error_messages) if error_messages else None
+
+    sync_history.add_entry(
+        success=overall_success,
+        repos_synced=repos_synced,
+        repos_failed=repos_failed,
+        error_message=error_summary,
+    )
+
+    # Mark as synced and clear unsaved changes flag
+    task_tui.last_sync_time = time.time()
+    task_tui.has_unsaved_changes = False
+    task_tui.sync_status = "success" if overall_success else "error"

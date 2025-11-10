@@ -118,14 +118,16 @@ def get_countdown_text(due_date: datetime, status: str = None) -> tuple[str, str
     hours = diff.seconds // 3600
 
     # Handle overdue (use negative numbers for compactness)
+    # Use ceiling division to be conservative (show MORE overdue)
     if days < 0:
         abs_days = abs(days)
         if abs_days < 7:
-            # Show in days: -1d, -3d, etc.
+            # Show in days for less than 1 week overdue: -1d, -2d, etc.
             text = f"-{abs_days}d"
         else:
             # Show in weeks: -1w, -2w, etc.
-            weeks = abs_days // 7
+            # Use ceiling division: 7-13 days = -2w, 14-20 days = -3w
+            weeks = (abs_days + 6) // 7
             text = f"-{weeks}w"
         return text, "red"
 
@@ -137,31 +139,29 @@ def get_countdown_text(due_date: datetime, status: str = None) -> tuple[str, str
             text = "today"
         return text, "yellow"
 
-    # Handle 1-6 days (urgent)
-    if days < 7:
-        if days == 1:
-            return "1 day", "yellow"
-        return f"{days} days", "yellow"
-
-    # Handle weeks (up to ~6 weeks)
+    # Handle all future dates with ceiling division (more conservative)
+    # This rounds UP to provide a safer estimate
     if days < 45:
-        weeks = days // 7
+        # Use ceiling division to round up to weeks
+        weeks = (days + 6) // 7  # Ceiling: 1-6 days → 1 week, 7-13 days → 2 weeks, etc.
         if weeks == 1:
-            return "1 week", "green"
+            return "1 week", "yellow"  # 1-6 days are still urgent
         return f"{weeks} weeks", "green"
 
     # Handle months (45+ days)
-    months = days // 30
+    # Use ceiling division to round UP (more conservative)
+    months = (days + 29) // 30  # Ceiling division: rounds up
     if months == 1:
         return "1 month", "green"
     return f"{months} months", "green"
 
 
-def build_task_tree(tasks: list[Task]) -> list[tuple[Task, int, bool, list[bool]]]:
+def build_task_tree(tasks: list[Task], config: Config) -> list[tuple[Task, int, bool, list[bool]]]:
     """Build a hierarchical tree structure from a flat list of tasks.
 
     Args:
         tasks: Flat list of Task objects
+        config: Configuration object for sorting preferences
 
     Returns:
         List of tuples: (task, depth, is_last_child, ancestor_positions)
@@ -179,6 +179,16 @@ def build_task_tree(tasks: list[Task]) -> list[tuple[Task, int, bool, list[bool]
                 children_map[task.parent] = []
             children_map[task.parent].append(task)
 
+    # Sort children within each parent
+    # For subtasks, prioritize due date first, then apply the configured sort order
+    # This ensures urgent subtasks appear first regardless of other sort criteria
+    for parent_id in children_map:
+        # Create a temporary config that prioritizes due date for subtasks
+        subtask_config = Config()
+        subtask_config.sort_by = ["due"] + [f for f in config.sort_by if f.lstrip("-") != "due"]
+        subtask_config.cluster_due_dates = config.cluster_due_dates
+        children_map[parent_id] = sort_tasks(children_map[parent_id], subtask_config, all_tasks=tasks)
+
     # Recursive function to build tree
     def add_to_tree(task: Task, depth: int, ancestor_positions: list[bool], result: list):
         # Determine if this is the last child
@@ -189,7 +199,7 @@ def build_task_tree(tasks: list[Task]) -> list[tuple[Task, int, bool, list[bool]
 
         result.append((task, depth, is_last, ancestor_positions.copy()))
 
-        # Add children
+        # Add children (already sorted)
         children = children_map.get(task.id, [])
         for child in children:
             new_ancestors = ancestor_positions + [is_last]
@@ -300,8 +310,8 @@ def display_tasks_table(
         # Pass all tasks for effective due date calculation (includes subtasks)
         sorted_top_level = sort_tasks(top_level, config, all_tasks=tasks)
 
-        # Build tree structure
-        tree_items = build_task_tree(sorted_top_level + subtasks)
+        # Build tree structure (subtasks will be sorted within their parents)
+        tree_items = build_task_tree(sorted_top_level + subtasks, config)
 
         # Extract tasks in tree order for display
         display_tasks = [item[0] for item in tree_items]

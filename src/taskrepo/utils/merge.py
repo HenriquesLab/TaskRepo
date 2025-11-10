@@ -1,13 +1,18 @@
 """Merge conflict detection and resolution utilities for TaskRepo."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from git import Repo as GitRepo
 
 from taskrepo.core.task import Task
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
 @dataclass
@@ -29,7 +34,9 @@ class ConflictInfo:
     can_auto_merge: bool
 
 
-def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
+def detect_conflicts(
+    git_repo: GitRepo, base_path: Path, task_cache: Any = None, skip_fetch: bool = False
+) -> list[ConflictInfo]:
     """Detect merge conflicts between local and remote branches.
 
     Fetches remote changes without merging and compares task files
@@ -38,6 +45,8 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
     Args:
         git_repo: GitPython repository object
         base_path: Base path of the repository (for resolving file paths)
+        task_cache: Optional TaskCache object to avoid redundant parsing
+        skip_fetch: Skip fetch operation if already performed (optimization)
 
     Returns:
         List of ConflictInfo objects for conflicting tasks
@@ -45,14 +54,15 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
     Raises:
         GitCommandError: If fetch or diff operations fail
     """
-    conflicts = []
+    conflicts: list[ConflictInfo] = []
 
     # Fetch remote changes without merging
     if not git_repo.remotes:
         return conflicts  # No remote, no conflicts
 
     origin = git_repo.remotes.origin
-    origin.fetch()
+    if not skip_fetch:
+        origin.fetch()
 
     # Get the remote branch name (usually origin/main or origin/master)
     try:
@@ -68,18 +78,18 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
         return conflicts  # No commits or diff failed
 
     # Track files modified in both branches
-    local_modified_files = set()
-    remote_modified_files = set()
+    local_modified_files: set[str] = set()
+    remote_modified_files: set[str] = set()
 
     for diff_item in diff_index:
         # Check if file exists in both versions (modified on both sides)
         if diff_item.a_path and diff_item.b_path:
-            file_path = diff_item.a_path
+            file_path_str = diff_item.a_path
             # Only consider task markdown files
-            if file_path.startswith("tasks/") and file_path.endswith(".md"):
+            if file_path_str.startswith("tasks/") and file_path_str.endswith(".md"):
                 if diff_item.change_type in ["M", "R"]:  # Modified or renamed
-                    local_modified_files.add(file_path)
-                    remote_modified_files.add(file_path)
+                    local_modified_files.add(file_path_str)
+                    remote_modified_files.add(file_path_str)
 
     # Check for actual conflicts in task files
     conflicting_files = local_modified_files & remote_modified_files
@@ -93,18 +103,35 @@ def detect_conflicts(git_repo: GitRepo, base_path: Path) -> list[ConflictInfo]:
             continue
 
         try:
-            # Load local version
+            # Extract task metadata
+            task_id = file_path.stem.replace("task-", "")
+            repo_name = base_path.name.replace("tasks-", "")
+
+            # Load local version (use cache if available)
             with open(abs_file_path, "r", encoding="utf-8") as f:
                 local_content = f.read()
-            local_task = Task.from_markdown(
-                local_content, task_id=file_path.stem.replace("task-", ""), repo=base_path.name.replace("tasks-", "")
-            )
 
-            # Load remote version
+            local_task = None
+            if task_cache:
+                local_task = task_cache.get(abs_file_path, local_content)
+
+            if not local_task:
+                local_task = Task.from_markdown(local_content, task_id=task_id, repo=repo_name)
+                if task_cache:
+                    task_cache.set(abs_file_path, local_task, local_content)
+
+            # Load remote version (build cache key for remote)
             remote_content = git_repo.git.show(f"{remote_branch}:{file_path_str}")
-            remote_task = Task.from_markdown(
-                remote_content, task_id=file_path.stem.replace("task-", ""), repo=base_path.name.replace("tasks-", "")
-            )
+            remote_cache_key = abs_file_path.parent / f"remote_{abs_file_path.name}"
+
+            remote_task = None
+            if task_cache:
+                remote_task = task_cache.get(remote_cache_key, remote_content)
+
+            if not remote_task:
+                remote_task = Task.from_markdown(remote_content, task_id=task_id, repo=repo_name)
+                if task_cache:
+                    task_cache.set(remote_cache_key, remote_task, remote_content)
 
             # Compare tasks and find conflicting fields
             conflicting_fields = _find_conflicting_fields(local_task, remote_task)

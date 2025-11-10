@@ -1,12 +1,40 @@
 """Repository discovery and management."""
 
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from git import Repo as GitRepo
 
 from taskrepo.core.task import Task
+
+
+@lru_cache(maxsize=512)
+def _load_task_cached(file_path: str, mtime: float, repo: str) -> Task:
+    """Load and parse a task file with LRU caching.
+
+    Caches parsed Task objects based on file path and modification time.
+    When mtime changes, the cache is automatically invalidated.
+
+    Args:
+        file_path: Path to task file (as string for hashability)
+        mtime: File modification time (for cache invalidation)
+        repo: Repository name
+
+    Returns:
+        Parsed Task object
+    """
+    return Task.load(Path(file_path), repo=repo)
+
+
+def clear_task_cache():
+    """Clear the task loading cache.
+
+    Call this after modifying tasks to ensure fresh data is loaded.
+    Useful when tasks are updated outside of the normal flow.
+    """
+    _load_task_cached.cache_clear()
 
 
 class Repository:
@@ -99,6 +127,8 @@ class Repository:
     def list_tasks(self, include_archived: bool = False) -> list[Task]:
         """List all tasks in this repository.
 
+        Uses LRU caching to avoid re-parsing unchanged task files.
+
         Args:
             include_archived: If True, also load tasks from archive/ folder
 
@@ -111,7 +141,9 @@ class Repository:
         if self.tasks_dir.exists():
             for task_file in sorted(self.tasks_dir.glob("task-*.md")):
                 try:
-                    task = Task.load(task_file, repo=self.name)
+                    # Use cached loading with mtime for automatic invalidation
+                    mtime = task_file.stat().st_mtime
+                    task = _load_task_cached(str(task_file), mtime, self.name)
                     tasks.append(task)
                 except Exception as e:
                     print(f"Warning: Failed to load task {task_file}: {e}")
@@ -120,7 +152,9 @@ class Repository:
         if include_archived and self.archive_dir.exists():
             for task_file in sorted(self.archive_dir.glob("task-*.md")):
                 try:
-                    task = Task.load(task_file, repo=self.name)
+                    # Use cached loading with mtime for automatic invalidation
+                    mtime = task_file.stat().st_mtime
+                    task = _load_task_cached(str(task_file), mtime, self.name)
                     tasks.append(task)
                 except Exception as e:
                     print(f"Warning: Failed to load task {task_file}: {e}")
@@ -131,6 +165,7 @@ class Repository:
         """Get a specific task by ID.
 
         Searches both tasks/ and archive/ directories.
+        Uses LRU caching to avoid re-parsing unchanged task files.
 
         Args:
             task_id: Task ID
@@ -141,12 +176,14 @@ class Repository:
         # Try tasks/ directory first
         task_file = self.tasks_dir / f"task-{task_id}.md"
         if task_file.exists():
-            return Task.load(task_file, repo=self.name)
+            mtime = task_file.stat().st_mtime
+            return _load_task_cached(str(task_file), mtime, self.name)
 
         # Try archive/ directory
         task_file = self.archive_dir / f"task-{task_id}.md"
         if task_file.exists():
-            return Task.load(task_file, repo=self.name)
+            mtime = task_file.stat().st_mtime
+            return _load_task_cached(str(task_file), mtime, self.name)
 
         return None
 
@@ -437,17 +474,22 @@ class Repository:
             hours = diff.seconds // 3600
 
             # Handle overdue
+            # Use ceiling division to be conservative (show MORE overdue)
             if days < 0:
                 abs_days = abs(days)
-                if abs_days == 1:
-                    text = "overdue by 1 day"
-                elif abs_days < 7:
-                    text = f"overdue by {abs_days} days"
-                elif abs_days < 14:
-                    text = "overdue by 1 week"
+                if abs_days < 7:
+                    # Show in days for less than 1 week overdue
+                    if abs_days == 1:
+                        text = "overdue by 1 day"
+                    else:
+                        text = f"overdue by {abs_days} days"
                 else:
-                    weeks = abs_days // 7
-                    text = f"overdue by {weeks} weeks"
+                    # Use ceiling division: 7-13 days = 2 weeks, 14-20 days = 3 weeks
+                    weeks = (abs_days + 6) // 7
+                    if weeks == 1:
+                        text = "overdue by 1 week"
+                    else:
+                        text = f"overdue by {weeks} weeks"
                 return text, "⚠️"
 
             # Handle today
@@ -458,27 +500,18 @@ class Repository:
                     text = "today"
                 return text, "⏰"
 
-            # Handle tomorrow
-            if days == 1:
-                return "tomorrow", "⏰"
-
-            # Handle within 3 days (urgent)
-            if days <= 3:
-                return f"{days} days", "⏰"
-
-            # Handle within 2 weeks
-            if days < 14:
-                return f"{days} days", "📅"
-
-            # Handle weeks
-            weeks = days // 7
-            if weeks == 1:
-                return "1 week", "📅"
-            elif weeks < 4:
+            # Handle all future dates with ceiling division (more conservative)
+            # This rounds UP to provide a safer estimate
+            if days < 28:  # Up to 4 weeks
+                # Use ceiling division to round up to weeks
+                weeks = (days + 6) // 7  # Ceiling: 1-6 days → 1 week, 7-13 days → 2 weeks, etc.
+                if weeks == 1:
+                    return "1 week", "⏰"  # 1-6 days are still urgent
                 return f"{weeks} weeks", "📅"
 
-            # Handle months
-            months = days // 30
+            # Handle months (28+ days)
+            # Use ceiling division to round UP (more conservative)
+            months = (days + 29) // 30  # Ceiling division: rounds up
             if months == 1:
                 return "1 month", "📅"
             else:

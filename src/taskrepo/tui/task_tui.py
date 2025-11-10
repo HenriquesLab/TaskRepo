@@ -74,6 +74,7 @@ class TaskTUI:
         self.conflicted_repos: set[str] = set()  # repos needing manual resolution
         self.background_sync_task: Optional[asyncio.Task] = None
         self.sync_message: Optional[str] = None  # temporary status bar message
+        self.has_unsaved_changes: bool = False  # tracks local modifications since last sync
 
         # Viewport scrolling state (depends on sync state for height calculation)
         self.viewport_top = 0  # First task visible in viewport
@@ -171,12 +172,121 @@ class TaskTUI:
             return True
         return False
 
+    def _force_reload(self, preserve_selection: bool = True, select_above: bool = False):
+        """Force an immediate reload of repositories and tasks.
+
+        Call this after making changes to tasks to immediately update the display.
+
+        Args:
+            preserve_selection: Try to keep selection on the same task (default: True)
+            select_above: Move selection one position up (for deleted/archived tasks) (default: False)
+        """
+        import time
+
+        # Save current selection info before reload
+        current_task_uuid = None
+        current_position = self.selected_row
+
+        if preserve_selection or select_above:
+            tasks = self._get_filtered_tasks()
+            if tasks and 0 <= self.selected_row < len(tasks):
+                current_task_uuid = tasks[self.selected_row].id
+
+        # Track reload time
+        self.last_reload_time = time.time()
+
+        # Update mtime to current
+        self.last_mtime = self._get_repositories_mtime()
+
+        # Reload repositories from disk
+        manager = RepositoryManager(self.config.parent_dir)
+        self.repositories = manager.discover_repositories()
+
+        # Rebuild view items
+        self.view_items = self._build_view_items()
+
+        # Update ID cache with all current tasks
+        all_tasks = manager.list_all_tasks(include_archived=False)
+        sorted_tasks = sort_tasks(all_tasks, self.config, all_tasks=all_tasks)
+        save_id_cache(sorted_tasks)
+
+        # Clear multi-selection since task IDs may have changed
+        self.multi_selected.clear()
+
+        # Restore selection intelligently
+        tasks = self._get_filtered_tasks()
+
+        if select_above:
+            # For operations that remove tasks (delete, archive, done), move to task above
+            self.selected_row = max(0, current_position - 1)
+            if self.selected_row >= len(tasks):
+                self.selected_row = max(0, len(tasks) - 1)
+        elif preserve_selection and current_task_uuid:
+            # Try to find the same task by UUID
+            found = False
+            for i, task in enumerate(tasks):
+                if task.id == current_task_uuid:
+                    self.selected_row = i
+                    found = True
+                    break
+
+            if not found:
+                # Task not found (was removed or filtered out), stay at same position
+                if current_position >= len(tasks):
+                    self.selected_row = max(0, len(tasks) - 1)
+                else:
+                    self.selected_row = current_position
+        else:
+            # Default: reset selected row if out of bounds
+            if self.selected_row >= len(tasks):
+                self.selected_row = max(0, len(tasks) - 1)
+
+        # Invalidate the display to trigger a redraw
+        if hasattr(self, "app") and self.app:
+            self.app.invalidate()
+
+    def _check_background_sync_status(self):
+        """Check global background sync status from CLI and update TUI status."""
+        # Import the global flags from tui command module
+        try:
+            from taskrepo.cli.commands import tui as tui_module
+
+            if tui_module._background_sync_running:
+                if self.sync_status != "syncing":
+                    self.sync_status = "syncing"
+                    self.sync_message = "Syncing repositories..."
+                    self.app.invalidate()
+            elif tui_module._background_sync_error:
+                # Sync failed
+                if self.sync_status != "error":
+                    self.sync_status = "error"
+                    self.sync_message = "Sync failed (press 's' to retry)"
+                    self.app.invalidate()
+                    # Reset the flag
+                    tui_module._background_sync_error = False
+            elif tui_module._background_sync_completed:
+                # Use the completion time directly from the global variable
+                if self.last_sync_time != tui_module._background_sync_completion_time:
+                    self.sync_status = "success"
+                    self.sync_message = "Sync completed"
+                    self.last_sync_time = tui_module._background_sync_completion_time
+                    self.has_unsaved_changes = False  # Clear unsaved flag after successful sync
+                    self.app.invalidate()
+                    # Reset the flag so we don't keep showing success
+                    tui_module._background_sync_completed = False
+        except (ImportError, AttributeError):
+            # If we can't import or access the flags, just skip
+            pass
+
     async def _auto_reload_loop(self):
         """Background task that periodically checks for file changes and reloads."""
         import time
 
         while True:
             await asyncio.sleep(2)  # Check every 2 seconds
+
+            # Check global background sync status from CLI
+            self._check_background_sync_status()
 
             if self._check_for_changes():
                 # Track reload time
@@ -209,6 +319,8 @@ class TaskTUI:
         """Background task that periodically syncs repositories."""
         import time
 
+        from taskrepo.utils.sync_history import SyncHistory
+
         while True:
             await asyncio.sleep(self.config.auto_sync_interval)
 
@@ -220,10 +332,13 @@ class TaskTUI:
             self.sync_status = "syncing"
             self.app.invalidate()
 
-            # Sync each repository
+            # Sync each repository and track results
             success_count = 0
             error_count = 0
             conflict_count = 0
+            repos_synced = []
+            repos_failed = []
+            error_messages = []
 
             for repo in self.repositories:
                 # Skip repos already marked as conflicted
@@ -234,24 +349,44 @@ class TaskTUI:
 
                 if success:
                     success_count += 1
+                    repos_synced.append(repo.name)
                 elif has_conflicts:
                     conflict_count += 1
                     self.conflicted_repos.add(repo.name)
+                    repos_failed.append(repo.name)
+                    error_messages.append(f"{repo.name}: {error_msg}")
                 else:
                     error_count += 1
+                    repos_failed.append(repo.name)
+                    error_messages.append(f"{repo.name}: {error_msg}")
+
+            # Record sync to history
+            sync_history = SyncHistory()
+            overall_success = error_count == 0 and conflict_count == 0
+            error_summary = "; ".join(error_messages) if error_messages else None
+
+            sync_history.add_entry(
+                success=overall_success,
+                repos_synced=repos_synced,
+                repos_failed=repos_failed,
+                error_message=error_summary,
+            )
 
             # Update sync status and message
-            self.last_sync_time = time.time()
             self.next_sync_time = time.time() + self.config.auto_sync_interval
 
             if error_count > 0 or conflict_count > 0:
                 self.sync_status = "error"
+                # Don't update last_sync_time when there are errors
                 if conflict_count > 0:
                     self._set_sync_message(f"⚠ {conflict_count} repo(s) need manual sync")
                 else:
                     self._set_sync_message(f"⚠ Sync failed for {error_count} repo(s)")
             else:
+                # Only set last_sync_time when sync fully succeeds
+                self.last_sync_time = time.time()
                 self.sync_status = "success"
+                self.has_unsaved_changes = False  # Clear unsaved flag after successful sync
                 if success_count > 0:
                     self._set_sync_message(f"✓ Synced {success_count} repo(s)")
 
@@ -281,7 +416,9 @@ class TaskTUI:
 
         # Run sync in executor to avoid blocking
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, sync_repository_background, repository, self.config.auto_sync_strategy)
+        return await loop.run_in_executor(
+            None, sync_repository_background, repository, self.config.auto_sync_strategy, self.config
+        )
 
     def _should_skip_sync(self) -> bool:
         """Check if background sync should be skipped.
@@ -753,11 +890,7 @@ class TaskTUI:
         if self.filter_text:
             view_info += f" | Filter: '{html.escape(self.filter_text)}'"
 
-        # Add sync status indicator if auto-sync is enabled
-        if self.config.auto_sync_enabled:
-            sync_indicator = self._get_sync_indicator()
-            if sync_indicator:
-                view_info += f" | {sync_indicator}"
+        # Sync status is now shown in bottom status bar, no need for top bar indicator
 
         return HTML(f"<b> {view_info} </b>")
 
@@ -767,6 +900,7 @@ class TaskTUI:
         Returns:
             HTML-formatted status string with priority information
         """
+        from taskrepo.utils.sync_history import SyncHistory
         from taskrepo.utils.time_format import format_interval, format_time_ago
 
         parts = []
@@ -779,16 +913,38 @@ class TaskTUI:
         # Priority 2: Active sync status
         if self.sync_status == "syncing":
             parts.append("<cyan>🔄 Syncing...</cyan>")
-        elif self.sync_status == "error" and not self.conflicted_repos:
-            # Only show generic error if not already showing conflicts
-            parts.append("<red>✗ Sync error</red>")
 
-        # Priority 3: Last sync time
-        if self.config.auto_sync_enabled and self.last_sync_time:
-            sync_time_str = format_time_ago(self.last_sync_time)
-            parts.append(f"<green>Synced {sync_time_str}</green>")
-        elif self.config.auto_sync_enabled:
-            parts.append("<dim>Not synced yet</dim>")
+        # Priority 3: Last sync status from history (reliable source of truth)
+        if self.config.auto_sync_enabled:
+            sync_history = SyncHistory()
+            last_sync = sync_history.get_last_sync()
+
+            if last_sync:
+                sync_time_str = format_time_ago(last_sync.timestamp)
+
+                if not last_sync.success:
+                    # Show error from history (only if not already showing conflicts)
+                    if not self.conflicted_repos:
+                        failed_count = len(last_sync.repos_failed)
+                        parts.append(
+                            f"<red>✗ Sync failed {sync_time_str} ({failed_count} repo{'s' if failed_count != 1 else ''})</red>"
+                        )
+                elif self.has_unsaved_changes:
+                    # Successful sync but have local changes
+                    repo_count = len(last_sync.repos_synced)
+                    if repo_count > 1:
+                        parts.append(f"<yellow>Synced {sync_time_str} ({repo_count} repos, unsaved)</yellow>")
+                    else:
+                        parts.append(f"<yellow>Synced {sync_time_str} (unsaved)</yellow>")
+                else:
+                    # Successful sync, no local changes
+                    repo_count = len(last_sync.repos_synced)
+                    if repo_count > 1:
+                        parts.append(f"<green>Synced {sync_time_str} ({repo_count} repos)</green>")
+                    else:
+                        parts.append(f"<green>Synced {sync_time_str}</green>")
+            else:
+                parts.append("<dim>Not synced yet</dim>")
 
         # Priority 4: Last reload time
         if self.last_reload_time:
@@ -1015,7 +1171,7 @@ class TaskTUI:
             subtasks = [t for t in tasks if t.parent]
             # Pass all tasks for effective due date calculation
             sorted_top_level = sort_tasks(top_level, self.config, all_tasks=tasks)
-            tree_items = build_task_tree(sorted_top_level + subtasks)
+            tree_items = build_task_tree(sorted_top_level + subtasks, self.config)
             return [item[0] for item in tree_items]
         else:
             return sort_tasks(tasks, self.config, all_tasks=tasks)
@@ -1043,7 +1199,7 @@ class TaskTUI:
             top_level = [t for t in tasks if not t.parent]
             subtasks = [t for t in tasks if t.parent]
             if top_level or subtasks:
-                tree_items = build_task_tree(tasks)
+                tree_items = build_task_tree(tasks, self.config)
         else:
             tree_items = [(task, 0, False, []) for task in tasks]
 

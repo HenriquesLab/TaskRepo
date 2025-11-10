@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2025-11-10
+
+### Fixed
+
+- **Subtask sorting**: Subtasks now sort by due date first, regardless of global sort configuration
+  - Urgent subtasks with earlier due dates now appear first within their parent task
+  - Ensures critical subtasks are visible at the top of hierarchical task lists
+  - Applies to both TUI and CLI list views with tree display
+
+### Improved
+
+- **Conservative countdown rounding**: All countdown displays now use ceiling division (rounds UP) for more conservative time estimates
+  - Future dates: 1-6 days → "1 week", 7-13 days → "2 weeks", etc.
+  - Overdue dates: 7-13 days → "-2w", 14-20 days → "-3w", etc.
+  - Prevents underestimating urgency by always rounding to the next higher time unit
+  - Applies to both CLI and README countdown displays
+
 ## [0.10.1] - 2025-11-06
 
 ### Improved

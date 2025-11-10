@@ -92,6 +92,129 @@ def show_change_summary(changes: dict):
         click.echo(f"  {field}: {old_str} → {new_str}")
 
 
+def _edit_task_interactive(task: Task, repository) -> bool:
+    """Edit a task interactively with field-by-field prompts.
+
+    Args:
+        task: Task object to edit
+        repository: Repository containing the task
+
+    Returns:
+        True if task was modified, False otherwise
+    """
+    from taskrepo.tui import prompts
+
+    changes = {}
+
+    while True:
+        # Show field selection menu
+        field = prompts.prompt_field_selection(task)
+
+        if field is None:
+            # User cancelled
+            return False
+        elif field == "done":
+            # User finished editing
+            break
+        elif field == "all":
+            # Edit all fields
+            fields_to_edit = [
+                "title",
+                "status",
+                "priority",
+                "project",
+                "assignees",
+                "tags",
+                "links",
+                "due",
+                "parent",
+                "depends",
+                "description",
+            ]
+        else:
+            fields_to_edit = [field]
+
+        # Prompt for each selected field
+        for field_name in fields_to_edit:
+            old_value = getattr(task, field_name)
+
+            if field_name == "title":
+                new_value = prompts.prompt_title(default=task.title)
+                if new_value and new_value != old_value:
+                    task.title = new_value
+                    changes["title"] = (old_value, new_value)
+
+            elif field_name == "status":
+                new_value = prompts.prompt_status(default=task.status)
+                if new_value != old_value:
+                    task.status = new_value
+                    changes["status"] = (old_value, new_value)
+
+            elif field_name == "priority":
+                new_value = prompts.prompt_priority(default=task.priority)
+                if new_value != old_value:
+                    task.priority = new_value
+                    changes["priority"] = (old_value, new_value)
+
+            elif field_name == "project":
+                new_value = prompts.prompt_project(repository.get_projects(), default=task.project)
+                if new_value != old_value:
+                    task.project = new_value
+                    changes["project"] = (old_value, new_value)
+
+            elif field_name == "assignees":
+                new_value = prompts.prompt_assignees(repository.get_assignees(), default=task.assignees)
+                if new_value != old_value:
+                    task.assignees = new_value
+                    changes["assignees"] = (old_value, new_value)
+
+            elif field_name == "tags":
+                new_value = prompts.prompt_tags(repository.get_tags(), default=task.tags)
+                if new_value != old_value:
+                    task.tags = new_value
+                    changes["tags"] = (old_value, new_value)
+
+            elif field_name == "links":
+                new_value = prompts.prompt_links(default=task.links)
+                if new_value != old_value:
+                    task.links = new_value
+                    changes["links"] = (old_value, new_value)
+
+            elif field_name == "due":
+                new_value = prompts.prompt_due_date(default=task.due)
+                if new_value != old_value:
+                    task.due = new_value
+                    changes["due"] = (old_value, new_value)
+
+            elif field_name == "parent":
+                new_value = prompts.prompt_parent(default=task.parent)
+                if new_value != old_value:
+                    task.parent = new_value
+                    changes["parent"] = (old_value, new_value)
+
+            elif field_name == "depends":
+                new_value = prompts.prompt_depends(default=task.depends)
+                if new_value != old_value:
+                    task.depends = new_value
+                    changes["depends"] = (old_value, new_value)
+
+            elif field_name == "description":
+                new_value = prompts.prompt_description(default=task.description)
+                if new_value != old_value:
+                    task.description = new_value
+                    changes["description"] = (old_value, new_value)
+
+    # If changes were made, update timestamp and save
+    if changes:
+        task.modified = datetime.now()
+        repository.save_task(task)
+        show_change_summary(changes)
+        return True
+    else:
+        click.echo("\nNo changes made.")
+        return False
+
+
 @click.command()
 @click.argument("task_ids", nargs=-1, required=True)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
@@ -123,6 +246,7 @@ def show_change_summary(changes: dict):
 @click.option("--remove-links", help="Remove links (comma-separated URLs)")
 @click.option("--remove-depends", help="Remove dependencies (comma-separated task IDs)")
 # Control options
+@click.option("--editor", is_flag=True, help="Use text editor instead of interactive prompts")
 @click.option("--edit-mode", is_flag=True, help="Open editor after applying changes (single task only)")
 @click.option("--editor-command", default=None, help="Editor to use (overrides $EDITOR and config)")
 @click.pass_context
@@ -149,6 +273,7 @@ def edit(
     remove_tags,
     remove_links,
     remove_depends,
+    editor,
     edit_mode,
     editor_command,
 ):
@@ -223,46 +348,51 @@ def edit(
         click.secho("Error: --edit-mode flag cannot be used with batch editing", fg="red", err=True)
         ctx.exit(1)
 
-    # Handle single task with no field changes (open editor)
+    # Handle single task with no field changes
     if len(task_id_list) == 1 and not has_field_changes:
         task_id = task_id_list[0]
         result = find_task_by_title_or_id(manager, task_id, repo)
         task, repository = select_task_from_result(ctx, result, task_id)
 
-        # Open editor (original behavior)
-        editor_cmd = editor_command or os.environ.get("EDITOR") or config.default_editor or "vim"
+        if editor:
+            # Use editor mode
+            editor_cmd = editor_command or os.environ.get("EDITOR") or config.default_editor or "vim"
 
-        # Create temporary file with task content
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            temp_file = Path(f.name)
-            f.write(task.to_markdown())
+            # Create temporary file with task content
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+                temp_file = Path(f.name)
+                f.write(task.to_markdown())
 
-        # Open editor
-        try:
-            subprocess.run([editor_cmd, str(temp_file)], check=True)
-        except subprocess.CalledProcessError:
-            click.secho(f"Error: Editor '{editor_cmd}' failed", fg="red", err=True)
-            temp_file.unlink()
-            ctx.exit(1)
-        except FileNotFoundError:
-            click.secho(f"Error: Editor '{editor_cmd}' not found", fg="red", err=True)
-            temp_file.unlink()
-            ctx.exit(1)
+            # Open editor
+            try:
+                subprocess.run([editor_cmd, str(temp_file)], check=True)
+            except subprocess.CalledProcessError:
+                click.secho(f"Error: Editor '{editor_cmd}' failed", fg="red", err=True)
+                temp_file.unlink()
+                ctx.exit(1)
+            except FileNotFoundError:
+                click.secho(f"Error: Editor '{editor_cmd}' not found", fg="red", err=True)
+                temp_file.unlink()
+                ctx.exit(1)
 
-        # Read modified content
-        try:
-            content = temp_file.read_text()
-            modified_task = Task.from_markdown(content, task.id, repository.name)
-        except Exception as e:
-            click.secho(f"Error: Failed to parse edited task: {e}", fg="red", err=True)
-            temp_file.unlink()
-            ctx.exit(1)
-        finally:
-            temp_file.unlink()
+            # Read modified content
+            try:
+                content = temp_file.read_text()
+                modified_task = Task.from_markdown(content, task.id, repository.name)
+            except Exception as e:
+                click.secho(f"Error: Failed to parse edited task: {e}", fg="red", err=True)
+                temp_file.unlink()
+                ctx.exit(1)
+            finally:
+                temp_file.unlink()
 
-        # Save modified task
-        repository.save_task(modified_task)
-        click.secho(f"✓ Task updated: {modified_task}", fg="green")
+            # Save modified task
+            repository.save_task(modified_task)
+            click.secho(f"✓ Task updated: {modified_task}", fg="green")
+        else:
+            # Use interactive prompts (default)
+            _edit_task_interactive(task, repository)
+
         click.echo()
 
         # Update cache and display repository tasks

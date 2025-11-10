@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Optional
 
 from git import Repo as GitRepo
@@ -32,6 +33,24 @@ class CommitEvent:
     files_changed: list[str]
 
 
+@lru_cache(maxsize=512)
+def _parse_task_cached(commit_hash: str, task_id: str, content: str) -> Task:
+    """Parse a task with caching to avoid redundant YAML parsing.
+
+    OPTIMIZATION: Cache parsed tasks by commit+task_id to avoid re-parsing
+    the same task content multiple times during history analysis.
+
+    Args:
+        commit_hash: Git commit hash (for cache key)
+        task_id: Task ID (for cache key)
+        content: Task markdown content
+
+    Returns:
+        Parsed Task object
+    """
+    return Task.from_markdown(content, task_id)
+
+
 def get_commit_history(
     git_repo: GitRepo,
     since: Optional[datetime] = None,
@@ -52,6 +71,9 @@ def get_commit_history(
     if since:
         kwargs["since"] = since
 
+    # OPTIMIZATION: Only load commits that touch task files
+    kwargs["paths"] = ["tasks/", "archive/"]
+
     try:
         for commit in git_repo.iter_commits(**kwargs):
             # Get files changed in this commit
@@ -61,7 +83,8 @@ def get_commit_history(
             # For each parent, get the diff
             if commit.parents:
                 parent = commit.parents[0]
-                diffs = parent.diff(commit)
+                # OPTIMIZATION: Only diff task files to avoid processing non-task changes
+                diffs = parent.diff(commit, paths=["tasks/", "archive/"])
 
                 for diff in diffs:
                     # Check if this is a task file (in tasks/ or archive/)
@@ -127,7 +150,7 @@ def get_commit_history(
                         try:
                             if commit.tree / f"tasks/task-{task_id}.md":
                                 content = (commit.tree / f"tasks/task-{task_id}.md").data_stream.read().decode("utf-8")
-                                task = Task.from_markdown(content, task_id)
+                                task = _parse_task_cached(commit.hexsha, task_id, content)
                                 if task_filter.lower() in task.title.lower():
                                     filtered_changes[task_id] = changes
                         except Exception:
@@ -177,7 +200,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                 # Get task content to extract title
                 if diff.a_blob:
                     content = diff.a_blob.data_stream.read().decode("utf-8")
-                    task = Task.from_markdown(content, task_id)
+                    task = _parse_task_cached(parent_commit.hexsha, task_id, content)
                     changes.append(
                         TaskChange(
                             field="archived",
@@ -194,7 +217,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                 # Get task content to extract title
                 if diff.b_blob:
                     content = diff.b_blob.data_stream.read().decode("utf-8")
-                    task = Task.from_markdown(content, task_id)
+                    task = _parse_task_cached(current_commit.hexsha, task_id, content)
                     changes.append(
                         TaskChange(
                             field="unarchived",
@@ -218,7 +241,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         # Handle deletions
         if new_content is None and old_content is not None:
             task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
-            old_task = Task.from_markdown(old_content, task_id)
+            old_task = _parse_task_cached(parent_commit.hexsha, task_id, old_content)
             changes.append(
                 TaskChange(
                     field="deleted",
@@ -233,7 +256,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         # Handle additions
         if old_content is None and new_content is not None:
             task_id = diff.b_path.replace("tasks/task-", "").replace(".md", "")
-            new_task = Task.from_markdown(new_content, task_id)
+            new_task = _parse_task_cached(current_commit.hexsha, task_id, new_content)
             # Include priority in the creation message
             changes.append(
                 TaskChange(
@@ -248,8 +271,8 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
 
         # Parse both versions
         task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
-        old_task = Task.from_markdown(old_content, task_id)
-        new_task = Task.from_markdown(new_content, task_id)
+        old_task = _parse_task_cached(parent_commit.hexsha, task_id, old_content)
+        new_task = _parse_task_cached(current_commit.hexsha, task_id, new_content)
 
         # Compare fields
         if old_task.status != new_task.status:
