@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - 2025-11-10
+
+### Fixed
+
+- **TUI module import**: Added missing `sync_history.py` module required by the TUI command
+  - Fixes `ModuleNotFoundError` when running `tsk tui`
+  - Provides persistent logging of sync attempts for reliable status monitoring
+  - Tracks last 10 sync attempts in `~/.TaskRepo/sync_history.json`
+
 ## [0.10.3] - 2025-11-10
 
 ### Improved
