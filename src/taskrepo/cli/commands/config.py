@@ -245,78 +245,78 @@ def config_cmd(ctx, show):
 
         elif choice == "9":
             # Configure task sorting
-            click.echo(f"\nCurrent sort order: {', '.join(config.sort_by)}")
-            cluster_status = "enabled" if config.cluster_due_dates else "disabled"
-            click.echo(f"Due date clustering: {cluster_status}")
-            click.echo("\nAvailable sort fields:")
-            click.echo("  priority, due, created, modified, status, title, project, assignee")
-            click.echo("\nSpecial assignee syntax:")
-            click.echo("  assignee                - Sort by first assignee alphabetically")
-            click.echo("  assignee:@username      - Tasks for @username appear first")
-            click.echo("  -assignee:@username     - Tasks NOT for @username appear first")
-            click.echo("\nGeneral options:")
-            click.echo("  Prefix with '-' for descending order (e.g., '-created', '-priority')")
+            click.echo(f"\nCurrent: {', '.join(config.sort_by)}")
 
-            # Use default assignee in examples if set, otherwise use generic placeholder
-            example_assignee = config.default_assignee if config.default_assignee else "@username"
-            click.echo("\nExamples:")
-            click.echo(f"  assignee:{example_assignee},due,priority    - Your tasks first, then by due date")
-            click.echo("  due,priority,-created              - Due date, priority, newest first")
+            # Define presets
+            example_assignee = config.default_assignee if config.default_assignee else "@me"
+            presets = [
+                ("due,priority", "By due date, then priority (default)"),
+                ("priority,due", "By priority first, then due date"),
+                (f"assignee:{example_assignee},due,priority", "My tasks first, then by due date"),
+                ("due", "Due date only (simple)"),
+                ("-created", "Newest tasks first"),
+                ("custom", "Enter custom sort fields (advanced)"),
+            ]
 
-            click.echo("\n" + "─" * 60)
-            click.secho("About Due Date Clustering", fg="cyan", bold=True)
-            click.echo("─" * 60)
-            if config.cluster_due_dates:
-                click.secho("Currently: ENABLED", fg="green")
-            else:
-                click.secho("Currently: DISABLED", fg="yellow")
-            click.echo("\nWhen enabled, tasks are grouped by countdown time buckets:")
-            click.echo("  • Overdue (2+ weeks, 1 week, 1-6 days)")
-            click.echo("  • Today, Tomorrow, 2-3 days, 4-13 days")
-            click.echo("  • 1-3 weeks, 1 month, 2+ months")
-            click.echo("\nWithout clustering (default):")
-            click.echo("  Tasks sorted by exact due date timestamps")
-            click.echo("  Example: Task A (due 11:59 PM) before Task B (due 12:01 AM next day)")
-            click.echo("\nWith clustering:")
-            click.echo("  Tasks in same bucket sorted by next field (e.g., priority)")
-            click.echo("  Example: All 'today' tasks grouped, high priority before low")
-            click.echo("\nUseful when: You have many tasks with similar due dates and want")
-            click.echo("             secondary fields (like priority) to matter within each bucket")
-            click.echo("\nToggle clustering: Choose option 10 from main menu")
-            click.echo("─" * 60)
+            click.echo("\nChoose a preset:")
+            for idx, (_sort_value, description) in enumerate(presets, 1):
+                click.echo(f"  {idx}. {description}")
+
             try:
-                new_sort = prompt("Enter sort fields (comma-separated): ")
-                if new_sort.strip():
-                    sort_fields = [f.strip() for f in new_sort.split(",") if f.strip()]
+                choice_str = prompt("\nChoice (1-6 or press Enter to cancel): ").strip()
+                if not choice_str:
+                    click.echo("Cancelled.")
+                    continue
+
+                choice_idx = int(choice_str)
+                if 1 <= choice_idx <= len(presets):
+                    sort_value, description = presets[choice_idx - 1]
+
+                    if sort_value == "custom":
+                        # Show advanced options
+                        click.echo("\nAvailable fields:")
+                        click.echo("  priority, due, created, modified, status, title, project, assignee")
+                        click.echo("\nOptions:")
+                        click.echo("  • Prefix with '-' for descending (e.g., '-created')")
+                        click.echo("  • Use 'assignee:@user' to prioritize specific user")
+                        click.echo("\nExamples:")
+                        click.echo("  due,priority        - Due date, then priority")
+                        click.echo("  assignee:@me,due    - My tasks first")
+                        click.echo("  -created            - Newest first")
+
+                        new_sort = prompt("\nEnter custom sort: ").strip()
+                        if not new_sort:
+                            click.echo("Cancelled.")
+                            continue
+                        sort_fields = [f.strip() for f in new_sort.split(",") if f.strip()]
+                    else:
+                        sort_fields = [f.strip() for f in sort_value.split(",")]
+
                     try:
                         config.sort_by = sort_fields
-                        click.secho(f"✓ Sort order updated to: {', '.join(sort_fields)}", fg="green")
+                        click.secho(f"✓ Sort order: {', '.join(sort_fields)}", fg="green")
                     except ValueError as e:
                         click.secho(f"✗ Error: {e}", fg="red")
                 else:
-                    click.echo("Cancelled.")
-            except (KeyboardInterrupt, EOFError):
+                    click.secho("Invalid choice.", fg="yellow")
+
+            except (ValueError, KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
         elif choice == "10":
             # Toggle due date clustering
             current_status = "enabled" if config.cluster_due_dates else "disabled"
-            click.echo(f"\nDue date clustering is currently: {current_status}")
-            click.echo("\nWhen enabled, tasks are grouped by countdown buckets (today, this week, this month)")
-            click.echo("instead of exact due dates. This allows secondary sort fields (like priority)")
-            click.echo("to take precedence within each time bucket.")
-            click.echo("\nExample with clustering enabled and sort_by=['due', 'priority']:")
-            click.echo("  Today:")
-            click.echo("    - High priority task")
-            click.echo("    - Medium priority task")
-            click.echo("  This week:")
-            click.echo("    - High priority task")
-            click.echo("    - Low priority task")
+            click.echo(f"\nDue date clustering: {current_status}")
+            click.echo("\nGroups tasks into time buckets (today, this week, etc.) instead of")
+            click.echo("exact timestamps. Useful when you want priority to matter within each bucket.")
+            click.echo("\nExample: With 'due,priority' sorting")
+            click.echo("  Disabled: Tasks sorted by exact due date/time")
+            click.echo("  Enabled:  All 'today' tasks grouped, high priority first")
             try:
-                new_value = confirm("\nEnable due date clustering?")
+                new_value = confirm("\nEnable clustering?")
                 config.cluster_due_dates = new_value
                 new_status = "enabled" if new_value else "disabled"
-                click.secho(f"✓ Due date clustering {new_status}", fg="green")
+                click.secho(f"✓ Clustering {new_status}", fg="green")
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
