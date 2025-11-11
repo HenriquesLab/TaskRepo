@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] - 2025-11-10
+
+### Fixed
+
+- **Config corruption bug**: Fixed bug where viewing tasks with subtasks would overwrite user's sort_by configuration
+  - The temporary config created for subtask sorting was inadvertently saving back to the config file
+  - This caused user's custom sort order (e.g., `assignee:@user, due, priority`) to revert to `due, assignee:@user, priority`
+  - Now modifies internal config data without triggering save when sorting subtasks
+  - Added regression test to prevent this issue from recurring
+
+- **TUI selection and scroll reset**: Fixed bug where pressing [d] to mark task as done would reset selection and scroll to top
+  - When TUI was recreated after marking task as done, both selected_row and viewport_top were reset to 0
+  - Now saves and restores both selected_row and viewport_top state across TUI recreation
+  - Preserves user's position and scroll location in the task list
+  - Selection intelligently moves to task above when completed task is removed from view
+
+- **Sync failure with unfinished merges**: Fixed critical ordering bug causing sync to fail when repository has incomplete merge
+  - Error: "You have not concluded your merge (MERGE_HEAD exists)"
+  - Sync was attempting to merge remote changes BEFORE checking for unfinished merges
+  - Now checks for and completes unfinished merges BEFORE attempting new merge
+  - Automatically resolves conflict markers and stages changes if merge is ready
+  - Improved error handling: skips repository if conflicts remain, provides clear guidance
+  - Auto-stages task file changes if working tree has modifications but no conflicts
+
+- **Countdown showing "-1d" for today**: Fixed bug where tasks due today showed "-1d" instead of "today"
+  - When due date was set to midnight (00:00:00) on same day, countdown calculated negative hours
+  - Now checks calendar date FIRST before calculating time difference
+  - Centralized countdown logic in new `utils/countdown.py` module
+  - Both TUI display and README generation now use same countdown calculation
+  - Added comprehensive tests to prevent regression (12 new test cases)
+
+### Added
+
+- **New `urgency` sort field**: Sort tasks by urgency level instead of chronological date
+  - Sorts by urgency: overdue (critical) → today (high) → soon (medium) → future (low)
+  - Unlike `due` which sorts chronologically (oldest first), `urgency` prioritizes urgent tasks
+  - Perfect for daily task lists where overdue items should appear at the top
+  - Usage: `sort_by: [urgency, priority]` or `sort_by: [assignee:@user, urgency, priority]`
+  - Can be combined with other sort fields like assignee and priority
+  - Respects effective due dates (includes subtasks and dependencies)
+
+### Improved
+
+- **TUI keyboard shortcuts display**: Consistent pattern using letters from within words
+  - Changed `[c]cancelled [v]archive [l]delete` → `[c]ancelled ar[v]hive de[l]ete`
+  - More intuitive: users see the highlighted letter within the actual word they're reading
+  - Added comprehensive design principle documentation in code to maintain consistency
+  - Pattern now consistent across all terminal widths (narrow, medium, wide)
+
 ## [0.10.4] - 2025-11-10
 
 ### Fixed

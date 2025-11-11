@@ -106,54 +106,17 @@ def get_countdown_text(due_date: datetime, status: str = None) -> tuple[str, str
         Tuple of (countdown_text, color_name)
         Format: "2 days", "1 week", "3 months"
     """
+    from taskrepo.utils.countdown import calculate_countdown, format_countdown_for_display
+
     # For completed or cancelled tasks, show neutral status instead of countdown
     if status == "completed":
         return "✓", "green"
     elif status == "cancelled":
         return "-", "red"
 
-    now = datetime.now()
-    diff = due_date - now
-    days = diff.days
-    hours = diff.seconds // 3600
-
-    # Handle overdue (use negative numbers for compactness)
-    # Use ceiling division to be conservative (show MORE overdue)
-    if days < 0:
-        abs_days = abs(days)
-        if abs_days < 7:
-            # Show in days for less than 1 week overdue: -1d, -2d, etc.
-            text = f"-{abs_days}d"
-        else:
-            # Show in weeks: -1w, -2w, etc.
-            # Use ceiling division: 7-13 days = -2w, 14-20 days = -3w
-            weeks = (abs_days + 6) // 7
-            text = f"-{weeks}w"
-        return text, "red"
-
-    # Handle today
-    if days == 0:
-        if hours < 1:
-            text = "now"
-        else:
-            text = "today"
-        return text, "yellow"
-
-    # Handle all future dates with ceiling division (more conservative)
-    # This rounds UP to provide a safer estimate
-    if days < 45:
-        # Use ceiling division to round up to weeks
-        weeks = (days + 6) // 7  # Ceiling: 1-6 days → 1 week, 7-13 days → 2 weeks, etc.
-        if weeks == 1:
-            return "1 week", "yellow"  # 1-6 days are still urgent
-        return f"{weeks} weeks", "green"
-
-    # Handle months (45+ days)
-    # Use ceiling division to round UP (more conservative)
-    months = (days + 29) // 30  # Ceiling division: rounds up
-    if months == 1:
-        return "1 month", "green"
-    return f"{months} months", "green"
+    # Use centralized countdown calculation
+    countdown_text, countdown_status, _ = calculate_countdown(due_date)
+    return format_countdown_for_display(countdown_text, countdown_status)
 
 
 def build_task_tree(tasks: list[Task], config: Config) -> list[tuple[Task, int, bool, list[bool]]]:
@@ -184,9 +147,10 @@ def build_task_tree(tasks: list[Task], config: Config) -> list[tuple[Task, int, 
     # This ensures urgent subtasks appear first regardless of other sort criteria
     for parent_id in children_map:
         # Create a temporary config that prioritizes due date for subtasks
+        # IMPORTANT: Modify _data directly to avoid triggering config.save()
         subtask_config = Config()
-        subtask_config.sort_by = ["due"] + [f for f in config.sort_by if f.lstrip("-") != "due"]
-        subtask_config.cluster_due_dates = config.cluster_due_dates
+        subtask_config._data["sort_by"] = ["due"] + [f for f in config.sort_by if f.lstrip("-") != "due"]
+        subtask_config._data["cluster_due_dates"] = config.cluster_due_dates
         children_map[parent_id] = sort_tasks(children_map[parent_id], subtask_config, all_tasks=tasks)
 
     # Recursive function to build tree

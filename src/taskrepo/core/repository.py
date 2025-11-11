@@ -468,54 +468,11 @@ class Repository:
             Returns:
                 Tuple of (countdown_text, emoji)
             """
-            now = datetime.now()
-            diff = due_date - now
-            days = diff.days
-            hours = diff.seconds // 3600
+            from taskrepo.utils.countdown import calculate_countdown, format_countdown_for_readme
 
-            # Handle overdue
-            # Use ceiling division to be conservative (show MORE overdue)
-            if days < 0:
-                abs_days = abs(days)
-                if abs_days < 7:
-                    # Show in days for less than 1 week overdue
-                    if abs_days == 1:
-                        text = "overdue by 1 day"
-                    else:
-                        text = f"overdue by {abs_days} days"
-                else:
-                    # Use ceiling division: 7-13 days = 2 weeks, 14-20 days = 3 weeks
-                    weeks = (abs_days + 6) // 7
-                    if weeks == 1:
-                        text = "overdue by 1 week"
-                    else:
-                        text = f"overdue by {weeks} weeks"
-                return text, "⚠️"
-
-            # Handle today
-            if days == 0:
-                if hours < 1:
-                    text = "due now"
-                else:
-                    text = "today"
-                return text, "⏰"
-
-            # Handle all future dates with ceiling division (more conservative)
-            # This rounds UP to provide a safer estimate
-            if days < 28:  # Up to 4 weeks
-                # Use ceiling division to round up to weeks
-                weeks = (days + 6) // 7  # Ceiling: 1-6 days → 1 week, 7-13 days → 2 weeks, etc.
-                if weeks == 1:
-                    return "1 week", "⏰"  # 1-6 days are still urgent
-                return f"{weeks} weeks", "📅"
-
-            # Handle months (28+ days)
-            # Use ceiling division to round UP (more conservative)
-            months = (days + 29) // 30  # Ceiling division: rounds up
-            if months == 1:
-                return "1 month", "📅"
-            else:
-                return f"{months} months", "📅"
+            # Use centralized countdown calculation
+            countdown_text, countdown_status, _ = calculate_countdown(due_date)
+            return format_countdown_for_readme(countdown_text, countdown_status)
 
         # Get all non-archived tasks (including completed)
         all_tasks = self.list_tasks(include_archived=False)

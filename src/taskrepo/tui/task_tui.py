@@ -971,18 +971,31 @@ class TaskTUI:
         if terminal_width < 80:
             return "[?]help"
 
+        # ==================================================================================
+        # KEYBOARD SHORTCUT DISPLAY DESIGN PRINCIPLE:
+        # ==================================================================================
+        # ALWAYS use letters FROM WITHIN the word itself (not before it) when possible.
+        #
+        # ✅ GOOD:    [c]ancelled    ar[v]hive    de[l]ete    [p]rogress    t[r]ee
+        # ❌ BAD:     [c]cancelled   [v]archive   [l]delete   [p]rogress    [r]tree
+        #
+        # Why? It's more intuitive and memorable - users see the letter highlighted
+        # within the actual word they're reading. Exceptions only when:
+        # 1. The letter doesn't exist in the word (e.g., [/]filter uses /)
+        # 2. First letter is clearer and unambiguous (e.g., [a]dd, [e]dit, [d]one)
+        #
+        # ⚠️  DO NOT change this pattern without strong justification - it improves UX!
+        # ==================================================================================
+
         # Narrow (80-120 cols): Minimal shortcuts
         if terminal_width < 120:
             return "[a]dd [e]dit [d]one [s]ync [/]filter [q]uit"
 
         # Medium (120-160 cols): Standard shortcuts
         if terminal_width < 160:
-            return (
-                "[a]dd [e]dit [d]one [p]rogress [c]cancelled [v]archive [m]ove [l]delete "
-                "[s]ync [/]filter [r]tree [q]uit"
-            )
+            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete [s]ync [/]filter t[r]ee [q]uit"
 
-        # Wide (>=160 cols): Full shortcuts
+        # Wide (>=160 cols): Full shortcuts with multi-select hint
         return (
             "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete "
             "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space"

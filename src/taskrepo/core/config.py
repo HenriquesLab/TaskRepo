@@ -251,6 +251,7 @@ class Config:
         valid_fields = {
             "priority",
             "due",
+            "urgency",
             "created",
             "modified",
             "status",
@@ -259,6 +260,7 @@ class Config:
             "assignee",
             "-priority",
             "-due",
+            "-urgency",
             "-created",
             "-modified",
             "-status",

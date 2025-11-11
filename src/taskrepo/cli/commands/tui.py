@@ -260,6 +260,10 @@ def tui(ctx, repo, no_sync):
         elif result == "sync":
             _handle_sync(task_tui, config)
 
+        # Save selected_row and viewport_top AFTER handler runs to capture any adjustments (e.g., from _force_reload)
+        saved_selected_row = task_tui.selected_row
+        saved_viewport_top = task_tui.viewport_top
+
         # Update ID cache after task operations
         all_tasks = manager.list_all_tasks(include_archived=False)
         sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
@@ -276,6 +280,14 @@ def tui(ctx, repo, no_sync):
         config.tui_view_mode = saved_view_mode
         # Rebuild view items with restored state
         task_tui.view_items = task_tui._build_view_items()
+        # Restore selected row and viewport position (ensure they're within bounds)
+        tasks = task_tui._get_filtered_tasks()
+        if tasks:
+            task_tui.selected_row = min(saved_selected_row, len(tasks) - 1)
+            task_tui.viewport_top = min(saved_viewport_top, max(0, len(tasks) - 1))
+        else:
+            task_tui.selected_row = 0
+            task_tui.viewport_top = 0
 
 
 def _handle_new_task(task_tui: TaskTUI, config):

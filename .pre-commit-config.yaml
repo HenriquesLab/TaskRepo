@@ -60,6 +60,25 @@ repos:
         name: Check commit message format
         stages: [commit-msg]
 
+  # Check for uncommitted files
+  - repo: local
+    hooks:
+      - id: check-uncommitted-files
+        name: Check for uncommitted or untracked files
+        entry: bash -c
+        args:
+          - -c
+          - |
+            if [ -n "$(git status --porcelain | grep -v '^[MADR]')" ]; then
+              echo "Error: You have unstaged changes or untracked files. Please stage all changes before committing."
+              echo ""
+              git status --short
+              exit 1
+            fi
+        language: system
+        pass_filenames: false
+        always_run: true
+
 ci:
   autofix_commit_msg: |
     [pre-commit.ci] auto fixes from pre-commit hooks

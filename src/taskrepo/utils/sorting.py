@@ -219,6 +219,31 @@ def sort_tasks(tasks: list[Task], config: Config, all_tasks: Optional[list[Task]
                 else:
                     # Use exact timestamp
                     value = effective_due.timestamp() if effective_due else float("inf")
+        elif field_name == "urgency":
+            # Sort by urgency level (overdue first, then today, then future)
+            # Completed/cancelled tasks should sort to bottom
+            if task.status in ("completed", "cancelled"):
+                value = 999
+            else:
+                # Get effective due date (considering subtasks and dependencies)
+                effective_due = get_effective_due_date(task, all_tasks)
+
+                if effective_due is None:
+                    # No due date - least urgent
+                    value = 100
+                else:
+                    from taskrepo.utils.countdown import calculate_countdown
+
+                    _, status, urgency_level = calculate_countdown(effective_due)
+
+                    # Map urgency to sort order (lower = more urgent, sorts first)
+                    urgency_order = {
+                        "critical": 0,  # Overdue or now
+                        "high": 1,  # Today
+                        "medium": 2,  # Soon (1 week)
+                        "low": 3,  # Future
+                    }
+                    value = urgency_order.get(urgency_level, 4)
         elif field_name == "created":
             value = task.created.timestamp()
         elif field_name == "modified":

@@ -688,3 +688,54 @@ def test_effective_due_date_caching():
     effective2 = get_effective_due_date(parent, all_tasks)
 
     assert effective1 == effective2
+
+
+def test_display_tree_view_does_not_modify_config():
+    """Test that displaying tasks in tree view doesn't corrupt the config file.
+
+    Regression test for bug where displaying subtasks would overwrite the user's
+    sort_by config with a temporary config that prioritizes due dates.
+    """
+    from tempfile import TemporaryDirectory
+
+    from taskrepo.core.config import Config
+    from taskrepo.core.task import Task
+    from taskrepo.tui.display import build_task_tree
+
+    with TemporaryDirectory() as tmpdir:
+        config_path = Path(tmpdir) / "config"
+        config = Config(config_path)
+
+        # Set a specific sort order that user wants
+        original_sort_by = ["assignee:@paxcalpt", "due", "priority"]
+        config.sort_by = original_sort_by
+
+        # Create tasks with parent-child relationship
+        parent = Task(
+            id="parent",
+            title="Parent Task",
+            status="pending",
+            priority="H",
+            assignees=["@paxcalpt"],
+        )
+
+        child = Task(
+            id="child",
+            title="Child Task",
+            status="pending",
+            priority="M",
+            parent="parent",
+        )
+
+        tasks = [parent, child]
+
+        # Build task tree (this would trigger the bug)
+        build_task_tree(tasks, config)
+
+        # Reload config from disk to verify it wasn't modified
+        config_reloaded = Config(config_path)
+
+        # Config should still have the original sort order
+        assert config_reloaded.sort_by == original_sort_by, (
+            f"Config was modified! Expected {original_sort_by}, got {config_reloaded.sort_by}"
+        )
