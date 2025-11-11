@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.6] - 2025-11-11
+
+### Added
+
+- **Pre-commit hook to prevent uncommitted files**: Added check-uncommitted-files hook to ensure all changes are staged before committing
+  - Blocks commits if there are unstaged changes or untracked files
+  - Provides clear error message showing which files need attention
+  - Ensures no work is accidentally left uncommitted
+  - Helps maintain clean git history and prevents partial commits
+
 ## [0.10.5] - 2025-11-10
 
 ### Fixed
