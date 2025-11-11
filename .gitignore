@@ -60,6 +60,7 @@ dmypy.json
 !README.md
 !CHANGELOG.md
 !CONTRIBUTING.md
+!GOOGLE_CALENDAR_SETUP.md
 
 # Sensitive data patterns
 *.pem

@@ -4,6 +4,8 @@ import click
 
 from taskrepo.cli.commands.add import add
 from taskrepo.cli.commands.archive import archive
+from taskrepo.cli.commands.calendar_clear import calendar_clear
+from taskrepo.cli.commands.calendar_setup import calendar_setup
 from taskrepo.cli.commands.cancelled import cancelled
 from taskrepo.cli.commands.config import config_cmd
 from taskrepo.cli.commands.delete import delete
@@ -35,7 +37,15 @@ class OrderedGroup(click.Group):
         sections = [
             (
                 "Setup & Configuration",
-                ["init", "config", "config-show", "llm-info", "upgrade"],
+                [
+                    "init",
+                    "config",
+                    "config-show",
+                    "calendar-setup",
+                    "calendar-clear",
+                    "llm-info",
+                    "upgrade",
+                ],
             ),
             (
                 "Viewing Tasks",
@@ -43,7 +53,18 @@ class OrderedGroup(click.Group):
             ),
             (
                 "Managing Tasks",
-                ["add", "edit", "ext", "move", "in-progress", "done", "cancelled", "del", "archive", "unarchive"],
+                [
+                    "add",
+                    "edit",
+                    "ext",
+                    "move",
+                    "in-progress",
+                    "done",
+                    "cancelled",
+                    "del",
+                    "archive",
+                    "unarchive",
+                ],
             ),
             (
                 "Repository Operations",
@@ -64,12 +85,22 @@ class OrderedGroup(click.Group):
         # Format each section
         for section_name, command_names in sections:
             # Filter commands that exist in this section
-            section_commands = [(name, commands[name]) for name in command_names if name in commands]
+            section_commands = [
+                (name, commands[name])
+                for name in command_names
+                if name in commands
+            ]
 
             if section_commands:
                 with formatter.section(section_name):
                     formatter.write_dl(
-                        [(name, cmd.get_short_help_str(limit=formatter.width)) for name, cmd in section_commands]
+                        [
+                            (
+                                name,
+                                cmd.get_short_help_str(limit=formatter.width),
+                            )
+                            for name, cmd in section_commands
+                        ]
                     )
 
 
@@ -140,6 +171,8 @@ def process_result(ctx, result, **kwargs):
 # Register commands
 cli.add_command(add)
 cli.add_command(archive)
+cli.add_command(calendar_clear)
+cli.add_command(calendar_setup)
 cli.add_command(cancelled)
 cli.add_command(config_cmd)
 cli.add_command(list_tasks)
@@ -160,7 +193,11 @@ cli.add_command(upgrade)
 
 
 @cli.command()
-@click.option("--reconfigure", is_flag=True, help="Reconfigure even if already initialized")
+@click.option(
+    "--reconfigure",
+    is_flag=True,
+    help="Reconfigure even if already initialized",
+)
 @click.pass_context
 def init(ctx, reconfigure):
     """Initialize TaskRepo configuration."""
@@ -190,7 +227,10 @@ def init(ctx, reconfigure):
 
             if repos:
                 click.echo()
-                click.secho(f"✓ Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:", fg="green")
+                click.secho(
+                    f"✓ Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:",
+                    fg="green",
+                )
                 for repo in repos:
                     task_count = len(repo.list_tasks())
                     click.echo(f"  - {repo.name} ({task_count} tasks)")
@@ -222,18 +262,25 @@ def init(ctx, reconfigure):
     # Find all locations with task repositories
     found_locations = {}
     for location in scan_locations:
-        repos_dict = RepositoryManager.scan_for_task_repositories(location, max_depth=2)
+        repos_dict = RepositoryManager.scan_for_task_repositories(
+            location, max_depth=2
+        )
         found_locations.update(repos_dict)
 
     # Present options to user
     parent_dir = None
 
     if found_locations:
-        click.secho(f"✓ Found task repositories in {len(found_locations)} location(s):", fg="green")
+        click.secho(
+            f"✓ Found task repositories in {len(found_locations)} location(s):",
+            fg="green",
+        )
         click.echo()
 
         # Sort by number of repos (descending)
-        sorted_locations = sorted(found_locations.items(), key=lambda x: len(x[1]), reverse=True)
+        sorted_locations = sorted(
+            found_locations.items(), key=lambda x: len(x[1]), reverse=True
+        )
 
         for idx, (location, repos) in enumerate(sorted_locations, 1):
             click.echo(f"  {idx}. {location}")
@@ -248,7 +295,9 @@ def init(ctx, reconfigure):
         elif found_locations:
             # Ask user to choose
             try:
-                choice = prompt(f"Select location [1-{len(sorted_locations)}] or press Enter to specify custom path: ")
+                choice = prompt(
+                    f"Select location [1-{len(sorted_locations)}] or press Enter to specify custom path: "
+                )
                 choice = choice.strip()
 
                 if choice:
@@ -257,7 +306,10 @@ def init(ctx, reconfigure):
                         if 1 <= choice_idx <= len(sorted_locations):
                             parent_dir = sorted_locations[choice_idx - 1][0]
                     except ValueError:
-                        click.secho("Invalid choice. Please specify custom path.", fg="yellow")
+                        click.secho(
+                            "Invalid choice. Please specify custom path.",
+                            fg="yellow",
+                        )
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
                 ctx.exit(0)
@@ -268,10 +320,15 @@ def init(ctx, reconfigure):
             click.echo("No existing task repositories found.")
             click.echo()
 
-        default_path = str(current_dir) if not config_exists else str(config.parent_dir)
+        default_path = (
+            str(current_dir) if not config_exists else str(config.parent_dir)
+        )
 
         try:
-            custom_path = prompt(f"Enter parent directory path [{default_path}]: ", default=default_path)
+            custom_path = prompt(
+                f"Enter parent directory path [{default_path}]: ",
+                default=default_path,
+            )
             parent_dir = Path(custom_path.strip()).expanduser()
         except (KeyboardInterrupt, EOFError):
             click.echo("\nCancelled.")
@@ -296,7 +353,10 @@ def init(ctx, reconfigure):
 
     click.echo()
     if repos:
-        click.secho(f"Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:", fg="green")
+        click.secho(
+            f"Found {len(repos)} repositor{'y' if len(repos) == 1 else 'ies'}:",
+            fg="green",
+        )
         for repo in repos:
             task_count = len(repo.list_tasks())
             click.echo(f"  - {repo.name} ({task_count} tasks)")
@@ -307,20 +367,35 @@ def init(ctx, reconfigure):
         click.echo()
         click.echo("Get started with:")
         click.echo("  • Create a new repository: tsk create-repo")
-        click.echo("  • Clone existing repository: gh repo clone <org/repo> <local-path>")
+        click.echo(
+            "  • Clone existing repository: gh repo clone <org/repo> <local-path>"
+        )
 
 
 @cli.command()
-@click.option("--name", "-n", help="Repository name (will be prefixed with 'tasks-')")
+@click.option(
+    "--name", "-n", help="Repository name (will be prefixed with 'tasks-')"
+)
 @click.option("--github", is_flag=True, help="Create GitHub repository")
-@click.option("-o", "--org", help="GitHub organization/owner (required with --github)")
-@click.option("--interactive/--no-interactive", "-i/-I", default=True, help="Use interactive mode")
+@click.option(
+    "-o", "--org", help="GitHub organization/owner (required with --github)"
+)
+@click.option(
+    "--interactive/--no-interactive",
+    "-i/-I",
+    default=True,
+    help="Use interactive mode",
+)
 @click.pass_context
 def create_repo(ctx, name, github, org, interactive):
     """Create a new task repository."""
     from taskrepo.core.repository import Repository, RepositoryManager
     from taskrepo.tui import prompts
-    from taskrepo.utils.github import GitHubError, check_github_repo_exists, clone_github_repo
+    from taskrepo.utils.github import (
+        GitHubError,
+        check_github_repo_exists,
+        clone_github_repo,
+    )
 
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -328,7 +403,9 @@ def create_repo(ctx, name, github, org, interactive):
     # Interactive mode
     if interactive:
         click.echo("Creating a new task repository...\n")
-        click.echo("Note: Repository names will be automatically prefixed with 'tasks-'")
+        click.echo(
+            "Note: Repository names will be automatically prefixed with 'tasks-'"
+        )
         click.echo("(e.g., entering 'work' will create 'tasks-work')\n")
 
         # Get repository name
@@ -354,7 +431,9 @@ def create_repo(ctx, name, github, org, interactive):
                 default_org = config.default_github_org
                 # Get existing orgs from repos for autocomplete
                 existing_orgs = manager.get_github_orgs()
-                org = prompts.prompt_github_org(default=default_org, existing_orgs=existing_orgs)
+                org = prompts.prompt_github_org(
+                    default=default_org, existing_orgs=existing_orgs
+                )
                 if not org:
                     click.echo("Cancelled.")
                     ctx.exit(0)
@@ -365,7 +444,11 @@ def create_repo(ctx, name, github, org, interactive):
             # Check if GitHub repo already exists
             if check_github_repo_exists(org, f"tasks-{name}"):
                 click.echo()
-                click.secho(f"⚠️  Repository tasks-{name} already exists on GitHub!", fg="yellow", bold=True)
+                click.secho(
+                    f"⚠️  Repository tasks-{name} already exists on GitHub!",
+                    fg="yellow",
+                    bold=True,
+                )
                 click.echo(f"    URL: https://github.com/{org}/tasks-{name}")
                 click.echo()
 
@@ -382,26 +465,48 @@ def create_repo(ctx, name, github, org, interactive):
                             clone_github_repo(org, f"tasks-{name}", repo_path)
                             repo = Repository(repo_path)
                             click.echo()
-                            click.secho(f"✓ Cloned repository: {repo.name} at {repo.path}", fg="green")
-                            click.secho(f"✓ GitHub repository: https://github.com/{org}/tasks-{name}", fg="green")
+                            click.secho(
+                                f"✓ Cloned repository: {repo.name} at {repo.path}",
+                                fg="green",
+                            )
+                            click.secho(
+                                f"✓ GitHub repository: https://github.com/{org}/tasks-{name}",
+                                fg="green",
+                            )
                             ctx.exit(0)
                         except GitHubError as e:
-                            click.secho(f"\n✗ Failed to clone repository: {e}", fg="red", err=True)
+                            click.secho(
+                                f"\n✗ Failed to clone repository: {e}",
+                                fg="red",
+                                err=True,
+                            )
                             # Ask if they want to create local-only instead
-                            if confirm("\nCreate local-only repository instead (without GitHub)?"):
+                            if confirm(
+                                "\nCreate local-only repository instead (without GitHub)?"
+                            ):
                                 github = False
-                                click.echo("\nProceeding with local-only repository...")
+                                click.echo(
+                                    "\nProceeding with local-only repository..."
+                                )
                             else:
                                 click.echo("Cancelled.")
                                 ctx.exit(0)
                         except Exception as e:
-                            click.secho(f"\n✗ Error initializing repository: {e}", fg="red", err=True)
+                            click.secho(
+                                f"\n✗ Error initializing repository: {e}",
+                                fg="red",
+                                err=True,
+                            )
                             ctx.exit(1)
                     else:
                         # User doesn't want to clone, ask if they want local-only
-                        if confirm("\nCreate local-only repository instead (without GitHub)?"):
+                        if confirm(
+                            "\nCreate local-only repository instead (without GitHub)?"
+                        ):
                             github = False
-                            click.echo("\nProceeding with local-only repository...")
+                            click.echo(
+                                "\nProceeding with local-only repository..."
+                            )
                         else:
                             click.echo("Cancelled.")
                             ctx.exit(0)
@@ -412,7 +517,11 @@ def create_repo(ctx, name, github, org, interactive):
     else:
         # Non-interactive mode - validate required fields
         if not name:
-            click.secho("Error: --name is required in non-interactive mode", fg="red", err=True)
+            click.secho(
+                "Error: --name is required in non-interactive mode",
+                fg="red",
+                err=True,
+            )
             ctx.exit(1)
 
         # Handle GitHub integration
@@ -428,7 +537,9 @@ def create_repo(ctx, name, github, org, interactive):
                         err=True,
                     )
                     ctx.exit(1)
-            visibility = "private"  # Default to private in non-interactive mode
+            visibility = (
+                "private"  # Default to private in non-interactive mode
+            )
 
             # Check if GitHub repo already exists
             if check_github_repo_exists(org, f"tasks-{name}"):
@@ -437,15 +548,26 @@ def create_repo(ctx, name, github, org, interactive):
                     fg="red",
                     err=True,
                 )
-                click.secho("       Use a different name or clone it manually with: gh repo clone", fg="red", err=True)
+                click.secho(
+                    "       Use a different name or clone it manually with: gh repo clone",
+                    fg="red",
+                    err=True,
+                )
                 ctx.exit(1)
 
     try:
-        repo = manager.create_repository(name, github_enabled=github, github_org=org, visibility=visibility)
+        repo = manager.create_repository(
+            name, github_enabled=github, github_org=org, visibility=visibility
+        )
         click.echo()
-        click.secho(f"✓ Created repository: {repo.name} at {repo.path}", fg="green")
+        click.secho(
+            f"✓ Created repository: {repo.name} at {repo.path}", fg="green"
+        )
         if github:
-            click.secho(f"✓ GitHub repository created: https://github.com/{org}/tasks-{name}", fg="green")
+            click.secho(
+                f"✓ GitHub repository created: https://github.com/{org}/tasks-{name}",
+                fg="green",
+            )
     except ValueError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         ctx.exit(1)
@@ -471,7 +593,9 @@ def repos(ctx):
         return
 
     # Sort by task count (descending), then name (ascending)
-    repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+    repositories = sorted(
+        repositories, key=lambda r: (-len(r.list_tasks()), r.name)
+    )
 
     click.echo(f"Repositories in {config.parent_dir}:\n")
     for repo in repositories:
@@ -489,9 +613,13 @@ def config_show(ctx):
     click.echo(f"  Parent directory: {config.parent_dir}")
     click.echo(f"  Default priority: {config.default_priority}")
     click.echo(f"  Default status: {config.default_status}")
-    default_assignee = config.default_assignee if config.default_assignee else "(none)"
+    default_assignee = (
+        config.default_assignee if config.default_assignee else "(none)"
+    )
     click.echo(f"  Default assignee: {default_assignee}")
-    default_github_org = config.default_github_org if config.default_github_org else "(none)"
+    default_github_org = (
+        config.default_github_org if config.default_github_org else "(none)"
+    )
     click.echo(f"  Default GitHub org: {default_github_org}")
     sort_by = ", ".join(config.sort_by)
     click.echo(f"  Sort by: {sort_by}")
@@ -550,11 +678,19 @@ def llm_info(ctx):
     click.echo()
     click.echo("  Statuses:   pending, in-progress, completed, cancelled")
     click.echo("  Priorities: H (High), M (Medium), L (Low)")
-    click.echo('  Due dates:  today, tomorrow, "next week", "Nov 15", 2025-11-15')
-    click.echo("              OR durations: 1d, 2w, 3m, 1y (extends from current due)")
+    click.echo(
+        '  Due dates:  today, tomorrow, "next week", "Nov 15", 2025-11-15'
+    )
+    click.echo(
+        "              OR durations: 1d, 2w, 3m, 1y (extends from current due)"
+    )
     click.echo("  Assignees:  @username (GitHub handles)")
-    click.echo("  Parent:     <task-id> (for creating subtasks - hierarchical tasks)")
-    click.echo("  Display IDs: Sequential numbers (1, 2, 3...) mapped to task UUIDs")
+    click.echo(
+        "  Parent:     <task-id> (for creating subtasks - hierarchical tasks)"
+    )
+    click.echo(
+        "  Display IDs: Sequential numbers (1, 2, 3...) mapped to task UUIDs"
+    )
     click.echo()
 
     # Section 4: Command Examples (curated for LLMs)
@@ -570,7 +706,9 @@ def llm_info(ctx):
     click.echo('  tsk search "authentication"')
     click.echo()
     click.echo("  # Create task with multiple options")
-    click.echo('  tsk add --title "Fix bug" --priority H --due tomorrow --repo work')
+    click.echo(
+        '  tsk add --title "Fix bug" --priority H --due tomorrow --repo work'
+    )
     click.echo()
     click.echo("  # Create subtask (non-interactive)")
     click.echo('  tsk add --title "Write tests" --parent 3 --repo work -I')
@@ -612,21 +750,31 @@ def llm_info(ctx):
     click.echo("    --archived               Show archived tasks")
     click.echo()
     click.echo("  Search command:")
-    click.echo('    tsk search "keyword"      Search title, description, project, tags')
-    click.echo('    tsk search "bug" --priority H  Combine search with filters')
+    click.echo(
+        '    tsk search "keyword"      Search title, description, project, tags'
+    )
+    click.echo(
+        '    tsk search "bug" --priority H  Combine search with filters'
+    )
     click.echo()
 
     # Section 6: Common Workflows
     click.secho("📝 COMMON WORKFLOWS", fg="yellow", bold=True)
     click.echo()
     click.echo("  1. Create and start working on a task:")
-    click.echo('     tsk add --title "Implement feature" --priority H --repo work')
+    click.echo(
+        '     tsk add --title "Implement feature" --priority H --repo work'
+    )
     click.echo("     tsk in-progress <id>")
     click.echo()
     click.echo("  2. Create task with subtasks (non-interactive):")
     click.echo('     tsk add --title "Build feature" --repo work -I')
-    click.echo('     tsk add --title "Write tests" --parent <parent-id> --repo work -I')
-    click.echo('     tsk add --title "Update docs" --parent <parent-id> --repo work -I')
+    click.echo(
+        '     tsk add --title "Write tests" --parent <parent-id> --repo work -I'
+    )
+    click.echo(
+        '     tsk add --title "Update docs" --parent <parent-id> --repo work -I'
+    )
     click.echo()
     click.echo("  3. Convert existing tasks to subtasks:")
     click.echo("     tsk edit 10 11 12 --parent 3")
@@ -647,16 +795,28 @@ def llm_info(ctx):
     # Section 7: Quick Tips for LLMs
     click.secho("💡 QUICK TIPS FOR LLMs", fg="yellow", bold=True)
     click.echo()
-    click.echo("  • Use display IDs (1, 2, 3...) to reference tasks in commands")
+    click.echo(
+        "  • Use display IDs (1, 2, 3...) to reference tasks in commands"
+    )
     click.echo("  • Multiple IDs: Use comma-separated list (e.g., 4,5,6)")
-    click.echo("  • Subtasks: Use --parent flag on add/edit; supports hierarchical tasks")
-    click.echo("  • Subtasks can exist in different repositories from their parent")
-    click.echo("  • View subtasks with 'tsk info <id>' to see parent and children")
+    click.echo(
+        "  • Subtasks: Use --parent flag on add/edit; supports hierarchical tasks"
+    )
+    click.echo(
+        "  • Subtasks can exist in different repositories from their parent"
+    )
+    click.echo(
+        "  • View subtasks with 'tsk info <id>' to see parent and children"
+    )
     click.echo("  • Tasks are stored as markdown files in git repositories")
-    click.echo("  • Repository naming: tasks-{name} (e.g., tasks-work, tasks-personal)")
+    click.echo(
+        "  • Repository naming: tasks-{name} (e.g., tasks-work, tasks-personal)"
+    )
     click.echo("  • Configuration file: ~/.TaskRepo/config")
     click.echo("  • Interactive mode: Run 'tsk tui' for full-screen interface")
-    click.echo("  • Each task has a UUID but users interact via sequential IDs")
+    click.echo(
+        "  • Each task has a UUID but users interact via sequential IDs"
+    )
     click.echo("  • Use 'tsk config --show' to see current user configuration")
     click.echo("  • Use 'tsk --help' to see all available commands")
     click.echo()

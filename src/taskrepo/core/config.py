@@ -28,7 +28,11 @@ class Config:
         "tui_view_mode": "repo",  # Options: "repo", "project", "assignee"
         "auto_sync_enabled": True,  # Enable background sync in TUI
         "auto_sync_interval": 300,  # Sync every 5 minutes (in seconds)
-        "auto_sync_strategy": "auto",  # Auto-merge strategy for background sync
+        "auto_sync_strategy": "auto",  # Auto-merge strategy
+        "gcal_enabled": False,  # Google Calendar sync
+        "gcal_calendar_id": "primary",  # Calendar ID to sync to
+        "gcal_sync_repos": None,  # List of repos to sync (None = all)
+        "gcal_sync_statuses": ["pending", "in-progress"],  # Statuses
     }
 
     def __init__(self, config_path: Optional[Path] = None):
@@ -327,7 +331,9 @@ class Config:
         """
         valid_modes = {"repo", "project", "assignee"}
         if value not in valid_modes:
-            raise ValueError(f"Invalid TUI view mode: {value}. Must be one of {valid_modes}")
+            raise ValueError(
+                f"Invalid TUI view mode: {value}. Must be one of {valid_modes}"
+            )
         self._data["tui_view_mode"] = value
         self.save()
 
@@ -395,7 +401,9 @@ class Config:
         """
         valid_strategies = {"auto", "local", "remote"}
         if value not in valid_strategies:
-            raise ValueError(f"Invalid sync strategy: {value}. Must be one of {valid_strategies}")
+            raise ValueError(
+                f"Invalid sync strategy: {value}. Must be one of {valid_strategies}"
+            )
         self._data["auto_sync_strategy"] = value
         self.save()
 
@@ -419,4 +427,86 @@ class Config:
             value: Configuration value
         """
         self._data[key] = value
+        self.save()
+
+    @property
+    def gcal_enabled(self) -> bool:
+        """Get Google Calendar sync enabled status.
+
+        Returns:
+            True if Google Calendar sync is enabled
+        """
+        return self._data.get("gcal_enabled", False)
+
+    @gcal_enabled.setter
+    def gcal_enabled(self, value: bool):
+        """Set Google Calendar sync enabled status.
+
+        Args:
+            value: True to enable Google Calendar sync
+        """
+        self._data["gcal_enabled"] = bool(value)
+        self.save()
+
+    @property
+    def gcal_calendar_id(self) -> str:
+        """Get Google Calendar ID.
+
+        Returns:
+            Calendar ID (default: "primary")
+        """
+        return self._data.get("gcal_calendar_id", "primary")
+
+    @gcal_calendar_id.setter
+    def gcal_calendar_id(self, value: str):
+        """Set Google Calendar ID.
+
+        Args:
+            value: Calendar ID
+        """
+        if value is not None and value.strip():
+            self._data["gcal_calendar_id"] = value.strip()
+        else:
+            self._data["gcal_calendar_id"] = "primary"
+        self.save()
+
+    @property
+    def gcal_sync_repos(self) -> Optional[list[str]]:
+        """Get list of repositories to sync to Google Calendar.
+
+        Returns:
+            List of repository names or None (None = sync all repos)
+        """
+        return self._data.get("gcal_sync_repos")
+
+    @gcal_sync_repos.setter
+    def gcal_sync_repos(self, value: Optional[list[str]]):
+        """Set list of repositories to sync to Google Calendar.
+
+        Args:
+            value: List of repository names or None (None = sync all)
+        """
+        if value is not None:
+            self._data["gcal_sync_repos"] = list(value)
+        else:
+            self._data["gcal_sync_repos"] = None
+        self.save()
+
+    @property
+    def gcal_sync_statuses(self) -> list[str]:
+        """Get list of task statuses to sync to Google Calendar.
+
+        Returns:
+            List of status names (default: pending, in-progress)
+        """
+        return self._data.get("gcal_sync_statuses", ["pending", "in-progress"])
+
+    @gcal_sync_statuses.setter
+    def gcal_sync_statuses(self, value: list[str]):
+        """Set list of task statuses to sync to Google Calendar.
+
+        Args:
+            value: List of status names to sync
+        """
+        self._data["gcal_sync_statuses"] = list(value)
         self.save()
