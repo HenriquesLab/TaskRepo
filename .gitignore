@@ -87,3 +87,6 @@ tasks-*/
 
 # Claude Code
 .claude/
+
+# Amazon Q
+.amazonq/
