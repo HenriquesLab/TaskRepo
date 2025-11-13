@@ -16,6 +16,7 @@ from taskrepo.core.repository import Repository, RepositoryManager
 from taskrepo.core.task import Task
 from taskrepo.tui.conflict_resolver import resolve_conflict_interactive
 from taskrepo.tui.display import display_tasks_table
+from taskrepo.utils.conflict_detection import resolve_readme_conflicts
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 console = Console()
@@ -275,6 +276,22 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
         click.echo("No repositories to sync.")
         return
 
+    # Proactive check: Detect repositories with unfinished merges BEFORE starting sync
+    repos_with_unfinished_merges = []
+    for repository in repositories:
+        merge_head_file = repository.path / ".git" / "MERGE_HEAD"
+        if merge_head_file.exists():
+            repos_with_unfinished_merges.append(repository.name)
+
+    if repos_with_unfinished_merges:
+        console.print()
+        console.print("[yellow]⚠ Warning: Found repositories with unfinished merges:[/yellow]")
+        for repo_name in repos_with_unfinished_merges:
+            console.print(f"  • {repo_name}")
+        console.print()
+        console.print("[cyan]These will be automatically resolved during sync.[/cyan]")
+        console.print()
+
     # Track timing for each repository
     repo_timings = {}
     total_start_time = time.perf_counter()
@@ -366,6 +383,73 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
 
                 # Check if remote exists
                 if git_repo.remotes:
+                    # IMPORTANT: Check for unfinished merge FIRST, before any git operations
+                    # This prevents "You have not concluded your merge (MERGE_HEAD exists)" errors
+                    merge_head_file = repository.path / ".git" / "MERGE_HEAD"
+                    if merge_head_file.exists():
+                        progress.console.print("  [yellow]⚠[/yellow] Found unfinished merge, attempting to complete...")
+
+                        # Check for conflict markers in task files
+                        if _has_conflict_markers(repository.path):
+                            progress.console.print("  [yellow]→[/yellow] Resolving conflict markers...")
+
+                            def resolve_markers():
+                                return _resolve_conflict_markers(repository, progress.console, task_cache)
+
+                            resolved_files, _ = run_with_spinner(
+                                progress, spinner_task, "Resolving conflict markers", resolve_markers, verbose
+                            )
+
+                            if resolved_files:
+                                # Stage resolved files
+                                for resolved_file in resolved_files:
+                                    git_repo.index.add([str(resolved_file)])
+                                progress.console.print(f"  [green]✓[/green] Resolved {len(resolved_files)} file(s)")
+
+                        # Try to complete the merge
+                        try:
+                            # Check if all conflicts are resolved (no unstaged changes with conflicts)
+                            if not git_repo.is_dirty(working_tree=True, untracked_files=False):
+                                # Working tree is clean, safe to commit
+                                git_repo.git.commit("-m", "Auto-sync: Completed unfinished merge", "--no-edit")
+                                progress.console.print("  [green]✓[/green] Completed unfinished merge")
+                                change_tracker.changes_to_commit.append("completed unfinished merge")
+                            else:
+                                # Still have unstaged changes, check if they're just unresolved conflicts
+                                # Stage any changes in task files (they should be auto-resolved by now)
+                                git_repo.git.add("tasks/")
+                                git_repo.git.commit("-m", "Auto-sync: Completed unfinished merge", "--no-edit")
+                                progress.console.print(
+                                    "  [green]✓[/green] Completed unfinished merge with auto-staged changes"
+                                )
+                                change_tracker.changes_to_commit.append("completed unfinished merge")
+                        except GitCommandError as e:
+                            # Failed to complete merge
+                            if "conflict" in str(e).lower() or "unmerged" in str(e).lower():
+                                progress.console.print(
+                                    "  [red]✗[/red] Cannot complete merge: unresolved conflicts remain"
+                                )
+                                progress.console.print(
+                                    "  [red]→[/red] Please resolve conflicts manually with: git status"
+                                )
+                                # Skip this repository - don't try to proceed with sync
+                                progress.update(overall_task, advance=1)
+                                continue
+                            else:
+                                # Other error, try to abort the merge
+                                progress.console.print(
+                                    f"  [yellow]⚠[/yellow] Cannot complete merge, aborting... ({escape(str(e))})"
+                                )
+                                try:
+                                    git_repo.git.merge("--abort")
+                                    progress.console.print("  [green]✓[/green] Aborted unfinished merge")
+                                except Exception:
+                                    progress.console.print("  [red]✗[/red] Failed to abort merge")
+                                    progress.console.print("  [red]→[/red] Please run: git merge --abort")
+                                    # Skip this repository
+                                    progress.update(overall_task, advance=1)
+                                    continue
+
                     # Detect conflicts before pulling (pass cache to avoid redundant parsing)
                     def check_conflicts():
                         return detect_conflicts(git_repo, repository.path, task_cache=task_cache)
@@ -461,68 +545,6 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     else:
                         progress.console.print("  [green]✓[/green] No conflicts detected")
 
-                    # IMPORTANT: Check for unfinished merge BEFORE attempting to pull/merge
-                    # This prevents "You have not concluded your merge (MERGE_HEAD exists)" errors
-                    merge_head_file = repository.path / ".git" / "MERGE_HEAD"
-                    if merge_head_file.exists():
-                        progress.console.print("  [yellow]⚠[/yellow] Found unfinished merge, attempting to complete...")
-
-                        # Check for conflict markers in task files
-                        if _has_conflict_markers(repository.path):
-                            progress.console.print("  [yellow]→[/yellow] Resolving conflict markers...")
-
-                            def resolve_markers():
-                                return _resolve_conflict_markers(repository, progress.console, task_cache)
-
-                            resolved_files, _ = run_with_spinner(
-                                progress, spinner_task, "Resolving conflict markers", resolve_markers, verbose
-                            )
-
-                            if resolved_files:
-                                # Stage resolved files
-                                for resolved_file in resolved_files:
-                                    git_repo.index.add([str(resolved_file)])
-                                progress.console.print(f"  [green]✓[/green] Resolved {len(resolved_files)} file(s)")
-
-                        # Try to complete the merge
-                        try:
-                            # Check if all conflicts are resolved (no unstaged changes with conflicts)
-                            if not git_repo.is_dirty(working_tree=True, untracked_files=False):
-                                # Working tree is clean, safe to commit
-                                git_repo.git.commit("-m", "Auto-sync: Completed unfinished merge", "--no-edit")
-                                progress.console.print("  [green]✓[/green] Completed unfinished merge")
-                                change_tracker.changes_to_commit.append("completed unfinished merge")
-                            else:
-                                # Still have unstaged changes, check if they're just unresolved conflicts
-                                # Stage any changes in task files (they should be auto-resolved by now)
-                                git_repo.git.add("tasks/")
-                                git_repo.git.commit("-m", "Auto-sync: Completed unfinished merge", "--no-edit")
-                                progress.console.print(
-                                    "  [green]✓[/green] Completed unfinished merge with auto-staged changes"
-                                )
-                                change_tracker.changes_to_commit.append("completed unfinished merge")
-                        except GitCommandError as e:
-                            # Failed to complete merge
-                            if "conflict" in str(e).lower() or "unmerged" in str(e).lower():
-                                progress.console.print(
-                                    "  [red]✗[/red] Cannot complete merge: unresolved conflicts remain"
-                                )
-                                progress.console.print("  [red]→[/red] Please resolve conflicts manually")
-                                # Don't abort - let user fix it manually
-                                # Skip this repository
-                                continue
-                            else:
-                                # Other error, try to abort
-                                progress.console.print(
-                                    f"  [yellow]⚠[/yellow] Cannot complete merge, aborting... ({escape(str(e))})"
-                                )
-                                try:
-                                    git_repo.git.merge("--abort")
-                                    progress.console.print("  [green]✓[/green] Aborted unfinished merge")
-                                except Exception:
-                                    progress.console.print("  [red]✗[/red] Failed to abort merge")
-                                    continue
-
                     # Merge remote changes (we already fetched during conflict detection, so use merge not pull)
                     pull_succeeded = True
                     try:
@@ -584,6 +606,34 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             )
 
                             change_tracker.record_marker_resolution(len(resolved_files))
+
+                        # Resolve README conflicts (auto-generated files, safe to auto-resolve)
+                        def resolve_readme():
+                            return resolve_readme_conflicts(repository.path, progress.console)
+
+                        resolved_readmes, _ = run_with_spinner(
+                            progress,
+                            spinner_task,
+                            "Resolving README conflicts",
+                            resolve_readme,
+                            verbose,
+                            operations_task,
+                        )
+
+                        if resolved_readmes:
+                            # Stage resolved README files
+                            def stage_readme_resolutions():
+                                for file_path in resolved_readmes:
+                                    git_repo.git.add(str(file_path.relative_to(repository.path)))
+
+                            run_with_spinner(
+                                progress,
+                                spinner_task,
+                                "Staging README resolutions",
+                                stage_readme_resolutions,
+                                verbose,
+                                operations_task,
+                            )
 
                     # Smart README generation - only regenerate if tasks may have changed
                     if change_tracker.should_regenerate_readme():

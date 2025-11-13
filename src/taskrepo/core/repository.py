@@ -835,6 +835,21 @@ class RepositoryManager:
 
         return Repository(repo_path)
 
+    @staticmethod
+    def sort_repositories_alphabetically(repositories: list["Repository"]) -> list["Repository"]:
+        """Sort repositories alphabetically by name.
+
+        This is the centralized sorting method used throughout the application
+        to ensure consistent repository ordering in all UI contexts.
+
+        Args:
+            repositories: List of Repository objects to sort
+
+        Returns:
+            Sorted list of Repository objects (alphabetically by name)
+        """
+        return sorted(repositories, key=lambda r: r.name)
+
     def get_github_orgs(self) -> list[str]:
         """Get list of GitHub organizations from existing repositories.
 

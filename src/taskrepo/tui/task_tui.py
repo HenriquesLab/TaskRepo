@@ -509,41 +509,33 @@ class TaskTUI:
     def _calculate_status_bar_height(self) -> int:
         """Calculate status bar height based on content and terminal width.
 
-        Returns 2 for wide terminals (>=120 cols) when status info is present,
-        otherwise returns 1 (or more if wrapping occurs on very narrow terminals).
+        Returns:
+        - 1 line: No status info (just shortcuts on one line or wrapping)
+        - 2+ lines: Status info on line 1, shortcuts on line 2+ (wrapped on narrow terminals)
         """
-        import re
-
         _, terminal_width = self._get_terminal_size()
 
         # Build status info to check if we have any
         status_info = self._build_status_info()
 
-        # Two-line layout for medium/wide terminals with status info
-        if terminal_width >= 120 and status_info:
-            return 2
+        # For narrow terminals, allow shortcuts to wrap
+        allow_multiline = terminal_width < 120
+        shortcuts = self._get_shortcuts_text(terminal_width, allow_multiline=allow_multiline)
 
-        # Single-line layout - check if wrapping is needed
-        # Get the actual combined content length
-        shortcuts = self._get_shortcuts_text(terminal_width)
-
-        # Strip HTML tags to get visible character count
-        def strip_html(text):
-            return re.sub(r"<[^>]+>", "", text)
+        # Count actual newlines in shortcuts text (smart-wrapped lines)
+        shortcuts_lines = shortcuts.count("\n") + 1
 
         if status_info:
-            # Combined: "status | shortcuts"
-            visible_status = strip_html(status_info)
-            content_length = len(visible_status) + 3 + len(shortcuts) + 2  # +3 for " | ", +2 for padding
+            # Status info takes 1 line, shortcuts on additional lines
+            # Total: 1 (status) + N (shortcuts lines)
+            total_lines = 1 + shortcuts_lines
+
+            # Cap at 4 lines maximum (1 status + up to 3 for shortcuts)
+            return min(4, max(2, total_lines))
         else:
             # Just shortcuts
-            content_length = len(shortcuts) + 2  # +2 for padding
-
-        # Calculate lines needed for wrapping (round up)
-        lines_needed = (content_length + terminal_width - 1) // terminal_width
-
-        # Ensure at least 1 line, max 3 lines (in case of very narrow terminal)
-        return max(1, min(3, lines_needed))
+            # Ensure at least 1 line, max 3 lines
+            return max(1, min(3, shortcuts_lines))
 
     def _create_style(self) -> Style:
         """Create the color scheme for the TUI."""
@@ -958,17 +950,19 @@ class TaskTUI:
 
         return " | ".join(parts) if parts else ""
 
-    def _get_shortcuts_text(self, terminal_width: int) -> str:
+    def _get_shortcuts_text(self, terminal_width: int, allow_multiline: bool = False) -> str:
         """Get keyboard shortcuts based on terminal width.
 
         Args:
             terminal_width: Current terminal width in columns
+            allow_multiline: If True, return full shortcuts even on narrow terminals
+                            (they'll wrap to multiple lines with smart word-break logic)
 
         Returns:
             HTML-formatted shortcuts string responsive to width
         """
-        # Very narrow (<80 cols): Just help hint
-        if terminal_width < 80:
+        # Very narrow (<80 cols): Just help hint (unless multiline allowed)
+        if terminal_width < 80 and not allow_multiline:
             return "[?]help"
 
         # ==================================================================================
@@ -987,13 +981,50 @@ class TaskTUI:
         # ⚠️  DO NOT change this pattern without strong justification - it improves UX!
         # ==================================================================================
 
-        # Narrow (80-120 cols): Minimal shortcuts
-        if terminal_width < 120:
-            return "[a]dd [e]dit [d]one [s]ync [/]filter [q]uit"
+        # When multiline is allowed, manually wrap to avoid breaking words
+        if allow_multiline:
+            # Standard shortcuts as a list
+            shortcuts_list = [
+                "[a]dd",
+                "[e]dit",
+                "[d]one",
+                "[p]rogress",
+                "[c]ancelled",
+                "ar[v]hive",
+                "[m]ove",
+                "de[l]ete",
+                "ex[t]end",
+                "[s]ync",
+                "[/]filter",
+                "t[r]ee",
+                "[q]uit",
+            ]
 
-        # Medium (120-160 cols): Standard shortcuts
+            # Smart wrap: build lines that fit within terminal width without breaking words
+            lines = []
+            current_line = ""
+            padding = 2  # Account for " " padding on each side
+
+            for shortcut in shortcuts_list:
+                # Check if adding this shortcut would exceed terminal width
+                test_line = f"{current_line} {shortcut}".strip()
+                if len(test_line) + padding <= terminal_width:
+                    current_line = test_line
+                else:
+                    # Line is full, start a new one
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = shortcut
+
+            # Add the last line
+            if current_line:
+                lines.append(current_line)
+
+            return "\n ".join(lines)
+
+        # Medium width (120-160 cols): Standard shortcuts on one line
         if terminal_width < 160:
-            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete [s]ync [/]filter t[r]ee [q]uit"
+            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete ex[t]end [s]ync [/]filter t[r]ee [q]uit"
 
         # Wide (>=160 cols): Full shortcuts with multi-select hint
         return (
@@ -1004,11 +1035,12 @@ class TaskTUI:
     def _get_status_bar_text(self) -> FormattedText:
         """Get status bar with sync/reload info and responsive shortcuts.
 
-        Returns a two-line status bar (when terminal is wide enough):
+        Returns a multi-line status bar:
         - Line 1: Status info (sync/reload times, conflicts, auto-sync status)
-        - Line 2: Keyboard shortcuts (responsive to terminal width)
+        - Lines 2+: Keyboard shortcuts (will wrap on narrow terminals to show all shortcuts)
 
-        For narrow terminals (<120 cols), combines both into single line.
+        On narrow terminals (<120 cols), shortcuts wrap to multiple lines automatically,
+        ensuring all shortcuts are visible even on 80-column terminals.
         """
         # Get terminal width for responsive layout
         _, terminal_width = self._get_terminal_size()
@@ -1016,19 +1048,17 @@ class TaskTUI:
         # Build status information (always priority)
         status_info = self._build_status_info()
 
-        # Get shortcuts based on terminal width
-        shortcuts = self._get_shortcuts_text(terminal_width)
+        # For narrow terminals, allow shortcuts to wrap to multiple lines
+        allow_multiline = terminal_width < 120
 
-        # Two-line layout for medium/wide terminals (>=120 cols)
-        if terminal_width >= 120 and status_info:
-            return HTML(f" {status_info}\n {shortcuts} ")
+        # Get shortcuts based on terminal width (with multiline wrapping for narrow terminals)
+        shortcuts = self._get_shortcuts_text(terminal_width, allow_multiline=allow_multiline)
 
-        # Single-line layout for narrow terminals
-        # Combine status and minimal shortcuts
+        # Always use separate lines for status and shortcuts when status exists
         if status_info:
-            return HTML(f" {status_info} | {shortcuts} ")
+            return HTML(f" {status_info}\n {shortcuts} ")
         else:
-            # Fallback to just shortcuts if no status info
+            # Just shortcuts if no status info
             return HTML(f" {shortcuts} ")
 
     def _get_task_detail_text(self) -> FormattedText:
@@ -1041,9 +1071,9 @@ class TaskTUI:
 
         task = tasks[self.selected_row]
 
-        # Get display ID
+        # Get display ID (zero-padded to 3 digits for consistent width)
         display_id = get_display_id_from_uuid(task.id)
-        display_id_str = str(display_id) if display_id else f"{task.id[:8]}..."
+        display_id_str = f"{display_id:03d}" if display_id else f"{task.id[:8]}..."
 
         # Build detail sections
         lines = []
@@ -1225,7 +1255,7 @@ class TaskTUI:
 
         # Define minimum and preferred widths for each column
         # Fixed width columns (don't expand)
-        max_id_width = 3
+        max_id_width = 4  # Accommodate 3-digit zero-padded IDs (001-999)
         max_status_width = 7
         max_priority_width = 3
         max_due_width = 10
@@ -1325,9 +1355,9 @@ class TaskTUI:
             is_selected = actual_idx == self.selected_row
             is_multi_selected = task.id in self.multi_selected
 
-            # Get display ID
+            # Get display ID (zero-padded to 3 digits for consistent width)
             display_id = get_display_id_from_uuid(task.id)
-            display_id_str = str(display_id) if display_id else f"{task.id[:8]}..."
+            display_id_str = f"{display_id:03d}" if display_id else f"{task.id[:8]}..."
 
             # Format title with tree structure and selection markers
             if self.tree_view:

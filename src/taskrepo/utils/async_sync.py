@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from taskrepo.core.repository import Repository
+from taskrepo.utils.conflict_detection import resolve_readme_conflicts
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 
@@ -121,6 +122,15 @@ def sync_repository_background(repository: Repository, strategy: str = "auto", c
             for file_path in resolved_files:
                 git_repo.git.add(str(file_path))
             git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_files)} conflict marker(s)")
+
+        # Step 4b: Resolve README conflicts (auto-generated files, safe to auto-resolve)
+        resolved_readmes = resolve_readme_conflicts(repository.path, console=None)
+        if resolved_readmes:
+            # Stage resolved README files
+            for file_path in resolved_readmes:
+                git_repo.git.add(str(file_path.relative_to(repository.path)))
+            # Commit if we actually resolved README conflicts
+            git_repo.index.commit(f"Auto-resolve: Fixed {len(resolved_readmes)} README conflict(s)")
 
         # Step 5: Update README files (skip if no config provided)
         if config:

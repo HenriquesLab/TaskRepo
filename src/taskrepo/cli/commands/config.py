@@ -168,8 +168,8 @@ def config_cmd(ctx, show):
             if not repositories:
                 click.secho("✗ No repositories found. Create one first with: tsk create-repo", fg="red")
             else:
-                # Sort by task count (descending), then name (ascending)
-                repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+                # Sort alphabetically by name
+                repositories = manager.sort_repositories_alphabetically(repositories)
 
                 current_repo = config.default_repo if config.default_repo else "(none)"
                 click.echo(f"\nCurrent default repository: {current_repo}")

@@ -142,8 +142,10 @@ def prompt_repository(repositories: list[Repository], default: Optional[str] = N
         print(f"Repository: {repositories[0].name}")
         return repositories[0]
 
-    # Sort by task count (descending), then name (ascending)
-    repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+    # Sort alphabetically by name
+    from taskrepo.core.repository import RepositoryManager
+
+    repositories = RepositoryManager.sort_repositories_alphabetically(repositories)
 
     # Find the default repository's index (after sorting)
     default_index = None

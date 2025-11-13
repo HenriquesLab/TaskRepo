@@ -470,8 +470,8 @@ def repos(ctx):
         click.echo("Create one with: taskrepo create-repo <name>")
         return
 
-    # Sort by task count (descending), then name (ascending)
-    repositories = sorted(repositories, key=lambda r: (-len(r.list_tasks()), r.name))
+    # Sort alphabetically by name
+    repositories = manager.sort_repositories_alphabetically(repositories)
 
     click.echo(f"Repositories in {config.parent_dir}:\n")
     for repo in repositories:

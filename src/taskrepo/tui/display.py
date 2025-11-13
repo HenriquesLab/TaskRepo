@@ -23,9 +23,21 @@ def display_width(text: str) -> int:
         Display width in terminal cells (emojis typically count as 2)
     """
     width = wcwidth.wcswidth(text)
-    # wcswidth returns -1 if there are non-printable characters
-    # Fall back to len() in that case
-    return width if width >= 0 else len(text)
+    # wcswidth returns -1 if there are non-printable characters or unrecognized sequences
+    if width >= 0:
+        return width
+
+    # Fall back to character-by-character calculation
+    # This handles mixed content (emojis, box-drawing chars, etc.) more reliably
+    total = 0
+    for char in text:
+        char_width = wcwidth.wcwidth(char)
+        if char_width < 0:
+            # Unrecognized character, assume width of 1
+            total += 1
+        else:
+            total += char_width
+    return total
 
 
 def truncate_to_width(text: str, max_width: int, suffix: str = "...") -> str:
