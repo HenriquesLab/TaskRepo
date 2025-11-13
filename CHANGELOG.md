@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.7] - 2025-11-13
+
+### Added
+
+- **Centralized README conflict auto-resolution**: Added intelligent README conflict resolver in `conflict_detection.py`
+  - Automatically resolves timestamp conflicts in auto-generated README files
+  - Handles nested conflict markers (`<<<<<<< HEAD` inside `<<<<<<< HEAD`)
+  - Integrated into both `sync` and `async_sync` commands
+  - README conflicts now resolve automatically during sync without manual intervention
+
+- **Smart word-aware wrapping for TUI shortcuts**: Enhanced status bar to show all shortcuts even on narrow terminals
+  - Shortcuts now intelligently wrap to multiple lines on terminals <120 columns
+  - Words never break mid-shortcut (e.g., `[q]uit` stays intact instead of `[q` / `uit`)
+  - Dynamic height calculation based on actual wrapped lines
+  - All shortcuts (including `ex[t]end`) now visible on 80-column terminals
+
+### Improved
+
+- **TUI status bar adaptability**: Status bar now adapts intelligently to terminal width
+  - Added `ex[t]end` shortcut to medium-width display (120-160 cols)
+  - Smart line-breaking algorithm respects word boundaries
+  - Multi-line status bar (2-4 lines) on narrow terminals ensures full visibility
+  - Better UX on narrow terminals with no loss of functionality
+
 ## [0.10.6] - 2025-11-11
 
 ### Added
