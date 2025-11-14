@@ -1,5 +1,7 @@
 """Add command for creating new tasks."""
 
+import sys
+
 import click
 
 from taskrepo.core.repository import RepositoryManager
@@ -19,7 +21,12 @@ from taskrepo.utils.helpers import update_cache_and_display_repo
 @click.option("--parent", "-P", help="Parent task ID (for creating subtasks)")
 @click.option("--due", help="Due date (e.g., 2025-12-31)")
 @click.option("--description", "-d", help="Task description")
-@click.option("--interactive/--no-interactive", "-i/-I", default=True, help="Use interactive mode")
+@click.option(
+    "--interactive/--no-interactive",
+    "-i/-I",
+    default=None,
+    help="Use interactive mode (default: auto-detect based on TTY)",
+)
 @click.pass_context
 def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due, description, interactive):
     """Add a new task."""
@@ -27,6 +34,21 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
     manager = RepositoryManager(config.parent_dir)
 
     repositories = manager.discover_repositories()
+
+    # Auto-detect interactive mode if not specified
+    if interactive is None:
+        # Check if stdin is a TTY (terminal)
+        interactive = sys.stdin.isatty()
+
+        # If not a TTY, warn user that non-interactive mode is being used
+        if not interactive and not title:
+            default_repo_msg = f" (using default: {config.default_repo})" if config.default_repo else ""
+            click.secho(
+                f"Warning: Input is not a terminal (fd=0).\n"
+                f"Running in non-interactive mode. --title is required{', --repo optional' if config.default_repo else ', --repo required'}{default_repo_msg}.",
+                fg="yellow",
+                err=True,
+            )
 
     # Interactive mode
     if interactive:
@@ -132,9 +154,17 @@ def add(ctx, repo, title, project, priority, assignees, tags, links, parent, due
 
     else:
         # Non-interactive mode - validate required fields
-        if not repo or not title:
-            click.secho("Error: --repo and --title are required in non-interactive mode", fg="red", err=True)
+        if not title:
+            click.secho("Error: --title is required in non-interactive mode", fg="red", err=True)
             ctx.exit(1)
+
+        # Use default repo if not specified
+        if not repo:
+            if config.default_repo:
+                repo = config.default_repo
+            else:
+                click.secho("Error: --repo is required (no default_repo configured)", fg="red", err=True)
+                ctx.exit(1)
 
         selected_repo = manager.get_repository(repo)
         if not selected_repo:

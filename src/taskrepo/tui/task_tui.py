@@ -990,9 +990,11 @@ class TaskTUI:
                 "[d]one",
                 "[p]rogress",
                 "[c]ancelled",
+                "[H][M][L]",
                 "ar[v]hive",
                 "[m]ove",
                 "de[l]ete",
+                "s[u]btask",
                 "ex[t]end",
                 "[s]ync",
                 "[/]filter",
@@ -1024,11 +1026,11 @@ class TaskTUI:
 
         # Medium width (120-160 cols): Standard shortcuts on one line
         if terminal_width < 160:
-            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete ex[t]end [s]ync [/]filter t[r]ee [q]uit"
+            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled [H][M][L] ar[v]hive [m]ove de[l]ete s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit"
 
         # Wide (>=160 cols): Full shortcuts with multi-select hint
         return (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled ar[v]hive [m]ove de[l]ete "
+            "[a]dd [e]dit [d]one [p]rogress [c]ancelled [H][M][L] ar[v]hive [m]ove de[l]ete "
             "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space"
         )
 
@@ -1177,20 +1179,26 @@ class TaskTUI:
             # Show all tasks
             tasks = all_tasks
         else:
-            # Filter based on view mode
-            current_view_value = self.view_items[self.current_view_idx]
-
-            if self.view_mode == "repo":
-                # Filter by repository
-                tasks = [t for t in all_tasks if t.repo == current_view_value]
-            elif self.view_mode == "project":
-                # Filter by project
-                tasks = [t for t in all_tasks if t.project == current_view_value]
-            elif self.view_mode == "assignee":
-                # Filter by assignee
-                tasks = [t for t in all_tasks if current_view_value in t.assignees]
-            else:
+            # Check if current_view_idx is still valid (it may be out of bounds after archiving/deleting)
+            if self.current_view_idx >= len(self.view_items):
+                # Index out of bounds - reset to "All" view
+                self.current_view_idx = -1
                 tasks = all_tasks
+            else:
+                # Filter based on view mode
+                current_view_value = self.view_items[self.current_view_idx]
+
+                if self.view_mode == "repo":
+                    # Filter by repository
+                    tasks = [t for t in all_tasks if t.repo == current_view_value]
+                elif self.view_mode == "project":
+                    # Filter by project
+                    tasks = [t for t in all_tasks if t.project == current_view_value]
+                elif self.view_mode == "assignee":
+                    # Filter by assignee
+                    tasks = [t for t in all_tasks if current_view_value in t.assignees]
+                else:
+                    tasks = all_tasks
 
         # Apply text filter if active
         if self.filter_text:

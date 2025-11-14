@@ -131,7 +131,7 @@ def tui(ctx, repo, no_sync):
         Space - Multi-select tasks
 
     Task Operations:
-        n - New task
+        a - Add new task
         e - Edit task
         d - Mark as done
         p - Toggle in-progress/pending
@@ -139,14 +139,16 @@ def tui(ctx, repo, no_sync):
         H - Set priority to High
         M - Set priority to Medium
         L - Set priority to Low
-        a - Archive task
-        x - Delete task
+        v - Archive task
+        l - Delete task
+        m - Move task to another repo
+        u - Create subtask
+        t - Extend due date
 
     View Controls:
         / - Filter tasks
         s - Sync with git
-        t - Toggle tree view
-        r - Refresh
+        r - Toggle tree view
         q/Esc - Quit
     """
     config = ctx.obj["config"]

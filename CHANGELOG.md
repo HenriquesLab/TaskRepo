@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.8] - 2025-11-14
+
+### Added
+
+- **Smart email-to-task integration**: Enhanced gmail-control skill with intelligent defaults
+  - Auto-detects priority from email keywords (urgent/asap → High, fyi → Low)
+  - Auto-extracts due dates from email content ("by Monday", "by tomorrow", etc.)
+  - Auto-tags all email-based tasks with "email" tag
+  - Now uses TaskRepo CLI instead of direct file creation for better integration
+
+- **TUI status bar improvements**: Added missing keyboard shortcuts to status bar
+  - Added priority shortcuts `[H][M][L]` for setting High/Medium/Low priority
+  - Added subtask shortcut `s[u]btask` (was only visible on very wide terminals)
+  - All shortcuts now visible at all terminal widths
+
+### Improved
+
+- **CLI non-interactive mode**: Enhanced `tsk add` command with intelligent TTY detection
+  - Automatically detects when not running in a terminal (stdin is not a TTY)
+  - Auto-switches to non-interactive mode without requiring manual flag
+  - Only requires `--title` argument (uses `default_repo` from config if `--repo` not specified)
+  - Better error messages with helpful context about available defaults
+  - Works seamlessly with scripts and automation
+
+- **TUI help documentation**: Updated `tsk tui --help` to reflect actual key bindings
+  - Fixed key mapping documentation (a/v/l/m/u/t keys)
+  - Added missing shortcuts (move, subtask, extend)
+  - Corrected tree toggle key from 't' to 'r'
+
+### Fixed
+
+- **TUI crash when archiving tasks**: Fixed IndexError when archiving the last task in a filtered view
+  - Added bounds checking in `_get_filtered_tasks()` method
+  - Automatically resets to "All tasks" view when current view becomes empty
+  - Prevents crash when view items list changes after archiving/deleting
+
 ## [0.10.7] - 2025-11-13
 
 ### Added
