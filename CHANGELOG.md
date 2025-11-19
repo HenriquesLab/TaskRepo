@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.9] - 2025-11-19
+
+### Fixed
+
+- **Git push error detection**: Fixed silent push failures that weren't being caught
+  - GitPython's `push()` doesn't always raise exceptions on failure
+  - Now explicitly checks PushInfo flags (ERROR, REJECTED, REMOTE_REJECTED, REMOTE_FAILURE)
+  - Push failures are now properly detected and reported instead of showing false success
+
+- **Automatic recovery for diverged branches**: Added auto-rebase when push is rejected
+  - Detects non-fast-forward push rejections (branches have diverged)
+  - Automatically runs `git pull --rebase` to integrate remote changes
+  - Retries push if rebase succeeds without conflicts
+  - Safely aborts and provides manual instructions if conflicts occur
+  - Applies to both `tsk sync` and TUI background sync
+
 ## [0.10.8] - 2025-11-14
 
 ### Added
