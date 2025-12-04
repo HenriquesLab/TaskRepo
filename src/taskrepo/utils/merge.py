@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from git import Repo as GitRepo
 
@@ -13,6 +14,19 @@ from taskrepo.core.task import Task
 
 if TYPE_CHECKING:
     from typing import Any
+
+# Field categories for merge logic
+SIMPLE_FIELDS = ["title", "status", "priority", "project", "parent", "description"]
+DATE_FIELDS = ["due"]
+LIST_FIELDS = ["assignees", "tags", "links", "depends"]
+SEMANTIC_FIELDS = {"status", "priority"}
+CONTENT_FIELDS = {"title", "description", "project"}
+
+# Thresholds for merge decisions
+MIN_TIME_DIFF_SECONDS = 1  # Minimum time difference to resolve conflicts
+TITLE_SIMILARITY_THRESHOLD = 0.7  # Title must be <70% similar to be major change
+DESCRIPTION_SIMILARITY_THRESHOLD = 0.5  # Description must be <50% similar
+MIN_DESCRIPTION_LENGTH = 50  # Minimum length to consider description substantial
 
 
 @dataclass
@@ -32,6 +46,73 @@ class ConflictInfo:
     remote_task: Task
     conflicting_fields: list[str]
     can_auto_merge: bool
+
+
+def _calculate_text_similarity(text1: str, text2: str) -> float:
+    """Calculate similarity ratio between two text strings.
+
+    Args:
+        text1: First text string
+        text2: Second text string
+
+    Returns:
+        Similarity ratio between 0.0 (completely different) and 1.0 (identical)
+    """
+    return SequenceMatcher(None, text1, text2).ratio()
+
+
+def _copy_task_from(source_task: Task) -> Task:
+    """Create a copy of a task with all fields.
+
+    Args:
+        source_task: Task to copy
+
+    Returns:
+        New Task instance with copied values
+    """
+    return Task(
+        id=source_task.id,
+        title=source_task.title,
+        status=source_task.status,
+        priority=source_task.priority,
+        project=source_task.project,
+        assignees=source_task.assignees.copy(),
+        tags=source_task.tags.copy(),
+        links=source_task.links.copy(),
+        due=source_task.due,
+        created=source_task.created,
+        modified=source_task.modified,
+        depends=source_task.depends.copy(),
+        parent=source_task.parent,
+        description=source_task.description,
+        repo=source_task.repo,
+    )
+
+
+def _resolve_semantic_conflict(value_a: str, value_b: str, newer_is_a: bool, get_priority: Callable[[str], int]) -> str:
+    """Generic semantic conflict resolution.
+
+    Chooses the value with higher semantic priority. If equal, uses timestamp.
+
+    Args:
+        value_a: First value to compare
+        value_b: Second value to compare
+        newer_is_a: Whether value_a is from the newer task
+        get_priority: Function to get semantic priority of a value (higher = better)
+
+    Returns:
+        The value with higher semantic priority, or newer if equal
+    """
+    priority_a = get_priority(value_a)
+    priority_b = get_priority(value_b)
+
+    if priority_a > priority_b:
+        return value_a
+    elif priority_b > priority_a:
+        return value_b
+    else:
+        # Equal priority - use timestamp
+        return value_a if newer_is_a else value_b
 
 
 def detect_conflicts(
@@ -173,26 +254,15 @@ def _find_conflicting_fields(local_task: Task, remote_task: Task) -> list[str]:
     """
     conflicting = []
 
-    # Compare simple fields (excluding timestamps)
-    simple_fields = ["title", "status", "priority", "project", "parent", "description"]
-    for field in simple_fields:
+    # Compare simple and date fields
+    for field in SIMPLE_FIELDS + DATE_FIELDS:
         local_val = getattr(local_task, field)
         remote_val = getattr(remote_task, field)
         if local_val != remote_val:
             conflicting.append(field)
 
-    # Compare date fields (excluding created/modified timestamps)
-    date_fields = ["due"]
-    for field in date_fields:
-        local_val = getattr(local_task, field)
-        remote_val = getattr(remote_task, field)
-        # Compare dates, accounting for None
-        if local_val != remote_val:
-            conflicting.append(field)
-
-    # Compare list fields
-    list_fields = ["assignees", "tags", "links", "depends"]
-    for field in list_fields:
+    # Compare list fields (use sets for comparison)
+    for field in LIST_FIELDS:
         local_val = set(getattr(local_task, field))
         remote_val = set(getattr(remote_task, field))
         if local_val != remote_val:
@@ -205,7 +275,7 @@ def _can_auto_merge(local_task: Task, remote_task: Task, conflicting_fields: lis
     """Determine if tasks can be automatically merged.
 
     Auto-merge is possible when:
-    1. Description conflict can be auto-resolved (one empty, or both same)
+    1. Description conflict can be auto-resolved (one empty, major edit, or both same)
     2. Status/priority conflicts can use semantic resolution
     3. Other simple field conflicts with clear timestamp winner
     4. List fields can be unioned
@@ -218,48 +288,42 @@ def _can_auto_merge(local_task: Task, remote_task: Task, conflicting_fields: lis
     Returns:
         True if tasks can be auto-merged, False otherwise
     """
-    # Check description conflicts - only block if both have content and differ
+    # Check description conflicts
     if "description" in conflicting_fields:
         local_desc = local_task.description.strip()
         remote_desc = remote_task.description.strip()
+
         # If one is empty, can auto-merge (use non-empty one)
-        # If both have content and differ, need manual resolution
-        if local_desc and remote_desc and local_desc != remote_desc:
-            return False
-        # Otherwise can auto-merge (one is empty or both are same)
+        if not local_desc or not remote_desc:
+            pass  # Can auto-merge
 
-    # Status and priority conflicts can always be resolved semantically
-    semantic_fields = {"status", "priority"}
-
-    # List fields can always be merged by union
-    list_fields = {"assignees", "tags", "links", "depends"}
-
-    # Date fields (due) can be resolved if one is None
-    date_fields = {"due"}
-
-    # Simple fields need timestamp resolution
-    simple_fields = {"title", "project", "parent"}
+        # If both have content and differ, check if it's a major edit
+        elif local_desc != remote_desc:
+            # Allow auto-merge if this is a major edit (will use local description)
+            is_major = _is_major_edit(local_task, remote_task, conflicting_fields)
+            if not is_major:
+                return False  # Not a major edit - need manual resolution
 
     # Check if we can auto-resolve all conflicts
+    time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
+
     for field in conflicting_fields:
-        if field in semantic_fields:
+        if field in SEMANTIC_FIELDS:
             continue  # Always resolvable
-        elif field in list_fields:
+        elif field in LIST_FIELDS:
             continue  # Always resolvable by union
-        elif field in date_fields:
+        elif field in DATE_FIELDS:
             # Can resolve if one is None
             local_val = getattr(local_task, field)
             remote_val = getattr(remote_task, field)
             if local_val is None or remote_val is None:
                 continue  # Resolvable - use non-None value
-            # Both have values - need timestamp to decide
-            time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
-            if time_diff <= 1:
+            # Both have values - need clear timestamp to decide
+            if time_diff <= MIN_TIME_DIFF_SECONDS:
                 return False  # Too close to call
-        elif field in simple_fields:
+        elif field in {"title", "project", "parent"}:
             # Need clear timestamp winner
-            time_diff = abs((local_task.modified - remote_task.modified).total_seconds())
-            if time_diff <= 1:
+            if time_diff <= MIN_TIME_DIFF_SECONDS:
                 return False  # Too close to call
         elif field == "description":
             # Already handled above
@@ -307,16 +371,7 @@ def resolve_status_conflict(status_a: str, status_b: str, newer_is_a: bool) -> s
         >>> resolve_status_conflict("completed", "cancelled", newer_is_a=False)
         "cancelled"  # Equal progress, newer wins
     """
-    priority_a = get_status_priority(status_a)
-    priority_b = get_status_priority(status_b)
-
-    if priority_a > priority_b:
-        return status_a
-    elif priority_b > priority_a:
-        return status_b
-    else:
-        # Equal progress - use timestamp
-        return status_a if newer_is_a else status_b
+    return _resolve_semantic_conflict(status_a, status_b, newer_is_a, get_status_priority)
 
 
 def get_priority_level(priority: str) -> int:
@@ -350,22 +405,56 @@ def resolve_priority_conflict(priority_a: str, priority_b: str, newer_is_a: bool
         >>> resolve_priority_conflict("H", "H", newer_is_a=False)
         "H"  # Equal urgency, newer wins (but same result)
     """
-    level_a = get_priority_level(priority_a)
-    level_b = get_priority_level(priority_b)
+    return _resolve_semantic_conflict(priority_a, priority_b, newer_is_a, get_priority_level)
 
-    if level_a > level_b:
-        return priority_a
-    elif level_b > level_a:
-        return priority_b
-    else:
-        # Equal urgency - use timestamp
-        return priority_a if newer_is_a else priority_b
+
+def _is_major_edit(local_task: Task, remote_task: Task, conflicting_fields: list[str]) -> bool:
+    """Detect if local changes represent a major edit session.
+
+    A major edit is when the user is clearly rewriting/restructuring the task,
+    not just updating status or making minor tweaks.
+
+    Args:
+        local_task: Local task version
+        remote_task: Remote task version
+        conflicting_fields: List of field names that conflict
+
+    Returns:
+        True if local changes represent a major edit session
+    """
+    # Count how many content fields changed
+    content_changes = sum(1 for field in conflicting_fields if field in CONTENT_FIELDS)
+
+    # Major edit if 2+ content fields changed (e.g., title + description)
+    if content_changes >= 2:
+        return True
+
+    # Also consider it major if title changed significantly
+    if "title" in conflicting_fields:
+        local_title = local_task.title.strip()
+        remote_title = remote_task.title.strip()
+        if local_title and remote_title:
+            similarity = _calculate_text_similarity(local_title, remote_title)
+            if similarity < TITLE_SIMILARITY_THRESHOLD:
+                return True
+
+    # Or if description changed substantially
+    if "description" in conflicting_fields:
+        local_desc = local_task.description.strip()
+        remote_desc = remote_task.description.strip()
+        # Both have content and significantly different
+        if local_desc and remote_desc and len(local_desc) > MIN_DESCRIPTION_LENGTH:
+            similarity = _calculate_text_similarity(local_desc, remote_desc)
+            if similarity < DESCRIPTION_SIMILARITY_THRESHOLD:
+                return True
+
+    return False
 
 
 def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: list[str]) -> Optional[Task]:
     """Automatically merge two conflicting task versions using semantic understanding.
 
-    **Semantic Merging Strategy**:
+    **Enhanced Semantic Merging Strategy**:
 
     - **Status**: Progress wins (completed/cancelled > in-progress > pending).
       If equal progress, newer timestamp wins.
@@ -376,12 +465,16 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
 
     - **Due date**: If one is None, use non-None. If both differ, newer wins.
 
-    - **List fields** (assignees, tags, links, depends): Union of both versions.
+    - **List fields** (assignees, tags, links, depends): **SMART MERGE**
+      1. If local is a major edit session → prefer local version
+      2. If local explicitly removed items and is newer → prefer local version
+      3. If local is significantly newer (>30s) → prefer local version
+      4. Otherwise → union of both versions (safe default)
 
     - **Other fields**: Newer timestamp wins.
 
-    This ensures that actual progress (e.g., marking as "done") isn't overwritten
-    by unchanged fields from a newer edit.
+    This ensures that intentional edits (like removing tags) aren't overwritten
+    by blindly merging everything together.
 
     Args:
         local_task: Local task version
@@ -398,43 +491,11 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
     # Determine which task is newer
     use_local = local_task.modified >= remote_task.modified
 
+    # Detect major edit session
+    is_major_edit = _is_major_edit(local_task, remote_task, conflicting_fields)
+
     # Start with the newer task as base
-    if use_local:
-        merged = Task(
-            id=local_task.id,
-            title=local_task.title,
-            status=local_task.status,
-            priority=local_task.priority,
-            project=local_task.project,
-            assignees=local_task.assignees.copy(),
-            tags=local_task.tags.copy(),
-            links=local_task.links.copy(),
-            due=local_task.due,
-            created=local_task.created,
-            modified=local_task.modified,
-            depends=local_task.depends.copy(),
-            parent=local_task.parent,
-            description=local_task.description,
-            repo=local_task.repo,
-        )
-    else:
-        merged = Task(
-            id=remote_task.id,
-            title=remote_task.title,
-            status=remote_task.status,
-            priority=remote_task.priority,
-            project=remote_task.project,
-            assignees=remote_task.assignees.copy(),
-            tags=remote_task.tags.copy(),
-            links=remote_task.links.copy(),
-            due=remote_task.due,
-            created=remote_task.created,
-            modified=remote_task.modified,
-            depends=remote_task.depends.copy(),
-            parent=remote_task.parent,
-            description=remote_task.description,
-            repo=remote_task.repo,
-        )
+    merged = _copy_task_from(local_task if use_local else remote_task)
 
     # Apply semantic resolution for status conflicts
     # Status with more progress wins (completed/cancelled > in-progress > pending)
@@ -446,16 +507,20 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
     if "priority" in conflicting_fields:
         merged.priority = resolve_priority_conflict(local_task.priority, remote_task.priority, newer_is_a=use_local)
 
-    # Handle description conflicts - use non-empty if one is empty
+    # Handle description conflicts
     if "description" in conflicting_fields:
         local_desc = local_task.description.strip()
         remote_desc = remote_task.description.strip()
         if not local_desc and remote_desc:
+            # One empty - use non-empty
             merged.description = remote_task.description
         elif local_desc and not remote_desc:
+            # One empty - use non-empty
             merged.description = local_task.description
-        # else: both have content (should have been caught by _can_auto_merge)
-        # or both empty - keep merged value as-is
+        elif local_desc and remote_desc and is_major_edit:
+            # Both have content, but major edit - prefer local
+            merged.description = local_task.description
+        # else: both empty or both same - keep merged value (newer task)
 
     # Handle due date conflicts - use non-None if one is None
     if "due" in conflicting_fields:
@@ -465,13 +530,26 @@ def smart_merge_tasks(local_task: Task, remote_task: Task, conflicting_fields: l
             merged.due = local_task.due
         # else: both have values - use newer (already set in merged)
 
-    # Merge list fields by taking union
-    list_fields = ["assignees", "tags", "links", "depends"]
-    for field in list_fields:
+    # SMART merge list fields with context-aware logic
+    for field in LIST_FIELDS:
         if field in conflicting_fields:
-            local_set = set(getattr(local_task, field))
-            remote_set = set(getattr(remote_task, field))
-            merged_list = sorted(local_set | remote_set)  # Union and sort
+            local_items = getattr(local_task, field)
+            remote_items = getattr(remote_task, field)
+            local_set = set(local_items)
+            remote_set = set(remote_items)
+
+            # Determine merge strategy based on context
+            # Rule 1: Major edit session (title+description changed significantly)
+            #         → respect ALL local changes
+            # Rule 2: Otherwise → use union (safe default for collaboration)
+
+            if is_major_edit and use_local:
+                # Major edit: user is actively rewriting the task, respect their version
+                merged_list = sorted(local_set)
+            else:
+                # Safe default: union (both sides may have added different items)
+                merged_list = sorted(local_set | remote_set)
+
             setattr(merged, field, merged_list)
 
     # Update modified timestamp to now
