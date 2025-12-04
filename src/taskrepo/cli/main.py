@@ -23,7 +23,7 @@ from taskrepo.cli.commands.unarchive import unarchive
 from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
 from taskrepo.utils.banner import display_banner
-from taskrepo.utils.update_checker import check_and_notify_updates
+from taskrepo.utils.update_checker import check_and_notify_updates, show_update_notification
 
 
 class OrderedGroup(click.Group):
@@ -133,8 +133,11 @@ def process_result(ctx, result, **kwargs):
 
     This runs after any command completes and checks for updates.
     """
-    # Check for updates after command completes
+    # Start async update check in background (if due)
     check_and_notify_updates()
+
+    # Show any cached update notifications immediately
+    show_update_notification()
 
 
 # Register commands

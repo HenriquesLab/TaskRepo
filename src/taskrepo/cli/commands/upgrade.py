@@ -8,7 +8,7 @@ import click
 
 from taskrepo.__version__ import __version__
 from taskrepo.utils.install_detector import detect_install_method
-from taskrepo.utils.update_checker import check_for_updates
+from taskrepo.utils.update_checker import force_update_check
 
 
 def detect_installer() -> Tuple[str, list[str]]:
@@ -102,11 +102,11 @@ def upgrade(ctx, check, yes):
     """
     # Check for updates
     click.echo("Checking for updates...")
-    latest_version = check_for_updates()
+    update_available, latest_version = force_update_check()
 
     if check:
         # Just show version information
-        if latest_version:
+        if update_available and latest_version:
             click.echo(f"Current version: v{__version__}")
             click.secho(f"Latest version: v{latest_version}", fg="green", bold=True)
             click.secho("Update available!", fg="yellow")
@@ -116,7 +116,7 @@ def upgrade(ctx, check, yes):
         return
 
     # No update available
-    if not latest_version:
+    if not update_available or not latest_version:
         click.secho(f"✓ You are already using the latest version (v{__version__})", fg="green")
         return
 
