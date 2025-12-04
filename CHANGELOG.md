@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.10] - 2025-12-04
+
+### Added
+
+- **Smart auto-merge with major edit detection**: Enhanced merge conflict resolution during `tsk sync`
+  - Detects major edit sessions (2+ content fields changed OR title/description significantly different)
+  - Context-aware list merging: respects local changes during major edits, uses union for incremental changes
+  - Fixes issue where removed tags were brought back by auto-merge during active editing
+  - Major edits are detected using text similarity analysis (title <70% similar OR description <50% similar)
+
+### Improved
+
+- **Code centralization in merge logic**: Better maintainability and consistency
+  - Added constants for field categories (SIMPLE_FIELDS, DATE_FIELDS, LIST_FIELDS, SEMANTIC_FIELDS, CONTENT_FIELDS)
+  - Added threshold constants (TITLE_SIMILARITY_THRESHOLD, DESCRIPTION_SIMILARITY_THRESHOLD, etc.)
+  - Created reusable helper functions:
+    - `_calculate_text_similarity()`: DRY for text comparison using SequenceMatcher
+    - `_copy_task_from()`: DRY for task copying
+    - `_resolve_semantic_conflict()`: Generic semantic resolution pattern
+  - Refactored all merge functions to use centralized components
+
 ## [0.10.9] - 2025-11-19
 
 ### Fixed
