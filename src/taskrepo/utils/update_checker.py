@@ -190,6 +190,10 @@ class UpdateChecker:
         if current == "unknown" or latest == "unknown":
             return None
 
+        # Don't show notification if versions are the same
+        if current == latest:
+            return None
+
         # Detect installation method and get appropriate upgrade command
         install_method = detect_install_method()
         upgrade_cmd = get_upgrade_command(install_method)

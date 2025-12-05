@@ -71,11 +71,47 @@ def test_countdown_overdue_weeks():
 
 
 def test_countdown_tomorrow():
-    """Test countdown shows weeks for tomorrow."""
+    """Test countdown shows 'tomorrow' for next day."""
     now = datetime(2025, 11, 10, 10, 0, 0)
     due = datetime(2025, 11, 11, 10, 0, 0)  # Tomorrow
     text, status, urgency = calculate_countdown(due, now)
-    assert text == "1 week"  # Ceiling: 1-6 days = 1 week
+    assert text == "tomorrow"
+    assert status == "soon"
+    assert urgency == "medium"
+
+
+def test_countdown_days():
+    """Test countdown shows days for 2-6 days away."""
+    now = datetime(2025, 11, 10, 10, 0, 0)
+
+    # 2 days
+    due = datetime(2025, 11, 12, 10, 0, 0)
+    text, status, urgency = calculate_countdown(due, now)
+    assert text == "2d"
+    assert status == "soon"
+    assert urgency == "medium"
+
+    # 3 days
+    due = datetime(2025, 11, 13, 10, 0, 0)
+    text, status, urgency = calculate_countdown(due, now)
+    assert text == "3d"
+    assert status == "soon"
+    assert urgency == "medium"
+
+    # 6 days
+    due = datetime(2025, 11, 16, 10, 0, 0)
+    text, status, urgency = calculate_countdown(due, now)
+    assert text == "6d"
+    assert status == "soon"
+    assert urgency == "medium"
+
+
+def test_countdown_one_week():
+    """Test countdown shows '1 week' for exactly 7 days."""
+    now = datetime(2025, 11, 10, 10, 0, 0)
+    due = datetime(2025, 11, 17, 10, 0, 0)  # Exactly 7 days
+    text, status, urgency = calculate_countdown(due, now)
+    assert text == "1 week"
     assert status == "soon"
     assert urgency == "medium"
 

@@ -703,11 +703,105 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
 
                         def push_changes():
                             origin = git_repo.remotes.origin
-                            origin.push()
+                            push_info = origin.push()
 
-                        run_with_spinner(
-                            progress, spinner_task, "Pushing to remote", push_changes, verbose, operations_task
-                        )
+                            # Check if push failed by examining PushInfo flags
+                            # GitPython doesn't always raise exceptions on push failures
+                            for info in push_info:
+                                # Check for error flags
+                                if info.flags & info.ERROR:
+                                    raise GitCommandError("git push", f"Push failed with ERROR flag: {info.summary}")
+                                if info.flags & info.REJECTED:
+                                    # Non-fast-forward - will attempt auto-recovery
+                                    raise GitCommandError("git push", "REJECTED")
+                                if info.flags & info.REMOTE_REJECTED:
+                                    raise GitCommandError("git push", f"Remote rejected push: {info.summary}")
+                                if info.flags & info.REMOTE_FAILURE:
+                                    raise GitCommandError("git push", f"Remote failure during push: {info.summary}")
+
+                            return push_info
+
+                        try:
+                            run_with_spinner(
+                                progress, spinner_task, "Pushing to remote", push_changes, verbose, operations_task
+                            )
+                        except GitCommandError as e:
+                            # Check if this is a non-fast-forward rejection that we can auto-recover
+                            if "REJECTED" in str(e):
+                                progress.console.print(
+                                    "  [yellow]⚠[/yellow] Push rejected (branches diverged) - attempting auto-recovery..."
+                                )
+
+                                # Try to pull with rebase
+                                try:
+
+                                    def rebase_pull():
+                                        # Get current branch
+                                        current_branch = git_repo.active_branch.name
+                                        # Pull with rebase to integrate remote changes
+                                        git_repo.git.pull("--rebase", "origin", current_branch)
+
+                                    run_with_spinner(
+                                        progress,
+                                        spinner_task,
+                                        "Pulling with rebase",
+                                        rebase_pull,
+                                        verbose,
+                                        operations_task,
+                                    )
+
+                                    # Check if rebase created conflicts
+                                    if git_repo.is_dirty(working_tree=True, untracked_files=False):
+                                        # Rebase created conflicts - abort and report
+                                        progress.console.print(
+                                            "  [red]✗[/red] Rebase created conflicts - aborting auto-recovery"
+                                        )
+                                        try:
+                                            git_repo.git.rebase("--abort")
+                                            progress.console.print("  [yellow]→[/yellow] Aborted rebase")
+                                        except Exception:
+                                            pass
+                                        progress.console.print(
+                                            "  [yellow]→[/yellow] Manual resolution required: git pull --rebase && git push"
+                                        )
+                                        raise
+                                    else:
+                                        # Rebase succeeded - try push again
+                                        progress.console.print("  [green]✓[/green] Rebase successful - retrying push")
+
+                                        def retry_push():
+                                            repo_origin = git_repo.remotes.origin
+                                            push_info = repo_origin.push()
+                                            # Check for errors again
+                                            for info in push_info:
+                                                if info.flags & (
+                                                    info.ERROR
+                                                    | info.REJECTED
+                                                    | info.REMOTE_REJECTED
+                                                    | info.REMOTE_FAILURE
+                                                ):
+                                                    raise GitCommandError(
+                                                        "git push", f"Push still failed: {info.summary}"
+                                                    )
+                                            return push_info
+
+                                        run_with_spinner(
+                                            progress, spinner_task, "Pushing to remote (retry)", retry_push, verbose
+                                        )
+
+                                except GitCommandError as rebase_error:
+                                    # Rebase or retry push failed
+                                    if "conflict" in str(rebase_error).lower():
+                                        progress.console.print(
+                                            "  [red]✗[/red] Auto-recovery failed: conflicts during rebase"
+                                        )
+                                        progress.console.print(
+                                            "  [yellow]→[/yellow] Resolve manually: git pull --rebase && git push"
+                                        )
+                                    raise
+                            else:
+                                # Other push error - re-raise
+                                raise
                 else:
                     progress.console.print("  • No remote configured (local repository only)")
 

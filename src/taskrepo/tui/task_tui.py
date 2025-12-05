@@ -1050,10 +1050,11 @@ class TaskTUI:
         # Build status information (always priority)
         status_info = self._build_status_info()
 
-        # For narrow terminals, allow shortcuts to wrap to multiple lines
-        allow_multiline = terminal_width < 120
+        # Always allow shortcuts to wrap to multiple lines if needed
+        # This ensures shortcuts are visible even when terminal is too narrow for single line
+        allow_multiline = True
 
-        # Get shortcuts based on terminal width (with multiline wrapping for narrow terminals)
+        # Get shortcuts based on terminal width (with multiline wrapping when needed)
         shortcuts = self._get_shortcuts_text(terminal_width, allow_multiline=allow_multiline)
 
         # Always use separate lines for status and shortcuts when status exists

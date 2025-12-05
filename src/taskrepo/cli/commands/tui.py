@@ -1178,7 +1178,6 @@ def _handle_sync(task_tui: TaskTUI, config):
                 pull_succeeded = True
                 try:
                     click.echo("  • Pulling from remote...")
-                    origin = git_repo.remotes.origin
                     # Use --rebase=false to handle divergent branches
                     git_repo.git.pull("--rebase=false", "origin", git_repo.active_branch.name)
                     click.secho("  ✓ Pulled from remote", fg="green")
@@ -1210,8 +1209,67 @@ def _handle_sync(task_tui: TaskTUI, config):
 
                 # Push to remote
                 click.echo("  • Pushing to remote...")
-                origin.push()
-                click.secho("  ✓ Pushed to remote", fg="green")
+
+                def try_push():
+                    repo_origin = git_repo.remotes.origin  # noqa: B023
+                    push_info = repo_origin.push()
+                    # Check if push failed by examining PushInfo flags
+                    for info in push_info:
+                        if info.flags & info.ERROR:
+                            raise GitCommandError("git push", f"Push failed with ERROR flag: {info.summary}")
+                        if info.flags & info.REJECTED:
+                            # Non-fast-forward - will attempt auto-recovery
+                            raise GitCommandError("git push", "REJECTED")
+                        if info.flags & info.REMOTE_REJECTED:
+                            raise GitCommandError("git push", f"Remote rejected push: {info.summary}")
+                        if info.flags & info.REMOTE_FAILURE:
+                            raise GitCommandError("git push", f"Remote failure during push: {info.summary}")
+                    return push_info
+
+                try:
+                    try_push()
+                    click.secho("  ✓ Pushed to remote", fg="green")
+                except GitCommandError as e:
+                    # Check if this is a non-fast-forward rejection that we can auto-recover
+                    if "REJECTED" in str(e):
+                        click.secho("  ⚠ Push rejected (branches diverged) - attempting auto-recovery...", fg="yellow")
+
+                        # Try to pull with rebase
+                        try:
+                            click.echo("  • Pulling with rebase...")
+                            current_branch = git_repo.active_branch.name
+                            git_repo.git.pull("--rebase", "origin", current_branch)
+
+                            # Check if rebase created conflicts
+                            if git_repo.is_dirty(working_tree=True, untracked_files=False):
+                                # Rebase created conflicts - abort and report
+                                click.secho("  ✗ Rebase created conflicts - aborting auto-recovery", fg="red")
+                                try:
+                                    git_repo.git.rebase("--abort")
+                                    click.secho("  → Aborted rebase", fg="yellow")
+                                except Exception:
+                                    pass
+                                click.secho(
+                                    "  → Manual resolution required: git pull --rebase && git push", fg="yellow"
+                                )
+                                raise
+                            else:
+                                # Rebase succeeded - try push again
+                                click.secho("  ✓ Rebase successful", fg="green")
+                                click.echo("  • Pushing to remote (retry)...")
+
+                                try_push()
+                                click.secho("  ✓ Pushed to remote", fg="green")
+
+                        except GitCommandError as rebase_error:
+                            # Rebase or retry push failed
+                            if "conflict" in str(rebase_error).lower():
+                                click.secho("  ✗ Auto-recovery failed: conflicts during rebase", fg="red")
+                                click.secho("  → Resolve manually: git pull --rebase && git push", fg="yellow")
+                            raise
+                    else:
+                        # Other push error - re-raise
+                        raise
             else:
                 click.secho("  ℹ No remote configured (local-only repository)", fg="cyan")
 

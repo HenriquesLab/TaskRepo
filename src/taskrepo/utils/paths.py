@@ -39,6 +39,17 @@ def get_update_check_cache_path() -> Path:
     return get_taskrepo_dir() / "update_check_cache.json"
 
 
+def get_history_cache_dir() -> Path:
+    """Get the path to the history cache directory.
+
+    Returns:
+        Path to ~/.TaskRepo/history_cache/
+    """
+    cache_dir = get_taskrepo_dir() / "history_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
 def get_legacy_config_path() -> Path:
     """Get the path to the legacy configuration file.
 

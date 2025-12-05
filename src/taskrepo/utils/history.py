@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Optional
 
-from git import Repo as GitRepo
-
+from taskrepo.core.repository import Repository
 from taskrepo.core.task import Task
+from taskrepo.utils import history_cache
 
 
 @dataclass
@@ -33,12 +33,13 @@ class CommitEvent:
     files_changed: list[str]
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=2048)
 def _parse_task_cached(commit_hash: str, task_id: str, content: str) -> Task:
     """Parse a task with caching to avoid redundant YAML parsing.
 
     OPTIMIZATION: Cache parsed tasks by commit+task_id to avoid re-parsing
     the same task content multiple times during history analysis.
+    Increased from 512 to 2048 entries for better hit rate on large histories.
 
     Args:
         commit_hash: Git commit hash (for cache key)
@@ -51,21 +52,101 @@ def _parse_task_cached(commit_hash: str, task_id: str, content: str) -> Task:
     return Task.from_markdown(content, task_id)
 
 
+def _commit_event_to_dict(event: CommitEvent) -> dict:
+    """Convert CommitEvent to JSON-serializable dict for caching.
+
+    Args:
+        event: CommitEvent object
+
+    Returns:
+        Dict representation
+    """
+    return {
+        "commit_hash": event.commit_hash,
+        "author": event.author,
+        "timestamp": event.timestamp.isoformat(),
+        "message": event.message,
+        "task_changes": {
+            task_id: [
+                {
+                    "field": change.field,
+                    "old_value": change.old_value,
+                    "new_value": change.new_value,
+                    "change_type": change.change_type,
+                    "task_title": change.task_title,
+                }
+                for change in changes
+            ]
+            for task_id, changes in event.task_changes.items()
+        },
+        "files_changed": event.files_changed,
+    }
+
+
+def _dict_to_commit_event(data: dict) -> CommitEvent:
+    """Convert cached dict back to CommitEvent object.
+
+    Args:
+        data: Dict representation from cache
+
+    Returns:
+        CommitEvent object
+    """
+    task_changes = {}
+    for task_id, changes_list in data.get("task_changes", {}).items():
+        task_changes[task_id] = [
+            TaskChange(
+                field=c["field"],
+                old_value=c["old_value"],
+                new_value=c["new_value"],
+                change_type=c["change_type"],
+                task_title=c.get("task_title"),
+            )
+            for c in changes_list
+        ]
+
+    return CommitEvent(
+        commit_hash=data["commit_hash"],
+        author=data["author"],
+        timestamp=datetime.fromisoformat(data["timestamp"]),
+        message=data["message"],
+        task_changes=task_changes,
+        files_changed=data.get("files_changed", []),
+    )
+
+
 def get_commit_history(
-    git_repo: GitRepo,
+    repository: Repository,
     since: Optional[datetime] = None,
     task_filter: Optional[str] = None,
+    use_cache: bool = True,
 ) -> list[CommitEvent]:
     """Extract commit history with task changes.
 
+    PERFORMANCE: Uses persistent cache to dramatically speed up repeated queries.
+    Cache is per-repository and supports incremental updates.
+
     Args:
-        git_repo: GitRepo instance
+        repository: Repository instance
         since: Only include commits after this date
         task_filter: Only include changes to tasks matching this ID/title pattern
+        use_cache: If False, bypass cache and recompute from git (default: True)
 
     Returns:
         List of CommitEvent objects
     """
+    # Try to load from cache first
+    if use_cache:
+        cached_commits = history_cache.get_cached_commits(repository, since, use_cache=True)
+        if cached_commits is not None:
+            # Cache hit! Convert dicts back to CommitEvent objects
+            return [_dict_to_commit_event(c) for c in cached_commits]
+
+    # Cache miss or bypass - compute from git
+    git_repo = repository.git_repo
+    if not git_repo:
+        return []
+
     commits = []
     kwargs = {}
     if since:
@@ -174,6 +255,11 @@ def get_commit_history(
     except Exception:
         # Handle repos with no commits or other git errors
         pass
+
+    # Save to cache for future queries (if caching is enabled)
+    if use_cache and commits:
+        commit_dicts = [_commit_event_to_dict(c) for c in commits]
+        history_cache.update_cache_incremental(repository, commit_dicts)
 
     return commits
 

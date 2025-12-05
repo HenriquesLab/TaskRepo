@@ -8,8 +8,15 @@ from rich.panel import Panel
 from rich.tree import Tree
 
 from taskrepo.core.repository import RepositoryManager
+from taskrepo.utils import history_cache
 from taskrepo.utils.date_parser import parse_date_or_duration
-from taskrepo.utils.display_constants import PRIORITY_COLORS, STATUS_COLORS
+from taskrepo.utils.display_constants import (
+    PRIORITY_COLORS,
+    STATUS_COLORS,
+    get_author_color,
+    get_project_color,
+    get_repo_color,
+)
 from taskrepo.utils.history import (
     categorize_commit,
     get_commit_history,
@@ -30,11 +37,31 @@ console = Console()
 @click.option("--task", "-t", help="Filter by task ID or title pattern")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed commit messages and file lists")
 @click.option("--all", "-a", is_flag=True, help="Show all commits including auto-updates (default: only task changes)")
+@click.option("--no-cache", is_flag=True, help="Skip cache and recompute from git")
+@click.option("--clear-cache", is_flag=True, help="Clear history cache and exit")
 @click.pass_context
-def history(ctx, repo, since, task, verbose, all):
+def history(ctx, repo, since, task, verbose, all, no_cache, clear_cache):
     """Show task and git repository history over time."""
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Handle cache clearing
+    if clear_cache:
+        if repo:
+            # Clear specific repo cache
+            count = history_cache.clear_cache(repo)
+            if count > 0:
+                console.print(f"[green]✓[/green] Cleared history cache for repository: {repo}")
+            else:
+                console.print(f"[yellow]⚠[/yellow] No cache found for repository: {repo}")
+        else:
+            # Clear all caches
+            count = history_cache.clear_cache()
+            if count > 0:
+                console.print(f"[green]✓[/green] Cleared {count} history cache file{'s' if count != 1 else ''}")
+            else:
+                console.print("[yellow]⚠[/yellow] No history cache files found")
+        return
 
     # Parse time range
     cutoff_date = None
@@ -73,7 +100,7 @@ def history(ctx, repo, since, task, verbose, all):
             continue
 
         # Get commit history
-        commits = get_commit_history(repository.git_repo, since=cutoff_date, task_filter=task)
+        commits = get_commit_history(repository, since=cutoff_date, task_filter=task, use_cache=not no_cache)
 
         # Add repository name to each commit for display
         for commit in commits:
@@ -150,11 +177,15 @@ def history(ctx, repo, since, task, verbose, all):
                 commit_msg = commit_msg[:47] + "..."
 
             # Build the commit node label with author
-            commit_label = f"[dim]{time_str}[/dim]  {emoji} {commit_msg} [dim]by {commit.author}[/dim]"
+            author_color = get_author_color(commit.author)
+            commit_label = (
+                f"[dim]{time_str}[/dim]  {emoji} {commit_msg} [dim]by[/dim] [{author_color}]{commit.author}[/]"
+            )
 
             # Add repository name if showing multiple repos
             if not repo:
-                commit_label += f" [dim]({commit.repo_name})[/dim]"
+                repo_color = get_repo_color(commit.repo_name)
+                commit_label += f" [dim]([/dim][{repo_color}]{commit.repo_name}[/][dim])[/dim]"
 
             commit_node = tree.add(commit_label)
 
@@ -182,7 +213,8 @@ def history(ctx, repo, since, task, verbose, all):
                             commit_node.add(f"[dim]{line.strip()}[/dim]")
 
                 # Show commit hash and author
-                commit_node.add(f"[dim]Commit: {commit.commit_hash} by {commit.author}[/dim]")
+                author_color = get_author_color(commit.author)
+                commit_node.add(f"[dim]Commit: {commit.commit_hash} by[/dim] [{author_color}]{commit.author}[/]")
 
         console.print(tree)
         console.print()
@@ -247,6 +279,12 @@ def format_task_change(change, task_id: str) -> str:
                 f"• {task_display}: priority [{old_color}]{change.old_value}[/{old_color}] "
                 f"→ [{new_color}]{change.new_value}[/{new_color}]"
             )
+        elif change.field == "project":
+            old_color = get_project_color(change.old_value) if change.old_value != "None" else "dim"
+            new_color = get_project_color(change.new_value) if change.new_value != "None" else "dim"
+            old_display = change.old_value if change.old_value != "None" else "no project"
+            new_display = change.new_value if change.new_value != "None" else "no project"
+            return f"• {task_display}: project [{old_color}]{old_display}[/] → [{new_color}]{new_display}[/]"
         elif change.field == "due":
             return f"• {task_display}: due date {change.old_value} → {change.new_value}"
         elif change.field == "title":

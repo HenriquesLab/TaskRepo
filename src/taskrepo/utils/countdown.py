@@ -77,11 +77,16 @@ def calculate_countdown(due_date: datetime, now: datetime | None = None) -> tupl
         else:
             return "today", "today", "high"
 
-    # Handle all future dates with ceiling division (more conservative)
-    # This rounds UP to provide a safer estimate
+    # Handle future dates less than 7 days - show in days
+    if days < 7:
+        if days == 1:
+            return "tomorrow", "soon", "medium"
+        return f"{days}d", "soon", "medium"
+
+    # Handle future dates 7+ days - show in weeks with ceiling division
     if days < 45:
         # Use ceiling division to round up to weeks
-        weeks = (days + 6) // 7  # Ceiling: 1-6 days → 1 week, 7-13 days → 2 weeks, etc.
+        weeks = (days + 6) // 7  # Ceiling: 7-13 days → 1 week, 14-20 days → 2 weeks, etc.
         if weeks == 1:
             return "1 week", "soon", "medium"
         return f"{weeks} weeks", "future", "low"
