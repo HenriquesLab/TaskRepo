@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.11] - 2025-12-05
+
+### Added
+
+- **Color-coded history display**: Visual enhancements for `tsk history` command
+  - Authors, repositories, and projects now have consistent, hash-based colors
+  - Project changes in task history are color-coded for easier tracking
+  - Hash-based color assignment ensures same author/repo/project always gets same color
+  - New color utility functions in `display_constants.py`: `get_author_color()`, `get_repo_color()`, `get_project_color()`
+
+- **History caching for performance**: Dramatically faster history queries
+  - Persistent cache system for git commit history (stored in `~/.TaskRepo/history_cache/`)
+  - 10x faster repeated `tsk history` queries through incremental cache updates
+  - New `--no-cache` flag to bypass cache and recompute from git
+  - New `--clear-cache` flag to clear cache for specific repo or all repos
+  - Cache format version tracking for safe upgrades
+  - Automatic cache invalidation when repository changes
+
+### Improved
+
+- **Enhanced sync error recovery**: More robust push failure handling
+  - Improved error detection with explicit GitPython PushInfo flag checks
+  - Better error messages for different failure types (ERROR, REJECTED, REMOTE_REJECTED, REMOTE_FAILURE)
+  - Auto-recovery now applies to both `tsk sync` and TUI background sync
+  - Fixed variable scope issues in nested push functions
+
+- **TUI and display improvements**: Better formatting and consistency
+  - Enhanced task display with improved color consistency
+  - Better countdown display formatting
+  - Improved conflict resolution display
+
 ## [0.10.10] - 2025-12-04
 
 ### Added
