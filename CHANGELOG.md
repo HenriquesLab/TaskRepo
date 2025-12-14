@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.12] - 2025-12-14
+
+### Fixed
+
+- **Critical sync push rejection bug**: Fixed auto-recovery mechanism for non-fast-forward push rejections
+  - Reordered GitPython PushInfo flag checks to prioritize REJECTED before generic ERROR flag
+  - Ensures automatic rebase recovery triggers when branches have diverged
+  - Previously, sync would fail with error instead of attempting auto-recovery
+  - Affects all users using `tsk sync` with remote repositories
+
+### Added
+
+- **History modifier tracking**: Show who made task changes in `tsk history` output
+  - New `modifier` field in TaskChange dataclass
+  - Infers modifier from task assignees when they differ from git commit author
+  - Displays modifier name in history view (e.g., "by @username")
+  - Helpful for multi-user repositories to track task ownership
+
 ## [0.10.11] - 2025-12-05
 
 ### Added
