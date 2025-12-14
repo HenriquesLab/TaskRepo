@@ -1,7 +1,12 @@
 """Main CLI entry point for TaskRepo."""
 
 import click
+from henriqueslab_updater import (
+    check_for_updates_async_background,
+    show_update_notification,
+)
 
+from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
 from taskrepo.cli.commands.archive import archive
 from taskrepo.cli.commands.cancelled import cancelled
@@ -23,7 +28,6 @@ from taskrepo.cli.commands.unarchive import unarchive
 from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
 from taskrepo.utils.banner import display_banner
-from taskrepo.utils.update_checker import check_and_notify_updates, show_update_notification
 
 
 class OrderedGroup(click.Group):
@@ -134,7 +138,7 @@ def process_result(ctx, result, **kwargs):
     This runs after any command completes and checks for updates.
     """
     # Start async update check in background (if due)
-    check_and_notify_updates()
+    check_for_updates_async_background(package_name="taskrepo", current_version=__version__)
 
     # Show any cached update notifications immediately
     show_update_notification()

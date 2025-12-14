@@ -1,44 +1,39 @@
 """Upgrade command for auto-upgrading taskrepo."""
 
 import subprocess
-import sys
 from typing import Optional, Tuple
 
 import click
+from henriqueslab_updater import UpdateChecker
 
 from taskrepo.__version__ import __version__
-from taskrepo.utils.install_detector import detect_install_method
-from taskrepo.utils.update_checker import force_update_check
 
 
-def detect_installer() -> Tuple[str, list[str]]:
-    """Detect which package installer was used to install taskrepo.
+def detect_installer(update_info: dict) -> Tuple[str, list[str]]:
+    """Extract installer information from update check result.
 
-    Uses the unified install_detector module for consistent detection.
+    Args:
+        update_info: Update information from UpdateChecker
 
     Returns:
         Tuple of (installer_name, upgrade_command_parts)
     """
-    install_method = detect_install_method()
+    install_method = update_info.get("install_method", "unknown")
+    upgrade_command = update_info.get("upgrade_command", "pip install --upgrade taskrepo")
 
-    # Map install method to command list
-    if install_method == "homebrew":
-        return ("Homebrew", ["brew", "upgrade", "taskrepo"])
-    elif install_method == "pipx":
-        return ("pipx", ["pipx", "upgrade", "taskrepo"])
-    elif install_method == "uv":
-        return ("uv tool", ["uv", "tool", "upgrade", "taskrepo"])
-    elif install_method == "pip-user":
-        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
-        return (f"{pip_cmd} (user)", [pip_cmd, "install", "--upgrade", "--user", "taskrepo"])
-    elif install_method == "pip":
-        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
-        return (pip_cmd, [pip_cmd, "install", "--upgrade", "taskrepo"])
-    elif install_method == "dev":
-        return ("Development mode", ["git", "pull"])
-    else:  # unknown
-        pip_cmd = "pip3" if sys.version_info.major == 3 else "pip"
-        return (pip_cmd, [pip_cmd, "install", "--upgrade", "taskrepo"])
+    # Map install method to friendly name
+    method_names = {
+        "homebrew": "Homebrew",
+        "pipx": "pipx",
+        "uv": "uv tool",
+        "pip-user": "pip (user)",
+        "pip": "pip",
+        "dev": "Development mode",
+        "unknown": "pip",
+    }
+
+    friendly_name = method_names.get(install_method, install_method)
+    return (friendly_name, upgrade_command.split())
 
 
 def run_upgrade(upgrade_cmd: list[str], is_homebrew: bool = False) -> Tuple[bool, Optional[str]]:
@@ -100,9 +95,14 @@ def upgrade(ctx, check, yes):
     This command checks PyPI for the latest version and upgrades
     taskrepo using the detected package installer (pipx, uv, or pip).
     """
-    # Check for updates
+    # Check for updates using henriqueslab-updater
     click.echo("Checking for updates...")
-    update_available, latest_version = force_update_check()
+    checker = UpdateChecker("taskrepo", __version__)
+    update_info = checker.check_sync(force=True)
+
+    # Extract update status
+    update_available = update_info is not None and update_info.get("update_available", False)
+    latest_version = update_info.get("latest_version") if update_info else None
 
     if check:
         # Just show version information
@@ -138,8 +138,8 @@ def upgrade(ctx, check, yes):
             click.echo("\nUpgrade cancelled.")
             return
 
-    # Detect installer
-    installer_name, upgrade_cmd = detect_installer()
+    # Detect installer from update info
+    installer_name, upgrade_cmd = detect_installer(update_info)
     is_homebrew = installer_name == "Homebrew"
 
     click.echo(f"\nDetected installer: {installer_name}")

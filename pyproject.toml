@@ -33,6 +33,7 @@ dependencies = [
     "python-dateutil>=2.8.0",
     "dateparser>=1.0.0",
     "packaging>=20.0",
+    "henriqueslab-updater>=1.0.0",
 ]
 
 [project.urls]
@@ -113,10 +114,6 @@ addopts = [
     "--tb=short",
     "--strict-markers",
     "--strict-config",
-    # Skip flaky tests that make real HTTP requests (should be mocked instead)
-    "--ignore=tests/unit/test_homebrew_checker.py",
-    "--ignore=tests/unit/test_install_detector.py",
-    "--ignore=tests/unit/test_update_checker.py",
 ]
 
 # Hatch configuration
