@@ -193,7 +193,7 @@ def history(ctx, repo, since, task, verbose, all, no_cache, clear_cache):
             if commit.task_changes:
                 for task_id, changes in commit.task_changes.items():
                     for change in changes:
-                        change_text = format_task_change(change, task_id)
+                        change_text = format_task_change(change, task_id, commit.author)
                         commit_node.add(change_text)
             elif all:
                 # Only show file counts when --all flag is used (for commits without task changes)
@@ -239,12 +239,13 @@ def history(ctx, repo, since, task, verbose, all, no_cache, clear_cache):
     console.print()
 
 
-def format_task_change(change, task_id: str) -> str:
+def format_task_change(change, task_id: str, commit_author: str) -> str:
     """Format a task change for display.
 
     Args:
         change: TaskChange object
         task_id: Task ID
+        commit_author: Git commit author name
 
     Returns:
         Formatted string with colors
@@ -258,57 +259,67 @@ def format_task_change(change, task_id: str) -> str:
     else:
         task_display = f"#{task_id[:8]}"
 
+    # Add modifier suffix if present and different from commit author
+    modifier_suffix = ""
+    if change.modifier:
+        # Simple check: if modifier is present, show it
+        # (We only set modifier when it differs from commit author in the first place)
+        author_color = get_author_color(change.modifier)
+        modifier_suffix = f" [dim](by[/dim] [{author_color}]{change.modifier}[/][dim])[/dim]"
+
     if change.change_type == "created":
         # Show priority with the creation
         priority_color = PRIORITY_COLORS.get(change.new_value, "white")
-        return f"[green]• {task_display}[/green] [dim](priority [{priority_color}]{change.new_value}[/{priority_color}])[/dim]"
+        return f"[green]• {task_display}[/green] [dim](priority [{priority_color}]{change.new_value}[/{priority_color}])[/dim]{modifier_suffix}"
     elif change.change_type == "deleted":
-        return f"[red]• {task_display} [dim](deleted)[/dim][/red]"
+        return f"[red]• {task_display} [dim](deleted)[/dim][/red]{modifier_suffix}"
     elif change.change_type == "modified":
         if change.field == "status":
             old_color = STATUS_COLORS.get(change.old_value, "white")
             new_color = STATUS_COLORS.get(change.new_value, "white")
             return (
                 f"• {task_display}: status [{old_color}]{change.old_value}[/{old_color}] "
-                f"→ [{new_color}]{change.new_value}[/{new_color}]"
+                f"→ [{new_color}]{change.new_value}[/{new_color}]{modifier_suffix}"
             )
         elif change.field == "priority":
             old_color = PRIORITY_COLORS.get(change.old_value, "white")
             new_color = PRIORITY_COLORS.get(change.new_value, "white")
             return (
                 f"• {task_display}: priority [{old_color}]{change.old_value}[/{old_color}] "
-                f"→ [{new_color}]{change.new_value}[/{new_color}]"
+                f"→ [{new_color}]{change.new_value}[/{new_color}]{modifier_suffix}"
             )
         elif change.field == "project":
             old_color = get_project_color(change.old_value) if change.old_value != "None" else "dim"
             new_color = get_project_color(change.new_value) if change.new_value != "None" else "dim"
             old_display = change.old_value if change.old_value != "None" else "no project"
             new_display = change.new_value if change.new_value != "None" else "no project"
-            return f"• {task_display}: project [{old_color}]{old_display}[/] → [{new_color}]{new_display}[/]"
+            return f"• {task_display}: project [{old_color}]{old_display}[/] → [{new_color}]{new_display}[/]{modifier_suffix}"
         elif change.field == "due":
-            return f"• {task_display}: due date {change.old_value} → {change.new_value}"
+            return f"• {task_display}: due date {change.old_value} → {change.new_value}{modifier_suffix}"
         elif change.field == "title":
-            return f"• Title changed: [dim]{change.old_value}[/dim] → {change.new_value}"
+            return f"• Title changed: [dim]{change.old_value}[/dim] → {change.new_value}{modifier_suffix}"
         elif change.field == "description":
-            return f"• {task_display}: description modified"
+            return f"• {task_display}: description modified{modifier_suffix}"
         else:
-            return f"• {task_display}: {change.field} updated"
+            return f"• {task_display}: {change.field} updated{modifier_suffix}"
     elif change.change_type == "added":
         if change.field == "assignees":
-            return f"• {task_display}: added assignee [cyan]{change.new_value}[/cyan]"
+            return f"• {task_display}: added assignee [cyan]{change.new_value}[/cyan]{modifier_suffix}"
         elif change.field == "tags":
-            return f"• {task_display}: added tag [magenta]{change.new_value}[/magenta]"
+            return f"• {task_display}: added tag [magenta]{change.new_value}[/magenta]{modifier_suffix}"
         elif change.field == "priority":
             priority_color = PRIORITY_COLORS.get(change.new_value, "white")
-            return f"• {task_display}: priority [{priority_color}]{change.new_value}[/{priority_color}]"
+            return (
+                f"• {task_display}: priority [{priority_color}]{change.new_value}[/{priority_color}]{modifier_suffix}"
+            )
     elif change.change_type == "removed":
         if change.field == "assignees":
-            return f"• {task_display}: removed assignee [dim]{change.old_value}[/dim]"
+            return f"• {task_display}: removed assignee [dim]{change.old_value}[/dim]{modifier_suffix}"
         elif change.field == "tags":
-            return f"• {task_display}: removed tag [dim]{change.old_value}[/dim]"
+            return f"• {task_display}: removed tag [dim]{change.old_value}[/dim]{modifier_suffix}"
     elif change.change_type == "archived":
-        return f"[yellow]• {task_display} [dim](archived)[/dim][/yellow]"
+        return f"[yellow]• {task_display} [dim](archived)[/dim][/yellow]{modifier_suffix}"
     elif change.change_type == "unarchived":
-        return f"[cyan]• {task_display} [dim](unarchived)[/dim][/cyan]"
+        return f"[cyan]• {task_display} [dim](unarchived)[/dim][/cyan]{modifier_suffix}"
 
-    return f"• {task_display}: {change.field} changed"
+    return f"• {task_display}: {change.field} changed{modifier_suffix}"

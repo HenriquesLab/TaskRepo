@@ -708,9 +708,8 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                             # Check if push failed by examining PushInfo flags
                             # GitPython doesn't always raise exceptions on push failures
                             for info in push_info:
-                                # Check for error flags
-                                if info.flags & info.ERROR:
-                                    raise GitCommandError("git push", f"Push failed with ERROR flag: {info.summary}")
+                                # Check for error flags - IMPORTANT: Check REJECTED before ERROR
+                                # because rejected pushes set both flags, but we want auto-recovery for REJECTED
                                 if info.flags & info.REJECTED:
                                     # Non-fast-forward - will attempt auto-recovery
                                     raise GitCommandError("git push", "REJECTED")
@@ -718,6 +717,8 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                     raise GitCommandError("git push", f"Remote rejected push: {info.summary}")
                                 if info.flags & info.REMOTE_FAILURE:
                                     raise GitCommandError("git push", f"Remote failure during push: {info.summary}")
+                                if info.flags & info.ERROR:
+                                    raise GitCommandError("git push", f"Push failed with ERROR flag: {info.summary}")
 
                             return push_info
 

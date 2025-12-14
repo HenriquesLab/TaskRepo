@@ -19,6 +19,7 @@ class TaskChange:
     new_value: str  # New value
     change_type: str  # 'modified', 'added', 'removed', 'created', 'deleted'
     task_title: Optional[str] = None  # Task title for display
+    modifier: Optional[str] = None  # Inferred person who made the change (from assignees)
 
 
 @dataclass
@@ -74,6 +75,7 @@ def _commit_event_to_dict(event: CommitEvent) -> dict:
                     "new_value": change.new_value,
                     "change_type": change.change_type,
                     "task_title": change.task_title,
+                    "modifier": change.modifier,
                 }
                 for change in changes
             ]
@@ -101,6 +103,7 @@ def _dict_to_commit_event(data: dict) -> CommitEvent:
                 new_value=c["new_value"],
                 change_type=c["change_type"],
                 task_title=c.get("task_title"),
+                modifier=c.get("modifier"),
             )
             for c in changes_list
         ]
@@ -264,6 +267,29 @@ def get_commit_history(
     return commits
 
 
+def _infer_modifier(task: Task, commit_author: str) -> Optional[str]:
+    """Infer who likely modified the task based on assignees.
+
+    Args:
+        task: Task object
+        commit_author: Git commit author name
+
+    Returns:
+        Assignee username if different from commit author, None otherwise
+    """
+    if not task.assignees:
+        return None
+
+    # If task has exactly one assignee, they likely made the change
+    if len(task.assignees) == 1:
+        assignee = task.assignees[0]
+        # Simple heuristic: if assignee differs from commit author, return it
+        # We can't do perfect matching without more metadata, but this is useful
+        return assignee
+
+    return None
+
+
 def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
     """Parse changes between two versions of a task file.
 
@@ -276,6 +302,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         List of TaskChange objects
     """
     changes = []
+    commit_author = str(current_commit.author.name)
 
     try:
         # Check for archive/unarchive operations (file moves between directories)
@@ -287,6 +314,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                 if diff.a_blob:
                     content = diff.a_blob.data_stream.read().decode("utf-8")
                     task = _parse_task_cached(parent_commit.hexsha, task_id, content)
+                    modifier = _infer_modifier(task, commit_author)
                     changes.append(
                         TaskChange(
                             field="archived",
@@ -294,6 +322,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                             new_value="archived",
                             change_type="archived",
                             task_title=task.title,
+                            modifier=modifier,
                         )
                     )
                 return changes
@@ -304,6 +333,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                 if diff.b_blob:
                     content = diff.b_blob.data_stream.read().decode("utf-8")
                     task = _parse_task_cached(current_commit.hexsha, task_id, content)
+                    modifier = _infer_modifier(task, commit_author)
                     changes.append(
                         TaskChange(
                             field="unarchived",
@@ -311,6 +341,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                             new_value="active",
                             change_type="unarchived",
                             task_title=task.title,
+                            modifier=modifier,
                         )
                     )
                 return changes
@@ -328,6 +359,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         if new_content is None and old_content is not None:
             task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
             old_task = _parse_task_cached(parent_commit.hexsha, task_id, old_content)
+            modifier = _infer_modifier(old_task, commit_author)
             changes.append(
                 TaskChange(
                     field="deleted",
@@ -335,6 +367,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value="Task deleted",
                     change_type="deleted",
                     task_title=old_task.title,
+                    modifier=modifier,
                 )
             )
             return changes
@@ -343,6 +376,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         if old_content is None and new_content is not None:
             task_id = diff.b_path.replace("tasks/task-", "").replace(".md", "")
             new_task = _parse_task_cached(current_commit.hexsha, task_id, new_content)
+            modifier = _infer_modifier(new_task, commit_author)
             # Include priority in the creation message
             changes.append(
                 TaskChange(
@@ -351,6 +385,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_task.priority,  # Store priority in new_value
                     change_type="created",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
             return changes
@@ -359,6 +394,9 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
         task_id = diff.a_path.replace("tasks/task-", "").replace(".md", "")
         old_task = _parse_task_cached(parent_commit.hexsha, task_id, old_content)
         new_task = _parse_task_cached(current_commit.hexsha, task_id, new_content)
+
+        # Infer who made the changes
+        modifier = _infer_modifier(new_task, commit_author)
 
         # Compare fields
         if old_task.status != new_task.status:
@@ -369,6 +407,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_task.status,
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -380,6 +419,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_task.priority,
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -391,6 +431,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_task.title,
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -409,6 +450,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=", ".join(added_assignees),
                     change_type="added",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -420,6 +462,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value="",
                     change_type="removed",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -438,6 +481,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=", ".join(added_tags),
                     change_type="added",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -449,6 +493,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value="",
                     change_type="removed",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -464,6 +509,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_due or "None",
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -476,6 +522,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value=new_task.project or "None",
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
@@ -488,6 +535,7 @@ def parse_task_changes(diff, parent_commit, current_commit) -> list[TaskChange]:
                     new_value="(modified)",
                     change_type="modified",
                     task_title=new_task.title,
+                    modifier=modifier,
                 )
             )
 
