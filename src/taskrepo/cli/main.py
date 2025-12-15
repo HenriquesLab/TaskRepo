@@ -2,6 +2,8 @@
 
 import click
 from henriqueslab_updater import (
+    ChangelogPlugin,
+    RichNotifier,
     check_for_updates_async_background,
     show_update_notification,
 )
@@ -138,7 +140,17 @@ def process_result(ctx, result, **kwargs):
     This runs after any command completes and checks for updates.
     """
     # Start async update check in background (if due)
-    check_for_updates_async_background(package_name="taskrepo", current_version=__version__)
+    check_for_updates_async_background(
+        package_name="taskrepo",
+        current_version=__version__,
+        notifier=RichNotifier(color_scheme="cyan"),
+        plugins=[
+            ChangelogPlugin(
+                changelog_url="https://raw.githubusercontent.com/henriqueslab/TaskRepo/main/CHANGELOG.md",
+                highlights_per_version=3,
+            ),
+        ],
+    )
 
     # Show any cached update notifications immediately
     show_update_notification()
