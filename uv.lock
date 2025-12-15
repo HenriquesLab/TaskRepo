@@ -206,6 +206,18 @@ wheels = [
 ]
 
 [[package]]
+name = "henriqueslab-updater"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/0b/2b7566bd836ac2387a580d1e9aa22809eba84bba7e0c473b9f9f71f72624/henriqueslab_updater-1.0.0.tar.gz", hash = "sha256:5e5189fa8412b9822ee78c8fbf49b8279753471c362979947db4a65c3eef3a2c", size = 25798, upload-time = "2025-12-14T12:46:46.774Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/12/e313532a8c456c656963e21d1b72c82b28b6769acd488c0255668dfb24da/henriqueslab_updater-1.0.0-py3-none-any.whl", hash = "sha256:aee679d48808b9ebb97a70e6c0f6f17afa82e4285983f3c07d092b2710d8eddc", size = 26004, upload-time = "2025-12-14T12:46:45.683Z" },
+]
+
+[[package]]
 name = "identify"
 version = "2.6.15"
 source = { registry = "https://pypi.org/simple" }
@@ -668,6 +680,7 @@ dependencies = [
     { name = "click" },
     { name = "dateparser" },
     { name = "gitpython" },
+    { name = "henriqueslab-updater" },
     { name = "packaging" },
     { name = "prompt-toolkit" },
     { name = "python-dateutil" },
@@ -692,6 +705,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
     { name = "dateparser", specifier = ">=1.0.0" },
     { name = "gitpython", specifier = ">=3.1.0" },
+    { name = "henriqueslab-updater", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "packaging", specifier = ">=20.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.2.0" },

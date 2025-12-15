@@ -12,6 +12,7 @@ from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
 from taskrepo.cli.commands.archive import archive
 from taskrepo.cli.commands.cancelled import cancelled
+from taskrepo.cli.commands.changelog import changelog
 from taskrepo.cli.commands.config import config_cmd
 from taskrepo.cli.commands.delete import delete
 from taskrepo.cli.commands.done import done
@@ -41,7 +42,7 @@ class OrderedGroup(click.Group):
         sections = [
             (
                 "Setup & Configuration",
-                ["init", "config", "config-show", "llm-info", "upgrade"],
+                ["init", "config", "config-show", "llm-info", "changelog", "upgrade"],
             ),
             (
                 "Viewing Tasks",
@@ -160,6 +161,7 @@ def process_result(ctx, result, **kwargs):
 cli.add_command(add)
 cli.add_command(archive)
 cli.add_command(cancelled)
+cli.add_command(changelog)
 cli.add_command(config_cmd)
 cli.add_command(list_tasks)
 cli.add_command(edit)

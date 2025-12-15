@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.14] - 2025-12-15
+
+### Added
+
+- **Changelog Command**: New `tsk changelog` command to view version history
+  - View current version changes: `tsk changelog`
+  - View specific version: `tsk changelog v0.10.13`
+  - Show recent versions: `tsk changelog --recent 5`
+  - Show changes since version: `tsk changelog --since v0.10.0`
+  - Filter breaking changes only: `tsk changelog --breaking-only`
+  - Full or highlight view modes with Rich formatting
+  - Automatically detects and highlights breaking changes
+  - Fetches live changelog from GitHub repository
+
+### Internal
+
+- Added `changelog_parser` utility module for parsing CHANGELOG.md
+- Added `changelog` CLI command with multiple viewing modes
+- Similar API to rxiv-maker's changelog command for consistency
+
 ## [0.10.13] - 2025-12-14
 
 ### Changed
