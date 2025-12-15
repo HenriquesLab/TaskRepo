@@ -1,88 +1,20 @@
 """Upgrade command for auto-upgrading taskrepo."""
 
-import subprocess
-from typing import Optional, Tuple
-
 import click
-from henriqueslab_updater import UpdateChecker
+from henriqueslab_updater import UpdateChecker, execute_upgrade
 
 from taskrepo.__version__ import __version__
 
-
-def detect_installer(update_info: dict) -> Tuple[str, list[str]]:
-    """Extract installer information from update check result.
-
-    Args:
-        update_info: Update information from UpdateChecker
-
-    Returns:
-        Tuple of (installer_name, upgrade_command_parts)
-    """
-    install_method = update_info.get("install_method", "unknown")
-    upgrade_command = update_info.get("upgrade_command", "pip install --upgrade taskrepo")
-
-    # Map install method to friendly name
-    method_names = {
-        "homebrew": "Homebrew",
-        "pipx": "pipx",
-        "uv": "uv tool",
-        "pip-user": "pip (user)",
-        "pip": "pip",
-        "dev": "Development mode",
-        "unknown": "pip",
-    }
-
-    friendly_name = method_names.get(install_method, install_method)
-    return (friendly_name, upgrade_command.split())
-
-
-def run_upgrade(upgrade_cmd: list[str], is_homebrew: bool = False) -> Tuple[bool, Optional[str]]:
-    """Run the upgrade command.
-
-    Args:
-        upgrade_cmd: List of command parts to execute
-        is_homebrew: Whether this is a Homebrew installation (requires brew update first)
-
-    Returns:
-        Tuple of (success: bool, error_message: Optional[str])
-    """
-    try:
-        # For Homebrew, run 'brew update' first to fetch latest formulae
-        if is_homebrew:
-            click.echo("Running: brew update")
-            update_result = subprocess.run(
-                ["brew", "update"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if update_result.returncode != 0:
-                error_msg = update_result.stderr.strip() if update_result.stderr else update_result.stdout.strip()
-                return (False, f"brew update failed: {error_msg}")
-            click.echo("✓ Homebrew formulae updated")
-            click.echo()
-
-        # Run the actual upgrade command
-        result = subprocess.run(
-            upgrade_cmd,
-            capture_output=True,
-            text=True,
-            timeout=120,  # 2 minutes timeout
-        )
-
-        if result.returncode == 0:
-            return (True, None)
-        else:
-            error_msg = result.stderr.strip() if result.stderr else result.stdout.strip()
-            return (False, error_msg)
-
-    except subprocess.TimeoutExpired:
-        return (False, "Upgrade command timed out after 2 minutes")
-    except FileNotFoundError:
-        installer = upgrade_cmd[0]
-        return (False, f"Command '{installer}' not found. Please install {installer} or upgrade manually.")
-    except Exception as e:
-        return (False, str(e))
+# Installer method to friendly name mapping
+INSTALLER_NAMES = {
+    "homebrew": "Homebrew",
+    "pipx": "pipx",
+    "uv": "uv tool",
+    "pip-user": "pip (user)",
+    "pip": "pip",
+    "dev": "Development mode",
+    "unknown": "pip",
+}
 
 
 @click.command()
@@ -138,19 +70,17 @@ def upgrade(ctx, check, yes):
             click.echo("\nUpgrade cancelled.")
             return
 
-    # Detect installer from update info
-    installer_name, upgrade_cmd = detect_installer(update_info)
-    is_homebrew = installer_name == "Homebrew"
+    # Get installer info and upgrade command
+    install_method = update_info.get("install_method", "unknown")
+    installer_name = INSTALLER_NAMES.get(install_method, install_method)
+    upgrade_command = update_info.get("upgrade_command", "pip install --upgrade taskrepo")
 
     click.echo(f"\nDetected installer: {installer_name}")
-    if is_homebrew:
-        click.echo("Running: brew update && brew upgrade taskrepo")
-    else:
-        click.echo(f"Running: {' '.join(upgrade_cmd)}")
+    click.echo(f"Running: {upgrade_command}")
     click.echo()
 
-    # Run upgrade
-    success, error = run_upgrade(upgrade_cmd, is_homebrew=is_homebrew)
+    # Run upgrade using centralized executor
+    success, error = execute_upgrade(upgrade_command, show_output=False, timeout=300)
 
     if success:
         click.echo()
@@ -178,8 +108,8 @@ def upgrade(ctx, check, yes):
         elif installer_name == "Development mode":
             click.echo("  cd <repo> && git pull && uv sync")
         else:
-            click.echo(f"  {installer_name} install --upgrade taskrepo")
+            click.echo("  pip install --upgrade taskrepo")
             click.echo("  # Or try with --user flag:")
-            click.echo(f"  {installer_name} install --upgrade --user taskrepo")
+            click.echo("  pip install --upgrade --user taskrepo")
 
         ctx.exit(1)
