@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgrade Command Modernization**: Migrated to henriqueslab-updater v1.2.0 centralized upgrade workflow
+  - Now uses `handle_upgrade_workflow()` - single function replaces manual orchestration
+  - Created `TaskRepoUpgradeNotifier` adapter implementing UpgradeNotifier protocol
+  - Reduced upgrade.py from 116 to 37 lines (68% reduction)
+  - Maintains existing CLI behavior and TaskRepo's color scheme
+  - Consistent upgrade experience across all HenriquesLab packages
+  - New notifiers module: `taskrepo.cli.notifiers.upgrade_notifier`
+
+### Dependencies
+
+- Updated `henriqueslab-updater>=1.2.0` (from >=1.1.3)
+
 ## [0.10.15] - 2025-12-15
 
 ### Fixed

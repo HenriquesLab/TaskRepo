@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 
 [[package]]
@@ -207,14 +207,14 @@ wheels = [
 
 [[package]]
 name = "henriqueslab-updater"
-version = "1.0.0"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/0b/2b7566bd836ac2387a580d1e9aa22809eba84bba7e0c473b9f9f71f72624/henriqueslab_updater-1.0.0.tar.gz", hash = "sha256:5e5189fa8412b9822ee78c8fbf49b8279753471c362979947db4a65c3eef3a2c", size = 25798, upload-time = "2025-12-14T12:46:46.774Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/41/8673c91d64df0639115d246b1ac70f401186dd6402c24fc625233cfc9d97/henriqueslab_updater-1.2.0.tar.gz", hash = "sha256:8e3ec84e912c46a9ae64a2a325b1fd10dd70e9cc68fbf821e9eb9a04af2f442d", size = 33336, upload-time = "2025-12-17T15:58:37.736Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/12/e313532a8c456c656963e21d1b72c82b28b6769acd488c0255668dfb24da/henriqueslab_updater-1.0.0-py3-none-any.whl", hash = "sha256:aee679d48808b9ebb97a70e6c0f6f17afa82e4285983f3c07d092b2710d8eddc", size = 26004, upload-time = "2025-12-14T12:46:45.683Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/f9/fd49114368bb0a4398f2c8822aefad381739b6944071e3044df59586b216/henriqueslab_updater-1.2.0-py3-none-any.whl", hash = "sha256:43f026e323ef62337b0d029e442952473fa9b121d3c7da4be60ede7757e51364", size = 34765, upload-time = "2025-12-17T15:58:36.621Z" },
 ]
 
 [[package]]
@@ -705,7 +705,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
     { name = "dateparser", specifier = ">=1.0.0" },
     { name = "gitpython", specifier = ">=3.1.0" },
-    { name = "henriqueslab-updater", specifier = ">=1.0.0" },
+    { name = "henriqueslab-updater", specifier = ">=1.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "packaging", specifier = ">=20.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.2.0" },
