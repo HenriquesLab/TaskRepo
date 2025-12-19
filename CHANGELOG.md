@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.16] - 2025-12-19
+
 ### Changed
 
 - **Upgrade Command Modernization**: Migrated to henriqueslab-updater v1.2.0 centralized upgrade workflow
@@ -16,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Maintains existing CLI behavior and TaskRepo's color scheme
   - Consistent upgrade experience across all HenriquesLab packages
   - New notifiers module: `taskrepo.cli.notifiers.upgrade_notifier`
+
+### Fixed
+
+- **Non-Interactive Terminal Detection**: Added sys.stdin.isatty() checks to archive and move commands
+  - Enables automation and scripting without hanging on interactive prompts
+  - Archive command auto-confirms subtask archiving in non-interactive mode
+  - Move command skips confirmation and auto-moves subtasks in non-interactive mode
 
 ### Dependencies
 
