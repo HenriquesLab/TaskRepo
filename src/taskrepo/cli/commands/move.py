@@ -1,5 +1,6 @@
 """Move command - Move tasks between repositories."""
 
+import sys
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -144,28 +145,32 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
 
     # Confirm move operation
     if not force:
-        click.echo()
-        if len(moved_tasks) == 1:
-            task, source_repo, _ = moved_tasks[0]
-            click.echo(f"Move task '{task.title}' from '{source_repo.name}' to '{to}'?")
+        # Check if we're in a terminal - if not, skip confirmation
+        if not sys.stdin.isatty():
+            pass  # Automatically confirm when not in terminal
         else:
-            click.echo(f"Move {len(moved_tasks)} task(s) to repository '{to}'?")
+            click.echo()
+            if len(moved_tasks) == 1:
+                task, source_repo, _ = moved_tasks[0]
+                click.echo(f"Move task '{task.title}' from '{source_repo.name}' to '{to}'?")
+            else:
+                click.echo(f"Move {len(moved_tasks)} task(s) to repository '{to}'?")
 
-        yn_validator = Validator.from_callable(
-            lambda text: text.lower() in ["y", "n", "yes", "no"],
-            error_message="Please enter 'y' or 'n'",
-            move_cursor_to_end=True,
-        )
+            yn_validator = Validator.from_callable(
+                lambda text: text.lower() in ["y", "n", "yes", "no"],
+                error_message="Please enter 'y' or 'n'",
+                move_cursor_to_end=True,
+            )
 
-        response = prompt(
-            "Confirm move? (Y/n) ",
-            default="y",
-            validator=yn_validator,
-        ).lower()
+            response = prompt(
+                "Confirm move? (Y/n) ",
+                default="y",
+                validator=yn_validator,
+            ).lower()
 
-        if response not in ["y", "yes"]:
-            click.echo("Cancelled.")
-            ctx.exit(0)
+            if response not in ["y", "yes"]:
+                click.echo("Cancelled.")
+                ctx.exit(0)
 
     click.echo()
 
@@ -178,21 +183,25 @@ def move(ctx, task_ids: Tuple[str, ...], repo: Optional[str], to: str, force: bo
             move_subtasks = force  # Default to --force flag value
 
             if subtasks_with_repos and not force:
-                click.echo(f"\nTask '{task.title}' has {len(subtasks_with_repos)} subtask(s).")
+                # Check if we're in a terminal - if not, default to yes
+                if not sys.stdin.isatty():
+                    move_subtasks = True
+                else:
+                    click.echo(f"\nTask '{task.title}' has {len(subtasks_with_repos)} subtask(s).")
 
-                yn_validator = Validator.from_callable(
-                    lambda text: text.lower() in ["y", "n", "yes", "no"],
-                    error_message="Please enter 'y' or 'n'",
-                    move_cursor_to_end=True,
-                )
+                    yn_validator = Validator.from_callable(
+                        lambda text: text.lower() in ["y", "n", "yes", "no"],
+                        error_message="Please enter 'y' or 'n'",
+                        move_cursor_to_end=True,
+                    )
 
-                response = prompt(
-                    "Move subtasks as well? (Y/n) ",
-                    default="y",
-                    validator=yn_validator,
-                ).lower()
+                    response = prompt(
+                        "Move subtasks as well? (Y/n) ",
+                        default="y",
+                        validator=yn_validator,
+                    ).lower()
 
-                move_subtasks = response in ["y", "yes"]
+                    move_subtasks = response in ["y", "yes"]
 
             # Check for dependencies
             if task.depends:

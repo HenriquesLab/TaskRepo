@@ -1,5 +1,6 @@
 """Archive command for moving tasks to archive folder."""
 
+import sys
 from typing import Tuple
 
 import click
@@ -85,26 +86,30 @@ def archive(ctx, task_ids: Tuple[str, ...], repo, yes):
             archive_subtasks = yes  # Default to --yes flag value
 
             if not yes:
-                # Show subtasks and prompt
-                click.echo(f"\nThis task has {count} {subtask_word}:")
-                for subtask, subtask_repo in subtasks_with_repos:
-                    status_emoji = STATUS_EMOJIS.get(subtask.status, "")
-                    click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+                # Check if we're in a terminal - if not, default to yes
+                if not sys.stdin.isatty():
+                    archive_subtasks = True
+                else:
+                    # Show subtasks and prompt
+                    click.echo(f"\nThis task has {count} {subtask_word}:")
+                    for subtask, subtask_repo in subtasks_with_repos:
+                        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+                        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                # Prompt for confirmation with Y as default
-                yn_validator = Validator.from_callable(
-                    lambda text: text.lower() in ["y", "n", "yes", "no"],
-                    error_message="Please enter 'y' or 'n'",
-                    move_cursor_to_end=True,
-                )
+                    # Prompt for confirmation with Y as default
+                    yn_validator = Validator.from_callable(
+                        lambda text: text.lower() in ["y", "n", "yes", "no"],
+                        error_message="Please enter 'y' or 'n'",
+                        move_cursor_to_end=True,
+                    )
 
-                response = prompt(
-                    f"Archive all {count} {subtask_word} too? (Y/n) ",
-                    default="y",
-                    validator=yn_validator,
-                ).lower()
+                    response = prompt(
+                        f"Archive all {count} {subtask_word} too? (Y/n) ",
+                        default="y",
+                        validator=yn_validator,
+                    ).lower()
 
-                archive_subtasks = response in ["y", "yes"]
+                    archive_subtasks = response in ["y", "yes"]
 
             if archive_subtasks:
                 # Archive all subtasks
