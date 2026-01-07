@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 from git import Repo as GitRepo
-from prompt_toolkit.shortcuts import confirm
+from prompt_toolkit.shortcuts import confirm, prompt
 
 
 def detect_unexpected_files(git_repo: GitRepo, repo_path: Path) -> dict[str, list[Path]]:
@@ -82,6 +82,8 @@ def detect_unexpected_files(git_repo: GitRepo, repo_path: Path) -> dict[str, lis
     return grouped
 
 
+from rich.console import Console
+
 def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: str) -> str:
     """Prompt user about unexpected files and return action choice.
 
@@ -92,26 +94,35 @@ def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: 
     Returns:
         User choice: "ignore", "delete", "commit", or "skip"
     """
-    click.echo(f"\n⚠️  Found unexpected files in repository '{repo_name}':\n")
+    # Use a fresh Console to avoid conflicts with progress bar
+    console = Console()
+    
+    console.print(f"\n[yellow]⚠️[/yellow]  Found unexpected files in repository '{repo_name}':\n")
 
     # Display grouped files
     for pattern, files in unexpected_files.items():
         file_count = len(files)
-        click.echo(f"  {pattern} ({file_count} file{'s' if file_count != 1 else ''}):")
+        console.print(f"  {pattern} ({file_count} file{'s' if file_count != 1 else ''}):")
         for file_path in sorted(files)[:5]:  # Show max 5 files per pattern
-            click.echo(f"    - {file_path}")
+            console.print(f"    - {file_path}")
         if file_count > 5:
-            click.echo(f"    ... and {file_count - 5} more")
-        click.echo()
+            console.print(f"    ... and {file_count - 5} more")
+        console.print()
 
-    click.echo("Options:")
-    click.echo("  [i] Add patterns to .gitignore and exclude from commit")
-    click.echo("  [d] Delete these files")
-    click.echo("  [c] Commit these files anyway")
-    click.echo("  [s] Skip this repository (don't commit anything)")
+    console.print("Options:")
+    console.print("  \\[i] Add patterns to .gitignore and exclude from commit")
+    console.print("  \\[d] Delete these files")
+    console.print("  \\[c] Commit these files anyway")
+    console.print("  \\[s] Skip this repository (don't commit anything)")
 
     while True:
-        choice = click.prompt("\nYour choice", type=str, default="i").lower().strip()
+        # Use prompt_toolkit's prompt for robust input handling
+        try:
+            choice = prompt("\nYour choice (default: i): ", default="i").lower().strip()
+        except (KeyboardInterrupt, EOFError):
+            # Safe default on interrupt
+            return "skip"
+            
         if choice in ["i", "ignore"]:
             return "ignore"
         elif choice in ["d", "delete", "del"]:
@@ -119,14 +130,14 @@ def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: 
             if confirm("⚠️  Are you sure you want to delete these files? This cannot be undone."):
                 return "delete"
             else:
-                click.echo("Cancelled deletion. Choose another option.")
+                console.print("Cancelled deletion. Choose another option.")
                 continue
         elif choice in ["c", "commit"]:
             return "commit"
         elif choice in ["s", "skip"]:
             return "skip"
         else:
-            click.secho(f"Invalid choice: {choice}. Please enter i, d, c, or s.", fg="yellow")
+            console.print(f"[yellow]Invalid choice: {choice}. Please enter i, d, c, or s.[/yellow]")
 
 
 def add_to_gitignore(patterns: list[str], repo_path: Path) -> None:

@@ -53,12 +53,25 @@ class TaskTUI:
         # Build view items based on mode
         self.view_items = self._build_view_items()
 
-        # Start at -1 to show "All" items first
-        self.current_view_idx = -1
+        # Restore view state from config if remember_tui_state is enabled
+        if config.remember_tui_state:
+            # Restore tree view state
+            self.tree_view = config.tui_tree_view
+
+            # Restore last selected view item
+            last_item = config.tui_last_view_item
+            if last_item and last_item in self.view_items:
+                self.current_view_idx = self.view_items.index(last_item)
+            else:
+                self.current_view_idx = -1  # Default to "All"
+        else:
+            # Default state
+            self.current_view_idx = -1  # Show "All" items first
+            self.tree_view = True
+
         self.selected_row = 0
         self.multi_selected: set[str] = set()  # Store task UUIDs
         self.filter_text = ""
-        self.tree_view = True
         self.filter_active = False
         self.show_detail_panel = True  # Always show detail panel
 
@@ -647,6 +660,12 @@ class TaskTUI:
             self.selected_row = 0
             self.viewport_top = 0  # Reset viewport
             self.multi_selected.clear()
+            # Save current view item to config if remember_tui_state is enabled
+            if self.config.remember_tui_state:
+                if self.current_view_idx == -1:
+                    self.config.tui_last_view_item = None
+                else:
+                    self.config.tui_last_view_item = self.view_items[self.current_view_idx]
 
         @kb.add("left", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -656,6 +675,12 @@ class TaskTUI:
             self.selected_row = 0
             self.viewport_top = 0  # Reset viewport
             self.multi_selected.clear()
+            # Save current view item to config if remember_tui_state is enabled
+            if self.config.remember_tui_state:
+                if self.current_view_idx == -1:
+                    self.config.tui_last_view_item = None
+                else:
+                    self.config.tui_last_view_item = self.view_items[self.current_view_idx]
 
         # Tab to switch view type (only when not filtering)
         @kb.add("tab", filter=Condition(lambda: not self.filter_active))
@@ -675,6 +700,9 @@ class TaskTUI:
 
             # Reset to "All" view
             self.current_view_idx = -1
+            # Reset last view item when switching modes
+            if self.config.remember_tui_state:
+                self.config.tui_last_view_item = None
             self.selected_row = 0
             self.viewport_top = 0
             self.multi_selected.clear()
@@ -759,10 +787,13 @@ class TaskTUI:
             event.app.exit(result="priority-low")
 
         # View operations (only when not filtering)
-        @kb.add("r", filter=Condition(lambda: not self.filter_active))
+        @kb.add("t", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Toggle tree view."""
             self.tree_view = not self.tree_view
+            # Save to config if remember_tui_state is enabled
+            if self.config.remember_tui_state:
+                self.config.tui_tree_view = self.tree_view
 
         @kb.add("s", filter=Condition(lambda: not self.filter_active))
         def _(event):

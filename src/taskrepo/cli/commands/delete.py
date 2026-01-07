@@ -1,5 +1,6 @@
 """Delete command for removing tasks."""
 
+import sys
 from typing import Tuple
 
 import click
@@ -37,6 +38,11 @@ def delete(ctx, task_ids: Tuple[str, ...], repo, force):
 
     # Batch confirmation for multiple tasks (unless --force flag is used)
     if is_batch and not force:
+        # Check if we're in a terminal - if not, skip confirmation (auto-cancel for safety)
+        if not sys.stdin.isatty():
+            click.echo("Warning: Non-interactive mode detected. Use --force to delete in non-interactive mode.")
+            ctx.exit(1)
+
         click.echo(f"\nAbout to delete {task_id_count} tasks. This cannot be undone.")
 
         # Create a validator for y/n input
@@ -60,6 +66,11 @@ def delete(ctx, task_ids: Tuple[str, ...], repo, force):
         """Handler to delete a task with optional confirmation."""
         # Single task confirmation (only if not batch and not force)
         if not is_batch and not force:
+            # Check if we're in a terminal - if not, require --force flag
+            if not sys.stdin.isatty():
+                click.echo("Warning: Non-interactive mode detected. Use --force to delete in non-interactive mode.")
+                ctx.exit(1)
+
             # Format task display with colored UUID and title
             assignees_str = f" {', '.join(task.assignees)}" if task.assignees else ""
             project_str = f" [{task.project}]" if task.project else ""

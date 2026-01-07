@@ -1,6 +1,8 @@
 """Sync command for git operations."""
 
 import re
+import subprocess
+import sys
 import time
 import traceback
 from datetime import datetime
@@ -20,6 +22,35 @@ from taskrepo.utils.conflict_detection import resolve_readme_conflicts
 from taskrepo.utils.merge import detect_conflicts, smart_merge_tasks
 
 console = Console()
+
+
+def run_git_verbose(repo_path: str, args: list[str], error_msg: str) -> bool:
+    """Run a git command letting output flow to the terminal for visibility/interactivity.
+    
+    Args:
+        repo_path: Path to the repository
+        args: Git arguments (e.g. ["push", "origin", "main"])
+        error_msg: Message to display on failure
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # flush console to ensure previous messages appear
+        sys.stdout.flush()
+        sys.stderr.flush()
+        
+        # Run git command, inheriting stdin/stdout/stderr
+        # We use a subprocess call to bypass GitPython's output capturing
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=repo_path,
+            check=False
+        )
+        return result.returncode == 0
+    except Exception as e:
+        console.print(f"  [red]✗[/red] {error_msg}: {e}")
+        return False
 
 
 def _log_sync_error(repo_name: str, error: Exception):
@@ -187,8 +218,60 @@ class SyncChangeTracker:
         return f"Auto-sync: {', '.join(self.changes_to_commit)}"
 
 
+
+class SimpleSyncProgress:
+    """A simple, linear progress reporter that replaces Rich's live display.
+    
+    This class is safer for interactive prompts as it doesn't take over the terminal
+    screen or cursor in complex ways. It prints log-style updates instead of
+    updating a progress bar in place.
+    """
+
+    def __init__(self, *args, console=None, **kwargs):
+        self.console = console or Console()
+        self.tasks = {}
+        self._task_counter = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def add_task(self, description, total=None, **kwargs):
+        task_id = self._task_counter
+        self._task_counter += 1
+        self.tasks[task_id] = {"description": description, "total": total, "completed": 0}
+        
+        # Don't print empty spinner tasks
+        if description:
+            # Strip markup for simpler display if needed, but Rich console handles it
+            self.console.print(description)
+            
+        return task_id
+
+    def update(self, task_id, advance=None, description=None, **kwargs):
+        if task_id not in self.tasks:
+            return
+            
+        task = self.tasks[task_id]
+        
+        if description:
+            task["description"] = description
+            # self.console.print(f"  {description}")  # Don't print every update, too noisy
+
+        if advance:
+            task["completed"] += advance
+            
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
 def run_with_spinner(
-    progress: Progress,
+    progress: Progress | SimpleSyncProgress,
     spinner_task: TaskID,
     operation_name: str,
     operation_func,
@@ -198,7 +281,7 @@ def run_with_spinner(
     """Run an operation with a spinner and timing.
 
     Args:
-        progress: Rich Progress instance
+        progress: Rich Progress instance or SimpleSyncProgress
         spinner_task: Spinner task ID
         operation_name: Name of operation to display
         operation_func: Function to execute
@@ -206,7 +289,12 @@ def run_with_spinner(
         operations_task: Optional operations progress task to advance
     """
     start_time = time.perf_counter()
-    progress.update(spinner_task, description=f"[cyan]{operation_name}...")
+    
+    # Update description (or print it for simple progress)
+    if isinstance(progress, SimpleSyncProgress):
+        progress.console.print(f"[cyan]{operation_name}...[/cyan]")
+    else:
+        progress.update(spinner_task, description=f"[cyan]{operation_name}...")
 
     try:
         result = operation_func()
@@ -256,8 +344,13 @@ def run_with_spinner(
     is_flag=True,
     help="Show detailed progress and timing information",
 )
+@click.option(
+    "--non-interactive",
+    is_flag=True,
+    help="Do not prompt for user input (skip repositories with unexpected files)",
+)
 @click.pass_context
-def sync(ctx, repo, push, auto_merge, strategy, verbose):
+def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
     """Sync task repositories with git (pull and optionally push)."""
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
@@ -296,29 +389,30 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
     repo_timings = {}
     total_start_time = time.perf_counter()
 
-    # Create progress context with progress bar (for repos or operations)
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.completed}/{task.total}"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
+    # Track timing for each repository
+    repo_timings = {}
+    total_start_time = time.perf_counter()
+
+    # Use SimpleSyncProgress to avoid terminal freezing issues during prompts
+    # The user explicitly requested a non-interactive progress bar (linear logs)
+    # to solve the hanging issues with the spinner.
+    progress_manager = SimpleSyncProgress(console=console)
+
+    with progress_manager as progress:
         # Add overall progress task
         # - For multiple repos: track repository progress
         # - For single repo: track operation progress
         if len(repositories) > 1:
-            overall_task = progress.add_task("[bold]Syncing repositories", total=len(repositories), completed=0)
+            overall_task = progress.add_task("[bold]Syncing repositories", total=len(repositories))
             operations_task = None  # Operations tracking not needed for multi-repo
         else:
             # Estimate operations for single repo (will be adjusted dynamically)
             estimated_ops = 6  # Base: check conflicts, pull, update readme, archive readme, maybe commit/push
-            overall_task = progress.add_task("[bold]Syncing operations", total=estimated_ops, completed=0)
+            overall_task = progress.add_task("[bold]Syncing operations", total=estimated_ops)
             operations_task = overall_task  # Use same task for operations
 
         # Add spinner task for per-operation status
-        spinner_task = progress.add_task("", total=None)
+        spinner_task = progress.add_task("Initializing...", total=None)
 
         for repo_index, repository in enumerate(repositories, 1):
             repo_start_time = time.perf_counter()
@@ -340,6 +434,39 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     f"[bold cyan][{repo_index}/{len(repositories)}][/bold cyan] {repository.name} [dim](local: {repository.path})[/dim]"
                 )
 
+            # Local flag for this repository's push status
+            should_push = push
+
+            # Check for detached HEAD and try to recover
+            if git_repo.head.is_detached:
+                progress.console.print("  [yellow]⚠[/yellow] Repository is in detached HEAD state")
+                
+                # Use a separate exception block to ensure we don't crash the whole sync
+                try:
+                    # Determine target branch (default to main, fallback to master)
+                    target_branch = "main"
+                    if "main" not in git_repo.heads and "master" in git_repo.heads:
+                        target_branch = "master"
+                    
+                    if target_branch in git_repo.heads:
+                        current_sha = git_repo.head.commit.hexsha
+                        branch_sha = git_repo.heads[target_branch].commit.hexsha
+                        
+                        if current_sha == branch_sha:
+                            # We are at the tip of the branch, just detached. Safe to switch.
+                            git_repo.heads[target_branch].checkout()
+                            progress.console.print(f"  [green]✓[/green] Automatically re-attached to branch '{target_branch}'")
+                        else:
+                            progress.console.print(f"  [yellow]⚠[/yellow] HEAD ({current_sha[:7]}) does not match {target_branch} ({branch_sha[:7]})")
+                            progress.console.print("  [yellow]⚠[/yellow] Skipping push to avoid errors. Please checkout a branch manually.")
+                            should_push = False
+                    else:
+                        progress.console.print(f"  [yellow]⚠[/yellow] Default branch '{target_branch}' not found locally")
+                        should_push = False
+                except Exception as e:
+                    progress.console.print(f"  [red]✗[/red] Failed to recover from detached HEAD: {e}")
+                    should_push = False
+
             try:
                 # Check if there are uncommitted changes (including untracked files)
                 if git_repo.is_dirty(untracked_files=True):
@@ -354,23 +481,36 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                     unexpected = detect_unexpected_files(git_repo, repository.path)
 
                     if unexpected:
-                        progress.console.print("  [yellow]⚠[/yellow] Found unexpected files")
-                        action = prompt_unexpected_files(unexpected, repository.name)
-
-                        if action == "ignore":
-                            # Add patterns to .gitignore
-                            patterns = list(unexpected.keys())
-                            add_to_gitignore(patterns, repository.path)
-                            # Stage .gitignore change
-                            git_repo.git.add(".gitignore")
-                        elif action == "delete":
-                            # Delete the files
-                            delete_unexpected_files(unexpected, repository.path)
-                        elif action == "skip":
+                        if non_interactive:
+                            progress.console.print("  [yellow]⚠[/yellow] Found unexpected files - skipping in non-interactive mode")
                             # Skip this repository
                             progress.console.print("  [yellow]⊗[/yellow] Skipped repository")
                             continue
-                        # If "commit", proceed as normal
+                        else:
+                            # Interactive mode: Pause progress to allow cleaner input
+                            progress.stop()
+                            try:
+                                # Provide clear visual separation
+                                progress.console.print()
+                                # Use separate console inside function to avoid progress bar conflict
+                                action = prompt_unexpected_files(unexpected, repository.name)
+                            finally:
+                                progress.start()
+
+                            if action == "ignore":
+                                # Add patterns to .gitignore
+                                patterns = list(unexpected.keys())
+                                add_to_gitignore(patterns, repository.path)
+                                # Stage .gitignore change
+                                git_repo.git.add(".gitignore")
+                            elif action == "delete":
+                                # Delete the files
+                                delete_unexpected_files(unexpected, repository.path)
+                            elif action == "skip":
+                                # Skip this repository
+                                progress.console.print("  [yellow]⊗[/yellow] Skipped repository")
+                                continue
+                            # If "commit", proceed as normal
 
                     # Stage all changes but don't commit yet (will consolidate commits later)
                     def stage_changes():
@@ -450,9 +590,17 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
                                     progress.update(overall_task, advance=1)
                                     continue
 
+                    # Fetch first to check for changes
+                    # Use verbose fetch to avoid hanging silently on network/auth
+                    if git_repo.remotes:
+                         current_branch = git_repo.active_branch.name
+                         if not run_git_verbose(str(repository.path), ["fetch", "origin"], "Fetch failed"):
+                             # If fetch fails, we might still proceed safely locally, or abort
+                             progress.console.print("  [yellow]⚠[/yellow] Fetch failed - proceeding with local state")
+
                     # Detect conflicts before pulling (pass cache to avoid redundant parsing)
                     def check_conflicts():
-                        return detect_conflicts(git_repo, repository.path, task_cache=task_cache)
+                        return detect_conflicts(git_repo, repository.path, task_cache=task_cache, skip_fetch=True)
 
                     conflicts, _ = run_with_spinner(
                         progress, spinner_task, "Checking for conflicts", check_conflicts, verbose, operations_task
@@ -700,109 +848,25 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
 
                     # Push changes
                     if push:
-
-                        def push_changes():
-                            origin = git_repo.remotes.origin
-                            push_info = origin.push()
-
-                            # Check if push failed by examining PushInfo flags
-                            # GitPython doesn't always raise exceptions on push failures
-                            for info in push_info:
-                                # Check for error flags - IMPORTANT: Check REJECTED before ERROR
-                                # because rejected pushes set both flags, but we want auto-recovery for REJECTED
-                                if info.flags & info.REJECTED:
-                                    # Non-fast-forward - will attempt auto-recovery
-                                    raise GitCommandError("git push", "REJECTED")
-                                if info.flags & info.REMOTE_REJECTED:
-                                    raise GitCommandError("git push", f"Remote rejected push: {info.summary}")
-                                if info.flags & info.REMOTE_FAILURE:
-                                    raise GitCommandError("git push", f"Remote failure during push: {info.summary}")
-                                if info.flags & info.ERROR:
-                                    raise GitCommandError("git push", f"Push failed with ERROR flag: {info.summary}")
-
-                            return push_info
-
                         try:
-                            run_with_spinner(
-                                progress, spinner_task, "Pushing to remote", push_changes, verbose, operations_task
-                            )
-                        except GitCommandError as e:
-                            # Check if this is a non-fast-forward rejection that we can auto-recover
-                            if "REJECTED" in str(e):
-                                progress.console.print(
-                                    "  [yellow]⚠[/yellow] Push rejected (branches diverged) - attempting auto-recovery..."
-                                )
+                            if should_push and git_repo.remotes:
+                                progress.console.print("  [dim]Pushing to remote...[/dim]")
+                                if not run_git_verbose(str(repository.path), ["push", "origin", current_branch], "Push failed"):
+                                    raise GitCommandError("git push", "Process failed")
+                            elif not should_push and push and git_repo.remotes:
+                                progress.console.print("  [dim]⊘ Pushing skipped (detached HEAD or error)[/dim]")
+                        except GitCommandError:
+                             # Fallback to recovery if we detect rejection
+                             progress.console.print("  [yellow]⚠[/yellow] Push failed. Attempting auto-recovery (pull --rebase)...")
+                             
+                             if run_git_verbose(str(repository.path), ["pull", "--rebase", "origin", current_branch], "Rebase failed"):
+                                 # Try pushing again
+                                 progress.console.print("  [dim]Retrying push...[/dim]")
+                                 if not run_git_verbose(str(repository.path), ["push", "origin", current_branch], "Retry push failed"):
+                                     progress.console.print("  [red]✗[/red] Retry push failed after rebase")
+                             else:
+                                 progress.console.print("  [red]✗[/red] Auto-recovery (rebase) failed")
 
-                                # Try to pull with rebase
-                                try:
-
-                                    def rebase_pull():
-                                        # Get current branch
-                                        current_branch = git_repo.active_branch.name
-                                        # Pull with rebase to integrate remote changes
-                                        git_repo.git.pull("--rebase", "origin", current_branch)
-
-                                    run_with_spinner(
-                                        progress,
-                                        spinner_task,
-                                        "Pulling with rebase",
-                                        rebase_pull,
-                                        verbose,
-                                        operations_task,
-                                    )
-
-                                    # Check if rebase created conflicts
-                                    if git_repo.is_dirty(working_tree=True, untracked_files=False):
-                                        # Rebase created conflicts - abort and report
-                                        progress.console.print(
-                                            "  [red]✗[/red] Rebase created conflicts - aborting auto-recovery"
-                                        )
-                                        try:
-                                            git_repo.git.rebase("--abort")
-                                            progress.console.print("  [yellow]→[/yellow] Aborted rebase")
-                                        except Exception:
-                                            pass
-                                        progress.console.print(
-                                            "  [yellow]→[/yellow] Manual resolution required: git pull --rebase && git push"
-                                        )
-                                        raise
-                                    else:
-                                        # Rebase succeeded - try push again
-                                        progress.console.print("  [green]✓[/green] Rebase successful - retrying push")
-
-                                        def retry_push():
-                                            repo_origin = git_repo.remotes.origin
-                                            push_info = repo_origin.push()
-                                            # Check for errors again
-                                            for info in push_info:
-                                                if info.flags & (
-                                                    info.ERROR
-                                                    | info.REJECTED
-                                                    | info.REMOTE_REJECTED
-                                                    | info.REMOTE_FAILURE
-                                                ):
-                                                    raise GitCommandError(
-                                                        "git push", f"Push still failed: {info.summary}"
-                                                    )
-                                            return push_info
-
-                                        run_with_spinner(
-                                            progress, spinner_task, "Pushing to remote (retry)", retry_push, verbose
-                                        )
-
-                                except GitCommandError as rebase_error:
-                                    # Rebase or retry push failed
-                                    if "conflict" in str(rebase_error).lower():
-                                        progress.console.print(
-                                            "  [red]✗[/red] Auto-recovery failed: conflicts during rebase"
-                                        )
-                                        progress.console.print(
-                                            "  [yellow]→[/yellow] Resolve manually: git pull --rebase && git push"
-                                        )
-                                    raise
-                            else:
-                                # Other push error - re-raise
-                                raise
                 else:
                     progress.console.print("  • No remote configured (local repository only)")
 
@@ -914,7 +978,13 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose):
         console.print("[cyan]IDs rebalanced to sequential order[/cyan]")
         console.print()
 
-        display_tasks_table(all_tasks, config, save_cache=False)
+        # If specific repo was synced, only show tasks for that repo
+        if repo:
+            tasks_to_display = [t for t in all_tasks if t.repo == repo]
+        else:
+            tasks_to_display = all_tasks
+
+        display_tasks_table(tasks_to_display, config, save_cache=False)
 
 
 def _show_merge_details(

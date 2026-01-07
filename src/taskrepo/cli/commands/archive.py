@@ -18,14 +18,52 @@ from taskrepo.utils.id_mapping import get_cache_size
 @click.argument("task_ids", nargs=-1)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
 @click.option("--yes", "-y", is_flag=True, help="Automatically archive subtasks (skip prompt)")
+@click.option("--all-completed", is_flag=True, help="Archive all completed tasks")
 @click.pass_context
-def archive(ctx, task_ids: Tuple[str, ...], repo, yes):
+def archive(ctx, task_ids: Tuple[str, ...], repo, yes, all_completed):
     """Archive one or more tasks, or list archived tasks if no task IDs are provided.
 
     TASK_IDS: One or more task IDs to archive (optional - if omitted, lists archived tasks)
+
+    Use --all-completed to archive all tasks with status 'completed' in one command.
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
+
+    # Handle --all-completed flag
+    if all_completed and not task_ids:
+        # Get all completed tasks
+        if repo:
+            repository = manager.get_repository(repo)
+            if not repository:
+                click.secho(f"Error: Repository '{repo}' not found", fg="red", err=True)
+                ctx.exit(1)
+            all_tasks = repository.list_tasks(include_archived=False)
+        else:
+            all_tasks = manager.list_all_tasks(include_archived=False)
+
+        # Filter for completed status
+        completed_tasks = [task for task in all_tasks if task.status == "completed"]
+
+        if not completed_tasks:
+            repo_msg = f" in repository '{repo}'" if repo else ""
+            click.echo(f"No completed tasks found{repo_msg}.")
+            return
+
+        # Get display IDs from cache for completed tasks
+        from taskrepo.utils.id_mapping import get_display_id_from_uuid
+        completed_ids = []
+        for task in completed_tasks:
+            display_id = get_display_id_from_uuid(task.id)
+            if display_id:
+                completed_ids.append(str(display_id))
+
+        if not completed_ids:
+            click.echo("No completed tasks found with display IDs.")
+            return
+
+        click.echo(f"Found {len(completed_ids)} completed task(s) to archive.")
+        task_ids = tuple(completed_ids)
 
     # If no task_ids provided, list archived tasks
     if not task_ids:
