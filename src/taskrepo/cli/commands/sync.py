@@ -12,7 +12,7 @@ import click
 from git import GitCommandError
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, TaskID
 
 from taskrepo.core.repository import Repository, RepositoryManager
 from taskrepo.core.task import Task
@@ -26,12 +26,12 @@ console = Console()
 
 def run_git_verbose(repo_path: str, args: list[str], error_msg: str) -> bool:
     """Run a git command letting output flow to the terminal for visibility/interactivity.
-    
+
     Args:
         repo_path: Path to the repository
         args: Git arguments (e.g. ["push", "origin", "main"])
         error_msg: Message to display on failure
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -39,14 +39,10 @@ def run_git_verbose(repo_path: str, args: list[str], error_msg: str) -> bool:
         # flush console to ensure previous messages appear
         sys.stdout.flush()
         sys.stderr.flush()
-        
+
         # Run git command, inheriting stdin/stdout/stderr
         # We use a subprocess call to bypass GitPython's output capturing
-        result = subprocess.run(
-            ["git"] + args,
-            cwd=repo_path,
-            check=False
-        )
+        result = subprocess.run(["git"] + args, cwd=repo_path, check=False)
         return result.returncode == 0
     except Exception as e:
         console.print(f"  [red]✗[/red] {error_msg}: {e}")
@@ -218,10 +214,9 @@ class SyncChangeTracker:
         return f"Auto-sync: {', '.join(self.changes_to_commit)}"
 
 
-
 class SimpleSyncProgress:
     """A simple, linear progress reporter that replaces Rich's live display.
-    
+
     This class is safer for interactive prompts as it doesn't take over the terminal
     screen or cursor in complex ways. It prints log-style updates instead of
     updating a progress bar in place.
@@ -242,27 +237,27 @@ class SimpleSyncProgress:
         task_id = self._task_counter
         self._task_counter += 1
         self.tasks[task_id] = {"description": description, "total": total, "completed": 0}
-        
+
         # Don't print empty spinner tasks
         if description:
             # Strip markup for simpler display if needed, but Rich console handles it
             self.console.print(description)
-            
+
         return task_id
 
     def update(self, task_id, advance=None, description=None, **kwargs):
         if task_id not in self.tasks:
             return
-            
+
         task = self.tasks[task_id]
-        
+
         if description:
             task["description"] = description
             # self.console.print(f"  {description}")  # Don't print every update, too noisy
 
         if advance:
             task["completed"] += advance
-            
+
     def start(self):
         pass
 
@@ -289,7 +284,7 @@ def run_with_spinner(
         operations_task: Optional operations progress task to advance
     """
     start_time = time.perf_counter()
-    
+
     # Update description (or print it for simple progress)
     if isinstance(progress, SimpleSyncProgress):
         progress.console.print(f"[cyan]{operation_name}...[/cyan]")
@@ -440,28 +435,36 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
             # Check for detached HEAD and try to recover
             if git_repo.head.is_detached:
                 progress.console.print("  [yellow]⚠[/yellow] Repository is in detached HEAD state")
-                
+
                 # Use a separate exception block to ensure we don't crash the whole sync
                 try:
                     # Determine target branch (default to main, fallback to master)
                     target_branch = "main"
                     if "main" not in git_repo.heads and "master" in git_repo.heads:
                         target_branch = "master"
-                    
+
                     if target_branch in git_repo.heads:
                         current_sha = git_repo.head.commit.hexsha
                         branch_sha = git_repo.heads[target_branch].commit.hexsha
-                        
+
                         if current_sha == branch_sha:
                             # We are at the tip of the branch, just detached. Safe to switch.
                             git_repo.heads[target_branch].checkout()
-                            progress.console.print(f"  [green]✓[/green] Automatically re-attached to branch '{target_branch}'")
+                            progress.console.print(
+                                f"  [green]✓[/green] Automatically re-attached to branch '{target_branch}'"
+                            )
                         else:
-                            progress.console.print(f"  [yellow]⚠[/yellow] HEAD ({current_sha[:7]}) does not match {target_branch} ({branch_sha[:7]})")
-                            progress.console.print("  [yellow]⚠[/yellow] Skipping push to avoid errors. Please checkout a branch manually.")
+                            progress.console.print(
+                                f"  [yellow]⚠[/yellow] HEAD ({current_sha[:7]}) does not match {target_branch} ({branch_sha[:7]})"
+                            )
+                            progress.console.print(
+                                "  [yellow]⚠[/yellow] Skipping push to avoid errors. Please checkout a branch manually."
+                            )
                             should_push = False
                     else:
-                        progress.console.print(f"  [yellow]⚠[/yellow] Default branch '{target_branch}' not found locally")
+                        progress.console.print(
+                            f"  [yellow]⚠[/yellow] Default branch '{target_branch}' not found locally"
+                        )
                         should_push = False
                 except Exception as e:
                     progress.console.print(f"  [red]✗[/red] Failed to recover from detached HEAD: {e}")
@@ -482,7 +485,9 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
 
                     if unexpected:
                         if non_interactive:
-                            progress.console.print("  [yellow]⚠[/yellow] Found unexpected files - skipping in non-interactive mode")
+                            progress.console.print(
+                                "  [yellow]⚠[/yellow] Found unexpected files - skipping in non-interactive mode"
+                            )
                             # Skip this repository
                             progress.console.print("  [yellow]⊗[/yellow] Skipped repository")
                             continue
@@ -593,10 +598,10 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
                     # Fetch first to check for changes
                     # Use verbose fetch to avoid hanging silently on network/auth
                     if git_repo.remotes:
-                         current_branch = git_repo.active_branch.name
-                         if not run_git_verbose(str(repository.path), ["fetch", "origin"], "Fetch failed"):
-                             # If fetch fails, we might still proceed safely locally, or abort
-                             progress.console.print("  [yellow]⚠[/yellow] Fetch failed - proceeding with local state")
+                        current_branch = git_repo.active_branch.name
+                        if not run_git_verbose(str(repository.path), ["fetch", "origin"], "Fetch failed"):
+                            # If fetch fails, we might still proceed safely locally, or abort
+                            progress.console.print("  [yellow]⚠[/yellow] Fetch failed - proceeding with local state")
 
                     # Detect conflicts before pulling (pass cache to avoid redundant parsing)
                     def check_conflicts():
@@ -851,21 +856,29 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
                         try:
                             if should_push and git_repo.remotes:
                                 progress.console.print("  [dim]Pushing to remote...[/dim]")
-                                if not run_git_verbose(str(repository.path), ["push", "origin", current_branch], "Push failed"):
+                                if not run_git_verbose(
+                                    str(repository.path), ["push", "origin", current_branch], "Push failed"
+                                ):
                                     raise GitCommandError("git push", "Process failed")
                             elif not should_push and push and git_repo.remotes:
                                 progress.console.print("  [dim]⊘ Pushing skipped (detached HEAD or error)[/dim]")
                         except GitCommandError:
-                             # Fallback to recovery if we detect rejection
-                             progress.console.print("  [yellow]⚠[/yellow] Push failed. Attempting auto-recovery (pull --rebase)...")
-                             
-                             if run_git_verbose(str(repository.path), ["pull", "--rebase", "origin", current_branch], "Rebase failed"):
-                                 # Try pushing again
-                                 progress.console.print("  [dim]Retrying push...[/dim]")
-                                 if not run_git_verbose(str(repository.path), ["push", "origin", current_branch], "Retry push failed"):
-                                     progress.console.print("  [red]✗[/red] Retry push failed after rebase")
-                             else:
-                                 progress.console.print("  [red]✗[/red] Auto-recovery (rebase) failed")
+                            # Fallback to recovery if we detect rejection
+                            progress.console.print(
+                                "  [yellow]⚠[/yellow] Push failed. Attempting auto-recovery (pull --rebase)..."
+                            )
+
+                            if run_git_verbose(
+                                str(repository.path), ["pull", "--rebase", "origin", current_branch], "Rebase failed"
+                            ):
+                                # Try pushing again
+                                progress.console.print("  [dim]Retrying push...[/dim]")
+                                if not run_git_verbose(
+                                    str(repository.path), ["push", "origin", current_branch], "Retry push failed"
+                                ):
+                                    progress.console.print("  [red]✗[/red] Retry push failed after rebase")
+                            else:
+                                progress.console.print("  [red]✗[/red] Auto-recovery (rebase) failed")
 
                 else:
                     progress.console.print("  • No remote configured (local repository only)")

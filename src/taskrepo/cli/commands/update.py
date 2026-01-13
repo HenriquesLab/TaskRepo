@@ -1,6 +1,5 @@
 """Update command for modifying task fields."""
 
-import sys
 from typing import Optional, Tuple
 
 import click
@@ -14,7 +13,9 @@ from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_re
 @click.argument("task_ids", nargs=-1, required=True)
 @click.option("--repo", "-r", help="Repository name (will search all repos if not specified)")
 @click.option("--priority", "-p", type=click.Choice(["H", "M", "L"]), help="Set priority")
-@click.option("--status", "-s", type=click.Choice(["pending", "in-progress", "completed", "cancelled"]), help="Set status")
+@click.option(
+    "--status", "-s", type=click.Choice(["pending", "in-progress", "completed", "cancelled"]), help="Set status"
+)
 @click.option("--project", help="Set project name")
 @click.option("--add-tag", multiple=True, help="Add tag(s) to task")
 @click.option("--remove-tag", multiple=True, help="Remove tag(s) from task")
@@ -23,10 +24,20 @@ from taskrepo.utils.helpers import find_task_by_title_or_id, select_task_from_re
 @click.option("--due", help="Set due date (natural language or ISO format)")
 @click.option("--title", help="Set new title")
 @click.pass_context
-def update(ctx, task_ids: Tuple[str, ...], repo: Optional[str], priority: Optional[str],
-           status: Optional[str], project: Optional[str], add_tag: Tuple[str, ...],
-           remove_tag: Tuple[str, ...], add_assignee: Tuple[str, ...],
-           remove_assignee: Tuple[str, ...], due: Optional[str], title: Optional[str]):
+def update(
+    ctx,
+    task_ids: Tuple[str, ...],
+    repo: Optional[str],
+    priority: Optional[str],
+    status: Optional[str],
+    project: Optional[str],
+    add_tag: Tuple[str, ...],
+    remove_tag: Tuple[str, ...],
+    add_assignee: Tuple[str, ...],
+    remove_assignee: Tuple[str, ...],
+    due: Optional[str],
+    title: Optional[str],
+):
     """Update fields for one or more tasks.
 
     Examples:
@@ -45,8 +56,7 @@ def update(ctx, task_ids: Tuple[str, ...], repo: Optional[str], priority: Option
     manager = RepositoryManager(config.parent_dir)
 
     # Check that at least one update option is provided
-    if not any([priority, status, project, add_tag, remove_tag, add_assignee,
-                remove_assignee, due, title]):
+    if not any([priority, status, project, add_tag, remove_tag, add_assignee, remove_assignee, due, title]):
         click.secho("Error: At least one update option must be specified", fg="red", err=True)
         ctx.exit(1)
 
@@ -125,7 +135,7 @@ def update(ctx, task_ids: Tuple[str, ...], repo: Optional[str], priority: Option
         if due:
             parsed_date = parse_date(due)
             if parsed_date:
-                task.due = parsed_date.isoformat()
+                task.due = parsed_date
                 changes.append(f"due → {due}")
             else:
                 click.secho(f"Warning: Could not parse due date '{due}' for task {task_id}", fg="yellow")

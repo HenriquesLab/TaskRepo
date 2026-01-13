@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 from git import Repo as GitRepo
 from prompt_toolkit.shortcuts import confirm, prompt
+from rich.console import Console
 
 
 def detect_unexpected_files(git_repo: GitRepo, repo_path: Path) -> dict[str, list[Path]]:
@@ -82,8 +83,6 @@ def detect_unexpected_files(git_repo: GitRepo, repo_path: Path) -> dict[str, lis
     return grouped
 
 
-from rich.console import Console
-
 def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: str) -> str:
     """Prompt user about unexpected files and return action choice.
 
@@ -96,7 +95,7 @@ def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: 
     """
     # Use a fresh Console to avoid conflicts with progress bar
     console = Console()
-    
+
     console.print(f"\n[yellow]⚠️[/yellow]  Found unexpected files in repository '{repo_name}':\n")
 
     # Display grouped files
@@ -122,7 +121,7 @@ def prompt_unexpected_files(unexpected_files: dict[str, list[Path]], repo_name: 
         except (KeyboardInterrupt, EOFError):
             # Safe default on interrupt
             return "skip"
-            
+
         if choice in ["i", "ignore"]:
             return "ignore"
         elif choice in ["d", "delete", "del"]:

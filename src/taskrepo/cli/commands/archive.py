@@ -52,6 +52,7 @@ def archive(ctx, task_ids: Tuple[str, ...], repo, yes, all_completed):
 
         # Get display IDs from cache for completed tasks
         from taskrepo.utils.id_mapping import get_display_id_from_uuid
+
         completed_ids = []
         for task in completed_tasks:
             display_id = get_display_id_from_uuid(task.id)

@@ -274,7 +274,9 @@ class Repository:
                     if not silent_errors:
                         # Check if error is due to git conflict markers
                         if "<<<<<<< HEAD" in str(e) or "could not find expected ':'" in str(e):
-                            print(f"Warning: Failed to load archived task {task_file.name}: Invalid YAML frontmatter: {e}")
+                            print(
+                                f"Warning: Failed to load archived task {task_file.name}: Invalid YAML frontmatter: {e}"
+                            )
                         else:
                             print(f"Warning: Failed to load archived task {task_file.name}: {e}")
 

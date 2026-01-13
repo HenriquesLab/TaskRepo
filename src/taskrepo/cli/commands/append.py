@@ -1,6 +1,5 @@
 """Append command for adding content to task descriptions."""
 
-import sys
 from typing import Optional
 
 import click
@@ -45,5 +44,5 @@ def append(ctx, task_id: str, text: str, repo: Optional[str]):
     repository.save_task(task)
 
     click.secho(f"✓ Appended text to task: {task.title}", fg="green")
-    click.echo(f"\nNew content added:")
+    click.echo("\nNew content added:")
     click.echo(f"  {text}")

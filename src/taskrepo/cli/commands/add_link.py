@@ -1,6 +1,5 @@
 """Add-link command for adding URLs to task links."""
 
-import sys
 from typing import Optional
 
 import click
