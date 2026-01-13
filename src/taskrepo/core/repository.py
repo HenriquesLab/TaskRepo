@@ -124,18 +124,20 @@ class Repository:
         except Exception as e:
             print(f"Warning: Could not fully remove done/ folder: {e}")
 
-    def list_tasks(self, include_archived: bool = False) -> list[Task]:
+    def list_tasks(self, include_archived: bool = False, silent_errors: bool = False) -> list[Task]:
         """List all tasks in this repository.
 
         Uses LRU caching to avoid re-parsing unchanged task files.
 
         Args:
             include_archived: If True, also load tasks from archive/ folder
+            silent_errors: If True, suppress individual error messages (still collects errors)
 
         Returns:
             List of Task objects (from tasks/ folder, excluding archive/ subdirectory)
         """
         tasks = []
+        failed_files = []
 
         # Load from tasks/ directory (excluding archive/ subdirectory)
         if self.tasks_dir.exists():
@@ -146,7 +148,13 @@ class Repository:
                     task = _load_task_cached(str(task_file), mtime, self.name)
                     tasks.append(task)
                 except Exception as e:
-                    print(f"Warning: Failed to load task {task_file}: {e}")
+                    failed_files.append((task_file, str(e)))
+                    if not silent_errors:
+                        # Check if error is due to git conflict markers
+                        if "<<<<<<< HEAD" in str(e) or "could not find expected ':'" in str(e):
+                            print(f"Warning: Failed to load task {task_file.name}: Invalid YAML frontmatter: {e}")
+                        else:
+                            print(f"Warning: Failed to load task {task_file.name}: {e}")
 
         # Optionally load from archive/ directory
         if include_archived and self.archive_dir.exists():
@@ -157,7 +165,22 @@ class Repository:
                     task = _load_task_cached(str(task_file), mtime, self.name)
                     tasks.append(task)
                 except Exception as e:
-                    print(f"Warning: Failed to load task {task_file}: {e}")
+                    failed_files.append((task_file, str(e)))
+                    if not silent_errors:
+                        # Check if error is due to git conflict markers
+                        if "<<<<<<< HEAD" in str(e) or "could not find expected ':'" in str(e):
+                            print(f"Warning: Failed to load task {task_file.name}: Invalid YAML frontmatter: {e}")
+                        else:
+                            print(f"Warning: Failed to load task {task_file.name}: {e}")
+
+        # Show summary if there were errors and we're being silent
+        if silent_errors and failed_files:
+            print(f"Warning: Failed to load {len(failed_files)} task(s) in {self.name} repository")
+            # Check for git conflict markers
+            conflict_files = [f for f, e in failed_files if "<<<<<<< HEAD" in e or "could not find expected ':'" in e]
+            if conflict_files:
+                print(f"  → {len(conflict_files)} file(s) appear to have unresolved git merge conflicts")
+                print("  → Run 'git status' to check for conflicts and resolve them")
 
         return tasks
 
@@ -229,13 +252,17 @@ class Repository:
 
         return False
 
-    def list_archived_tasks(self) -> list[Task]:
+    def list_archived_tasks(self, silent_errors: bool = False) -> list[Task]:
         """List all archived tasks in this repository.
+
+        Args:
+            silent_errors: If True, suppress individual error messages (still collects errors)
 
         Returns:
             List of Task objects from archive/ folder
         """
         tasks = []
+        failed_files = []
 
         if self.archive_dir.exists():
             for task_file in sorted(self.archive_dir.glob("task-*.md")):
@@ -243,7 +270,22 @@ class Repository:
                     task = Task.load(task_file, repo=self.name)
                     tasks.append(task)
                 except Exception as e:
-                    print(f"Warning: Failed to load archived task {task_file}: {e}")
+                    failed_files.append((task_file, str(e)))
+                    if not silent_errors:
+                        # Check if error is due to git conflict markers
+                        if "<<<<<<< HEAD" in str(e) or "could not find expected ':'" in str(e):
+                            print(f"Warning: Failed to load archived task {task_file.name}: Invalid YAML frontmatter: {e}")
+                        else:
+                            print(f"Warning: Failed to load archived task {task_file.name}: {e}")
+
+        # Show summary if there were errors and we're being silent
+        if silent_errors and failed_files:
+            print(f"Warning: Failed to load {len(failed_files)} archived task(s) in {self.name} repository")
+            # Check for git conflict markers
+            conflict_files = [f for f, e in failed_files if "<<<<<<< HEAD" in e or "could not find expected ':'" in e]
+            if conflict_files:
+                print(f"  → {len(conflict_files)} file(s) appear to have unresolved git merge conflicts")
+                print("  → Run 'git status' to check for conflicts and resolve them")
 
         return tasks
 
