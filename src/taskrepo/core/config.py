@@ -26,6 +26,9 @@ class Config:
         "sort_by": ["due", "priority"],
         "cluster_due_dates": False,
         "tui_view_mode": "repo",  # Options: "repo", "project", "assignee"
+        "remember_tui_state": True,  # Remember TUI view state (view mode, tree view, etc.)
+        "tui_tree_view": True,  # Tree view enabled/disabled
+        "tui_last_view_item": None,  # Last selected repo/project/assignee name
         "auto_sync_enabled": True,  # Enable background sync in TUI
         "auto_sync_interval": 300,  # Sync every 5 minutes (in seconds)
         "auto_sync_strategy": "auto",  # Auto-merge strategy for background sync
@@ -331,6 +334,63 @@ class Config:
         if value not in valid_modes:
             raise ValueError(f"Invalid TUI view mode: {value}. Must be one of {valid_modes}")
         self._data["tui_view_mode"] = value
+        self.save()
+
+    @property
+    def remember_tui_state(self) -> bool:
+        """Get remember TUI state setting.
+
+        Returns:
+            True if TUI state (view mode, tree view, selected item) should be remembered
+        """
+        return self._data.get("remember_tui_state", True)
+
+    @remember_tui_state.setter
+    def remember_tui_state(self, value: bool):
+        """Set remember TUI state setting.
+
+        Args:
+            value: True to remember TUI state across sessions
+        """
+        self._data["remember_tui_state"] = bool(value)
+        self.save()
+
+    @property
+    def tui_tree_view(self) -> bool:
+        """Get TUI tree view setting.
+
+        Returns:
+            True if tree view is enabled
+        """
+        return self._data.get("tui_tree_view", True)
+
+    @tui_tree_view.setter
+    def tui_tree_view(self, value: bool):
+        """Set TUI tree view setting.
+
+        Args:
+            value: True to enable tree view
+        """
+        self._data["tui_tree_view"] = bool(value)
+        self.save()
+
+    @property
+    def tui_last_view_item(self) -> Optional[str]:
+        """Get last selected view item in TUI.
+
+        Returns:
+            Name of last selected repo/project/assignee, or None
+        """
+        return self._data.get("tui_last_view_item", None)
+
+    @tui_last_view_item.setter
+    def tui_last_view_item(self, value: Optional[str]):
+        """Set last selected view item in TUI.
+
+        Args:
+            value: Name of repo/project/assignee, or None for "All"
+        """
+        self._data["tui_last_view_item"] = value
         self.save()
 
     @property

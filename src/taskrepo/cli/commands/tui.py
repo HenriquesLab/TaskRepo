@@ -67,7 +67,7 @@ def _background_sync(config):
         # Run sync as subprocess with output suppressed to avoid interfering with TUI
         if tsk_cmd:
             result = subprocess.run(
-                [tsk_cmd, "sync"],
+                [tsk_cmd, "sync", "--non-interactive"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=300,  # 5 minute timeout
@@ -77,7 +77,7 @@ def _background_sync(config):
             import sys
 
             result = subprocess.run(
-                [sys.executable, "-m", "taskrepo.cli.main", "sync"],
+                [sys.executable, "-m", "taskrepo.cli.main", "sync", "--non-interactive"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=300,  # 5 minute timeout
@@ -198,7 +198,7 @@ def tui(ctx, repo, no_sync):
         sync_thread.start()
 
     # If repo specified, find its index and start there
-    start_repo_idx = -1  # Default to "All" tab
+    start_repo_idx = None  # Will be set only if --repo flag provided
     if repo:
         try:
             start_repo_idx = next(i for i, r in enumerate(repositories) if r.name == repo)
@@ -214,8 +214,9 @@ def tui(ctx, repo, no_sync):
 
     # Create and run TUI in a loop
     task_tui = TaskTUI(config, repositories)
-    # Set the starting view index
-    task_tui.current_view_idx = start_repo_idx
+    # Set the starting view index only if --repo was explicitly provided
+    if start_repo_idx is not None:
+        task_tui.current_view_idx = start_repo_idx
 
     while True:
         result = task_tui.run()

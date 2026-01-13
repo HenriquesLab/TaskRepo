@@ -10,6 +10,8 @@ from henriqueslab_updater import (
 
 from taskrepo.__version__ import __version__
 from taskrepo.cli.commands.add import add
+from taskrepo.cli.commands.add_link import add_link
+from taskrepo.cli.commands.append import append
 from taskrepo.cli.commands.archive import archive
 from taskrepo.cli.commands.cancelled import cancelled
 from taskrepo.cli.commands.changelog import changelog
@@ -28,6 +30,7 @@ from taskrepo.cli.commands.search import search
 from taskrepo.cli.commands.sync import sync
 from taskrepo.cli.commands.tui import tui
 from taskrepo.cli.commands.unarchive import unarchive
+from taskrepo.cli.commands.update import update
 from taskrepo.cli.commands.upgrade import upgrade
 from taskrepo.core.config import Config
 from taskrepo.utils.banner import display_banner
@@ -159,6 +162,8 @@ def process_result(ctx, result, **kwargs):
 
 # Register commands
 cli.add_command(add)
+cli.add_command(add_link)
+cli.add_command(append)
 cli.add_command(archive)
 cli.add_command(cancelled)
 cli.add_command(changelog)
@@ -177,6 +182,7 @@ cli.add_command(search)
 cli.add_command(sync)
 cli.add_command(tui)
 cli.add_command(unarchive)
+cli.add_command(update)
 cli.add_command(upgrade)
 
 

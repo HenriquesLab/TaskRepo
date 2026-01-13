@@ -1,5 +1,6 @@
 """Done command for marking tasks as completed."""
 
+import sys
 from typing import Tuple
 
 import click
@@ -87,26 +88,30 @@ def done(ctx, task_ids: Tuple[str, ...], repo, yes):
             mark_subtasks = yes  # Default to --yes flag value
 
             if not yes:
-                # Show subtasks and prompt
-                click.echo(f"\nThis task has {count} {subtask_word}:")
-                for subtask, subtask_repo in subtasks_with_repos:
-                    status_emoji = STATUS_EMOJIS.get(subtask.status, "")
-                    click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
+                # Check if we're in a terminal - if not, default to yes
+                if not sys.stdin.isatty():
+                    mark_subtasks = True
+                else:
+                    # Show subtasks and prompt
+                    click.echo(f"\nThis task has {count} {subtask_word}:")
+                    for subtask, subtask_repo in subtasks_with_repos:
+                        status_emoji = STATUS_EMOJIS.get(subtask.status, "")
+                        click.echo(f"  • {status_emoji} {subtask.title} (repo: {subtask_repo.name})")
 
-                # Prompt for confirmation with Y as default
-                yn_validator = Validator.from_callable(
-                    lambda text: text.lower() in ["y", "n", "yes", "no"],
-                    error_message="Please enter 'y' or 'n'",
-                    move_cursor_to_end=True,
-                )
+                    # Prompt for confirmation with Y as default
+                    yn_validator = Validator.from_callable(
+                        lambda text: text.lower() in ["y", "n", "yes", "no"],
+                        error_message="Please enter 'y' or 'n'",
+                        move_cursor_to_end=True,
+                    )
 
-                response = prompt(
-                    f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
-                    default="y",
-                    validator=yn_validator,
-                ).lower()
+                    response = prompt(
+                        f"Mark all {count} {subtask_word} as completed too? (Y/n) ",
+                        default="y",
+                        validator=yn_validator,
+                    ).lower()
 
-                mark_subtasks = response in ["y", "yes"]
+                    mark_subtasks = response in ["y", "yes"]
 
             if mark_subtasks:
                 # Mark all subtasks as completed

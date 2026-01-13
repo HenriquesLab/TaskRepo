@@ -37,6 +37,12 @@ def _display_config(config):
     cluster_status = "enabled" if config.cluster_due_dates else "disabled"
     click.echo(f"  Due date clustering: {cluster_status}")
     click.echo(f"  TUI view mode: {config.tui_view_mode}")
+    remember_status = "enabled" if config.remember_tui_state else "disabled"
+    click.echo(f"  Remember TUI state: {remember_status}")
+    tree_view_status = "enabled" if config.tui_tree_view else "disabled"
+    click.echo(f"  TUI tree view default: {tree_view_status}")
+    last_item = config.tui_last_view_item or "(none)"
+    click.echo(f"  TUI last view item: {last_item}")
     click.secho("-" * 50, fg="green")
 
 
