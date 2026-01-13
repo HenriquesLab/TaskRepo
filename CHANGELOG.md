@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.17] - 2026-01-13
+
+### Added
+
+- **TUI State Persistence**: Remember TUI view mode and selection across sessions
+  - New config option `remember_tui_state` (default: true)
+  - Persists tree view state (`tui_tree_view`)
+  - Remembers last selected view item (`tui_last_view_item`)
+  - Automatically restores state when reopening TUI
+
+- **New Task Management Commands**:
+  - `tsk add-link`: Add URLs to task links field
+  - `tsk append`: Append text to task descriptions
+  - `tsk update`: Update multiple task fields atomically
+
+- **Archive Command Improvements**:
+  - New `--all-completed` flag to archive all completed tasks at once
+  - Shows count of tasks to be archived before confirmation
+
+- **Sync Command Non-Interactive Mode**:
+  - New `--non-interactive` flag for automation and scripting
+  - Auto-confirms all prompts with safe defaults
+  - Enables seamless integration with CI/CD pipelines
+
+### Changed
+
+- **Improved Error Handling**: Better resilience for corrupted task files
+  - Added `silent_errors` parameter to `list_tasks()` and `list_archived_tasks()`
+  - Detects and reports git conflict markers specifically
+  - Groups error messages with helpful resolution steps
+  - Suggests running `git status` when conflicts detected
+
+- **Code Quality**: Fixed all linting and formatting issues
+  - Removed unused imports across multiple files
+  - Fixed whitespace and f-string issues
+  - Moved imports to top of files per PEP 8
+  - Fixed type error in update command (datetime vs string)
+
+### Dependencies
+
+- Bump actions/checkout from v5 to v6
+- Bump actions/cache from v4 to v5
+- Bump actions/upload-artifact from v5 to v6
+- Update pytest requirement from <9.0 to <10.0
+
 ## [0.10.16] - 2025-12-19
 
 ### Changed
