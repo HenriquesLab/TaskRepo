@@ -787,7 +787,7 @@ class TaskTUI:
             event.app.exit(result="priority-low")
 
         # View operations (only when not filtering)
-        @kb.add("t", filter=Condition(lambda: not self.filter_active))
+        @kb.add("r", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Toggle tree view."""
             self.tree_view = not self.tree_view

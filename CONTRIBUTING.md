@@ -29,6 +29,55 @@ uv sync --extra dev
 uv run pytest tests/ -v
 ```
 
+## Updating the Homebrew Formula
+
+When releasing a new version of TaskRepo, update the Homebrew formula:
+
+### 1. Get Package Information from PyPI
+
+```bash
+VERSION=0.10.17  # Replace with new version
+curl "https://pypi.org/pypi/taskrepo/$VERSION/json" | \
+  jq -r '.urls[] | select(.packagetype=="sdist") | "URL: \(.url)\nSHA256: \(.digests.sha256)"'
+```
+
+### 2. Update the Formula
+
+Edit `homebrew-formulas/Formula/taskrepo.rb`:
+- Update the `url` line with the new URL
+- Update the `sha256` line with the new hash
+
+### 3. Test Locally
+
+```bash
+cd ~/GitHub/homebrew-formulas
+brew install --build-from-source ./Formula/taskrepo.rb
+brew test taskrepo
+tsk --version  # Verify correct version
+brew uninstall taskrepo
+```
+
+### 4. Audit the Formula
+
+```bash
+brew audit --strict --online taskrepo
+```
+
+### 5. Commit and Push
+
+```bash
+git add Formula/taskrepo.rb
+git commit -m "taskrepo: update to version $VERSION"
+git push
+```
+
+### 6. Verify Installation
+
+```bash
+brew install henriqueslab/formulas/taskrepo
+tsk --version
+```
+
 ## Development Workflow
 
 ### Making Changes

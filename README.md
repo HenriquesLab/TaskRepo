@@ -37,11 +37,7 @@ Browse and manage tasks with the interactive Terminal User Interface featuring c
 ### macOS (Homebrew) - Recommended for Mac users
 
 ```bash
-# Tap the HenriquesLab formulas repository
-brew tap henriqueslab/formulas
-
-# Install TaskRepo
-brew install taskrepo
+brew install henriqueslab/formulas/taskrepo
 ```
 
 **Updating:**
@@ -50,7 +46,7 @@ brew update
 brew upgrade taskrepo
 ```
 
-Benefits: Simple installation, automatic dependency management (Python 3.12, git, gh), easy updates
+Benefits: Simple one-command installation, automatic dependency management (Python 3.13, git, gh), easy updates
 
 ### Using pipx (recommended for Linux/Windows)
 
