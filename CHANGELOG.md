@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.18] - 2026-02-02
+
+### Documentation
+
+- **Homebrew Formula Workflow Alignment**: Aligned CONTRIBUTING.md with automation strategy (#12)
+  - Prioritized automated `just release taskrepo` workflow as recommended method
+  - Fixed hardcoded version placeholder (`VERSION=0.10.17` → `VERSION=X.Y.Z`)
+  - Updated path references to use relative paths (`../homebrew-formulas`)
+  - Added automation context with `just` utility commands reference
+  - Consistent with rxiv-maker and folder2md4llms ecosystem patterns
+
+- **CLAUDE.md Creation**: Added comprehensive AI assistant guidelines
+  - Homebrew formula automation workflow documentation
+  - Development environment setup instructions
+  - Release process and testing strategy
+  - Code style and security considerations
+  - Enables better automated contributions and consistency
+
+- **.gitignore Update**: Allow CLAUDE.md to be tracked
+  - Added `!CLAUDE.md` exception to markdown ignore pattern
+  - Maintains restrictive markdown file policy with explicit allowlist
+
 ## [0.10.17] - 2026-01-13
 
 ### Added
