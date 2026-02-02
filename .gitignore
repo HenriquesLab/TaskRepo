@@ -60,6 +60,7 @@ dmypy.json
 !README.md
 !CHANGELOG.md
 !CONTRIBUTING.md
+!CLAUDE.md
 
 # Sensitive data patterns
 *.pem

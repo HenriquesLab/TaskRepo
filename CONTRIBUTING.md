@@ -31,39 +31,63 @@ uv run pytest tests/ -v
 
 ## Updating the Homebrew Formula
 
-When releasing a new version of TaskRepo, update the Homebrew formula:
+When releasing a new version, the Homebrew formula must be updated in the [`homebrew-formulas` repository](https://github.com/HenriquesLab/homebrew-formulas).
 
-### 1. Get Package Information from PyPI
+### Automated Workflow (Recommended)
 
 ```bash
-VERSION=0.10.17  # Replace with new version
+cd ../homebrew-formulas
+just release taskrepo  # Full workflow: update → test → commit → push
+```
+
+This automatically:
+- Fetches the latest version from PyPI
+- Downloads and calculates SHA256 checksum
+- Updates the formula file
+- Tests the installation
+- Commits with standardized message
+- Pushes to remote
+
+### Manual Workflow (Alternative)
+
+If `just` is not available, you can update the formula manually:
+
+#### 1. Get Package Information from PyPI
+
+```bash
+VERSION=X.Y.Z  # Replace with new version
 curl "https://pypi.org/pypi/taskrepo/$VERSION/json" | \
   jq -r '.urls[] | select(.packagetype=="sdist") | "URL: \(.url)\nSHA256: \(.digests.sha256)"'
 ```
 
-### 2. Update the Formula
+#### 2. Update the Formula
 
-Edit `homebrew-formulas/Formula/taskrepo.rb`:
+Navigate to the homebrew-formulas repository and edit the formula:
+
+```bash
+cd ../homebrew-formulas  # Use relative path from TaskRepo directory
+```
+
+Edit `Formula/taskrepo.rb`:
 - Update the `url` line with the new URL
 - Update the `sha256` line with the new hash
 
-### 3. Test Locally
+#### 3. Test Locally
 
 ```bash
-cd ~/GitHub/homebrew-formulas
 brew install --build-from-source ./Formula/taskrepo.rb
 brew test taskrepo
 tsk --version  # Verify correct version
 brew uninstall taskrepo
 ```
 
-### 4. Audit the Formula
+#### 4. Audit the Formula
 
 ```bash
 brew audit --strict --online taskrepo
 ```
 
-### 5. Commit and Push
+#### 5. Commit and Push
 
 ```bash
 git add Formula/taskrepo.rb
@@ -71,12 +95,14 @@ git commit -m "taskrepo: update to version $VERSION"
 git push
 ```
 
-### 6. Verify Installation
+#### 6. Verify Installation
 
 ```bash
 brew install henriqueslab/formulas/taskrepo
 tsk --version
 ```
+
+**Note:** The automated workflow using `just` is preferred for consistency and efficiency. See the [homebrew-formulas repository](https://github.com/HenriquesLab/homebrew-formulas) for additional utility commands like `just list`, `just check-updates`, and `just sha256`
 
 ## Development Workflow
 
