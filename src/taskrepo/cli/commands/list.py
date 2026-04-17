@@ -1,7 +1,6 @@
 """List command for displaying tasks."""
 
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -10,18 +9,36 @@ from rich.console import Console
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all_repositories
-from taskrepo.utils.id_mapping import get_display_id_from_uuid
+from taskrepo.utils.id_mapping import get_cache_path
 
 
-def _task_to_dict(task) -> dict:
+def _load_uuid_to_display_id() -> dict[str, int]:
+    """Load the ID cache once and return a {uuid: display_id} map.
+
+    Returns an empty dict if the cache file is missing or malformed. Callers
+    that care about missing cache state should check the returned dict length.
+    """
+    cache_path = get_cache_path()
+    if not cache_path.exists():
+        return {}
+    try:
+        with open(cache_path) as f:
+            cache = json.load(f)
+        return {entry["uuid"]: int(display_id) for display_id, entry in cache.items()}
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return {}
+
+
+def _task_to_dict(task, uuid_to_id: dict[str, int]) -> dict:
     """Serialize a Task to a JSON-compatible dict.
 
-    The ``id`` field is the short numeric display ID (same as the table view);
-    ``uuid`` is the stable underlying identifier. All dates are ISO 8601.
+    ``id`` is the short numeric display ID matching the table view, or ``null``
+    if the task isn't in the ID cache (e.g. freshly added or on a fresh clone
+    before ``tsk list`` has populated the cache). ``uuid`` is always the
+    stable underlying identifier. All dates are ISO 8601.
     """
-    display_id = get_display_id_from_uuid(task.id)
     return {
-        "id": display_id if display_id is not None else None,
+        "id": uuid_to_id.get(task.id),
         "uuid": task.id,
         "title": task.title,
         "status": task.status,
@@ -131,9 +148,18 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, js
         save_id_cache(sorted_tasks, rebalance=True)
 
     if json_output:
-        payload = [_task_to_dict(t) for t in sorted_tasks]
-        json.dump(payload, sys.stdout, indent=2, default=str)
-        sys.stdout.write("\n")
+        # Load the UUID→display_id map once to avoid O(n²) disk reads.
+        uuid_to_id = _load_uuid_to_display_id()
+        # Emit a one-time hint if the cache is empty on a filtered view —
+        # every JSON id will be null until `tsk list` is run unfiltered.
+        if not uuid_to_id and has_filters:
+            click.echo(
+                "Note: ID cache is empty; `id` fields will be null. "
+                "Run `tsk list` without filters once to populate it.",
+                err=True,
+            )
+        payload = [_task_to_dict(t, uuid_to_id) for t in sorted_tasks]
+        click.echo(json.dumps(payload, indent=2, default=str))
         return
 
     # Display sorted tasks
