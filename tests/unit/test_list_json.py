@@ -6,7 +6,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from taskrepo.cli.commands.list import _load_uuid_to_display_id, _task_to_dict
+from click.testing import CliRunner
+
+from taskrepo.cli.commands.list import _load_uuid_to_display_id, _task_to_dict, list_tasks
+from taskrepo.core.config import Config
+from taskrepo.core.repository import Repository
 from taskrepo.core.task import Task
 
 
@@ -69,8 +73,8 @@ def test_task_to_dict_handles_none_dates():
     task = _make_task(due=None)
     result = _task_to_dict(task, uuid_to_id={})
     assert result["due"] is None
-    # created/modified are set by Task.__post_init__ defaults, so they are
-    # always serializable strings — just assert they round-trip through JSON.
+    # `created`/`modified` are populated for these helper-built tasks, and
+    # `_task_to_dict()` should serialize them to JSON-safe string values.
     json.dumps(result)
 
 
@@ -125,3 +129,109 @@ def test_load_uuid_to_display_id_is_single_read_for_n_tasks():
     assert len(payload) == 100
     assert payload[0]["id"] == 0
     assert payload[99]["id"] == 99
+
+
+def test_load_uuid_to_display_id_rejects_non_dict_top_level():
+    """Cache whose top level is not a dict (e.g. a list) should not raise."""
+    with TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "id_cache.json"
+        cache_path.write_text(json.dumps(["not", "a", "dict"]))
+        with patch("taskrepo.cli.commands.list.get_cache_path", return_value=cache_path):
+            assert _load_uuid_to_display_id() == {}
+
+
+# ---------------------------------------------------------------------------
+# CLI integration tests — these exercise the full `list_tasks` Click command
+# via CliRunner, which is the exact path that was broken before (json.dump
+# to sys.stdout bypassed Click's output capture). Keep these around as a
+# regression guard.
+# ---------------------------------------------------------------------------
+
+
+def _build_cli_fixture(tmpdir: str) -> Config:
+    """Create a parent dir with one task repo and one task, plus a config."""
+    parent = Path(tmpdir) / "parent"
+    parent.mkdir()
+    repo_path = parent / "tasks-test"
+    repo_path.mkdir()
+    repo = Repository(repo_path)
+    repo.save_task(
+        Task(
+            id="11111111-1111-1111-1111-111111111111",
+            title="CLI fixture task",
+            status="pending",
+            priority="H",
+            project="proj",
+            tags=["t1"],
+        )
+    )
+
+    config_path = Path(tmpdir) / "config.yaml"
+    config = Config(config_path=config_path)
+    config._data["parent_dir"] = str(parent)
+    config.save()
+    return config
+
+
+def test_json_output_is_valid_json_via_cli_runner():
+    """Regression guard for the `json.dump(..., sys.stdout)` bypass bug.
+
+    Before v0.11.1, JSON output was written directly to sys.stdout,
+    which bypassed Click's output capture and could break CliRunner tests.
+    This test ensures `CliRunner` sees the JSON on stdout.
+    """
+    with TemporaryDirectory() as tmpdir:
+        config = _build_cli_fixture(tmpdir)
+        runner = CliRunner()
+        result = runner.invoke(list_tasks, ["--json"], obj={"config": config})
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["title"] == "CLI fixture task"
+        assert data[0]["uuid"] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_json_output_empty_result_is_empty_array():
+    """No tasks match → stdout must be the literal JSON array `[]`."""
+    with TemporaryDirectory() as tmpdir:
+        parent = Path(tmpdir) / "parent"
+        parent.mkdir()
+        (parent / "tasks-empty").mkdir()
+        Repository(parent / "tasks-empty")
+        config_path = Path(tmpdir) / "config.yaml"
+        config = Config(config_path=config_path)
+        config._data["parent_dir"] = str(parent)
+        config.save()
+
+        runner = CliRunner()
+        result = runner.invoke(list_tasks, ["--json", "--priority", "L"], obj={"config": config})
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+
+def test_json_output_stderr_hint_on_filtered_empty_cache():
+    """When the ID cache is empty and filters are applied, a stderr hint fires."""
+    with TemporaryDirectory() as tmpdir:
+        config = _build_cli_fixture(tmpdir)
+        # Point the ID cache at a guaranteed-empty path for this test.
+        empty_cache = Path(tmpdir) / "nonexistent_cache.json"
+        runner = CliRunner()
+        with patch("taskrepo.cli.commands.list.get_cache_path", return_value=empty_cache):
+            result = runner.invoke(
+                list_tasks,
+                ["--json", "--priority", "H"],
+                obj={"config": config},
+            )
+
+        assert result.exit_code == 0
+        # CliRunner merges stderr into output by default.
+        assert "ID cache is empty" in result.output
+        # Strip the stderr hint line(s) from the captured output to isolate
+        # the JSON body, then verify it parses.
+        json_start = result.output.index("[")
+        data = json.loads(result.output[json_start:])
+        assert isinstance(data, list)
+        assert data[0]["id"] is None  # cache empty → id is null

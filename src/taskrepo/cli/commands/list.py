@@ -15,8 +15,10 @@ from taskrepo.utils.id_mapping import get_cache_path
 def _load_uuid_to_display_id() -> dict[str, int]:
     """Load the ID cache once and return a {uuid: display_id} map.
 
-    Returns an empty dict if the cache file is missing or malformed. Callers
-    that care about missing cache state should check the returned dict length.
+    Returns an empty dict if the cache file is missing, unreadable, or
+    structurally unexpected (e.g. top-level non-object, entries missing
+    ``uuid``). Callers that care about missing cache state should check the
+    returned dict length.
     """
     cache_path = get_cache_path()
     if not cache_path.exists():
@@ -24,8 +26,14 @@ def _load_uuid_to_display_id() -> dict[str, int]:
     try:
         with open(cache_path) as f:
             cache = json.load(f)
-        return {entry["uuid"]: int(display_id) for display_id, entry in cache.items()}
-    except (json.JSONDecodeError, KeyError, ValueError):
+        if not isinstance(cache, dict):
+            return {}
+        return {
+            entry["uuid"]: int(display_id)
+            for display_id, entry in cache.items()
+            if isinstance(entry, dict) and "uuid" in entry
+        }
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
         return {}
 
 
@@ -149,6 +157,8 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, js
 
     if json_output:
         # Load the UUID→display_id map once to avoid O(n²) disk reads.
+        # On unfiltered runs, save_id_cache() above has already populated
+        # the cache, so uuid_to_id will not be empty below.
         uuid_to_id = _load_uuid_to_display_id()
         # Emit a one-time hint if the cache is empty on a filtered view —
         # every JSON id will be null until `tsk list` is run unfiltered.

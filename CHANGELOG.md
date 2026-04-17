@@ -24,8 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Unit tests for `--json` output: field coverage, missing-cache → `null id`,
-  None-date handling, JSON serializability, cache loading (missing/valid/
-  malformed), and a regression guard that the cache is loaded only once.
+  None-date handling, JSON serializability, cache loading (missing / valid /
+  malformed / non-dict top level), and a regression guard that the cache is
+  loaded only once per invocation.
+- CLI integration tests via `CliRunner` that invoke `list_tasks --json` end
+  to end, guarding the exact regression path fixed in this release
+  (`json.dump` → stdout bypass) and the stderr-hint behavior on filtered
+  runs with an empty ID cache.
+
+### Fixed
+
+- `_load_uuid_to_display_id()` now tolerates cache files whose top-level
+  value is not a dict, entries missing a `uuid` key, and `OSError`/
+  `TypeError` during parsing — in all these cases it returns an empty map
+  rather than propagating the exception.
 
 ## [0.11.0] - 2026-04-17
 
