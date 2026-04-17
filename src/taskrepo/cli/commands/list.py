@@ -1,5 +1,7 @@
 """List command for displaying tasks."""
 
+import json
+import sys
 from pathlib import Path
 
 import click
@@ -8,6 +10,34 @@ from rich.console import Console
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all_repositories
+from taskrepo.utils.id_mapping import get_display_id_from_uuid
+
+
+def _task_to_dict(task) -> dict:
+    """Serialize a Task to a JSON-compatible dict.
+
+    The ``id`` field is the short numeric display ID (same as the table view);
+    ``uuid`` is the stable underlying identifier. All dates are ISO 8601.
+    """
+    display_id = get_display_id_from_uuid(task.id)
+    return {
+        "id": display_id if display_id is not None else None,
+        "uuid": task.id,
+        "title": task.title,
+        "status": task.status,
+        "priority": task.priority,
+        "repo": task.repo,
+        "project": task.project,
+        "assignees": list(task.assignees),
+        "tags": list(task.tags),
+        "links": list(task.links),
+        "due": task.due.isoformat() if task.due else None,
+        "created": task.created.isoformat() if task.created else None,
+        "modified": task.modified.isoformat() if task.modified else None,
+        "depends": list(task.depends),
+        "parent": task.parent,
+        "description": task.description,
+    }
 
 
 @click.command(name="list")
@@ -18,20 +48,23 @@ from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all
 @click.option("--assignee", "-a", help="Filter by assignee")
 @click.option("--tag", "-t", help="Filter by tag")
 @click.option("--archived", is_flag=True, help="Show archived tasks")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON (machine-readable, no truncation)")
 @click.pass_context
-def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
+def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, json_output):
     """List tasks with optional filters.
 
     By default, shows all non-archived tasks (including completed).
     Use --archived to show archived tasks instead.
+    Use --json for machine-readable output suitable for scripting or LLMs.
     """
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
-    # Check for unresolved merge conflicts and warn user
+    # Check for unresolved merge conflicts and warn user.
+    # In JSON mode, emit the warning to stderr so stdout stays valid JSON.
     conflicts = scan_all_repositories(Path(config.parent_dir).expanduser())
     if conflicts:
-        console = Console()
+        console = Console(stderr=True) if json_output else Console()
         display_conflict_warning(conflicts, console)
 
     # Get tasks (including or excluding archived based on flag)
@@ -80,7 +113,10 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
 
     # Display results
     if not tasks:
-        click.echo("No tasks found.")
+        if json_output:
+            click.echo("[]")
+        else:
+            click.echo("No tasks found.")
         return
 
     # Sort tasks before display (always sort, regardless of filters)
@@ -89,9 +125,16 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived):
 
     sorted_tasks = sort_tasks(tasks, config, all_tasks=all_tasks)
 
-    # Only rebalance IDs for unfiltered views (like sync does)
+    # Only rebalance IDs for unfiltered views (like sync does).
+    # Do this before serializing so JSON short IDs match the table view.
     if not has_filters:
         save_id_cache(sorted_tasks, rebalance=True)
+
+    if json_output:
+        payload = [_task_to_dict(t) for t in sorted_tasks]
+        json.dump(payload, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+        return
 
     # Display sorted tasks
     display_tasks_table(sorted_tasks, config, save_cache=False)
