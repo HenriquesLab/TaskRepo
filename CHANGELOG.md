@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-17
+
+### Added
+
+- **JSON output for `tsk list`**: New `--json` flag emits tasks as a JSON array on
+  stdout, making the command scriptable and LLM-friendly without the truncation
+  imposed by the Rich table view.
+  - Each task object includes `id` (short numeric display ID, matching the table
+    view), `uuid` (stable underlying identifier), `title`, `status`, `priority`,
+    `repo`, `project`, `assignees`, `tags`, `links`, `due`, `created`, `modified`,
+    `depends`, `parent`, and `description`.
+  - All dates are ISO 8601.
+  - Composes with every existing filter (`--status`, `--priority`, `--repo`,
+    `--project`, `--assignee`, `--tag`, `--archived`).
+  - Empty result sets return `[]`.
+  - Merge-conflict warnings redirected to stderr in JSON mode so stdout stays
+    valid JSON.
+  - Example: `tsk list --json -s pending | jq '.[] | select(.priority=="H")'`
+
 ## [0.10.18] - 2026-02-02
 
 ### Documentation
