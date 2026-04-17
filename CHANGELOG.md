@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-04-17
+
+### Changed
+
+- **`tsk list --json` performance and correctness** (addresses PR #16 review):
+  - Load the ID cache once per invocation instead of re-reading it per task.
+    Previously `get_display_id_from_uuid` was called inside the serialization
+    loop, producing N file reads and O(N²) linear scans.
+  - Switched JSON output from direct `sys.stdout.write` to `click.echo` so
+    Click's output layer (and test capture) sees the output.
+  - Emit a one-time stderr hint when the ID cache is empty on a filtered view,
+    so users aren't surprised by `"id": null` values.
+  - Removed a redundant conditional on the `id` field.
+
+### Added
+
+- Unit tests for `--json` output: field coverage, missing-cache → `null id`,
+  None-date handling, JSON serializability, cache loading (missing / valid /
+  malformed / non-dict top level), and a regression guard that the cache is
+  loaded only once per invocation.
+- CLI integration tests via `CliRunner` that invoke `list_tasks --json` end
+  to end, guarding the exact regression path fixed in this release
+  (`json.dump` → stdout bypass) and the stderr-hint behavior on filtered
+  runs with an empty ID cache.
+
+### Fixed
+
+- `_load_uuid_to_display_id()` now tolerates cache files whose top-level
+  value is not a dict, entries missing a `uuid` key, and `OSError`/
+  `TypeError` during parsing — in all these cases it returns an empty map
+  rather than propagating the exception.
+
 ## [0.11.0] - 2026-04-17
 
 ### Added
