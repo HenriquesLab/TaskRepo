@@ -36,6 +36,8 @@ def _display_config(config):
     click.echo(f"  Sort by: {sort_by}")
     cluster_status = "enabled" if config.cluster_due_dates else "disabled"
     click.echo(f"  Due date clustering: {cluster_status}")
+    stable_ids_status = "enabled" if config.stable_ids else "disabled"
+    click.echo(f"  Stable display IDs: {stable_ids_status}")
     click.echo(f"  TUI view mode: {config.tui_view_mode}")
     remember_status = "enabled" if config.remember_tui_state else "disabled"
     click.echo(f"  Remember TUI state: {remember_status}")
@@ -79,13 +81,14 @@ def config_cmd(ctx, show):
         click.echo("  9. Configure task sorting")
         click.echo(" 10. Toggle due date clustering")
         click.echo(" 11. Set TUI view mode")
-        click.echo("\n 12. Reset to defaults")
-        click.echo(" 13. Exit")
+        click.echo(" 12. Toggle stable display IDs")
+        click.echo("\n 13. Reset to defaults")
+        click.echo(" 14. Exit")
 
         try:
             choice = prompt(
-                "\nEnter choice (1-13 or Ctrl+C to exit): ",
-                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]),
+                "\nEnter choice (1-14 or Ctrl+C to exit): ",
+                completer=WordCompleter(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]),
             )
         except (KeyboardInterrupt, EOFError):
             click.echo()
@@ -363,6 +366,34 @@ def config_cmd(ctx, show):
                 click.echo("\nCancelled.")
 
         elif choice == "12":
+            # Toggle stable display IDs
+            is_enabled = config.stable_ids
+            status_text = "ON" if is_enabled else "OFF"
+            click.secho(f"\nStable display IDs is currently: {status_text}", bold=True)
+
+            click.echo("\nWhen ON: display IDs are preserved across `tsk list` and `tsk sync`.")
+            click.echo("New tasks fill gaps left by completed/deleted tasks.")
+            click.echo("When OFF: IDs rebalance to sequential order on every unfiltered list/sync.")
+
+            try:
+                if is_enabled:
+                    should_change = confirm("\nTurn OFF stable IDs?")
+                    if should_change:
+                        config.stable_ids = False
+                        click.secho("✓ Stable IDs turned OFF", fg="green")
+                    else:
+                        click.echo("No changes made.")
+                else:
+                    should_change = confirm("\nTurn ON stable IDs?")
+                    if should_change:
+                        config.stable_ids = True
+                        click.secho("✓ Stable IDs turned ON", fg="green")
+                    else:
+                        click.echo("No changes made.")
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\nCancelled.")
+
+        elif choice == "13":
             # Reset to defaults
             click.echo("\n⚠️  This will reset ALL configuration to defaults.")
             try:
@@ -375,11 +406,11 @@ def config_cmd(ctx, show):
             except (KeyboardInterrupt, EOFError):
                 click.echo("\nCancelled.")
 
-        elif choice == "13":
+        elif choice == "14":
             # Exit
             click.echo()
             click.secho("✓ Configuration saved. Exiting.", fg="green", bold=True)
             break
 
         else:
-            click.secho("✗ Invalid choice. Please enter a number from 1-13.", fg="red")
+            click.secho("✗ Invalid choice. Please enter a number from 1-14.", fg="red")

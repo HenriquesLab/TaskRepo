@@ -150,10 +150,10 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, js
 
     sorted_tasks = sort_tasks(tasks, config, all_tasks=all_tasks)
 
-    # Only rebalance IDs for unfiltered views (like sync does).
-    # Do this before serializing so JSON short IDs match the table view.
+    # Refresh cache on unfiltered views. Honor stable_ids config:
+    # rebalance=False preserves existing display IDs and fills gaps for new tasks.
     if not has_filters:
-        save_id_cache(sorted_tasks, rebalance=True)
+        save_id_cache(sorted_tasks, rebalance=not config.stable_ids)
 
     if json_output:
         # Load the UUID→display_id map once to avoid O(n²) disk reads.

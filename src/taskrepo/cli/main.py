@@ -524,6 +524,8 @@ def config_show(ctx):
     click.echo(f"  Sort by: {sort_by}")
     cluster_status = "enabled" if config.cluster_due_dates else "disabled"
     click.echo(f"  Due date clustering: {cluster_status}")
+    stable_ids_status = "enabled" if config.stable_ids else "disabled"
+    click.echo(f"  Stable display IDs: {stable_ids_status}")
 
 
 @cli.command()

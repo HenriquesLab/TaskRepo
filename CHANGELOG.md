@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-04-20
+
+### Added
+
+- **Stable display IDs** (`stable_ids` config option, default `True`): preserve
+  display IDs across `tsk list` and `tsk sync`. New tasks fill gaps left by
+  completed or deleted tasks instead of triggering a full sequential rebalance.
+  This prevents the "task #20 is now a different task" confusion that could
+  occur after completing other tasks.
+  - Opt out via `tsk config` (menu option 12) or by setting
+    `stable_ids: false` in `~/.TaskRepo/config`.
+  - `tsk sync` output reflects the chosen mode ("IDs preserved" vs
+    "IDs rebalanced to sequential order").
+  - `tsk config --show` and `tsk config-show` display the current setting.
+
 ## [0.11.1] - 2026-04-17
 
 ### Changed

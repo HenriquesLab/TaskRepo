@@ -986,9 +986,13 @@ def sync(ctx, repo, push, auto_merge, strategy, verbose, non_interactive):
         from taskrepo.utils.sorting import sort_tasks
 
         sorted_tasks = sort_tasks(all_tasks, config, all_tasks=all_tasks)
-        save_id_cache(sorted_tasks, rebalance=True)
+        rebalance_ids = not config.stable_ids
+        save_id_cache(sorted_tasks, rebalance=rebalance_ids)
 
-        console.print("[cyan]IDs rebalanced to sequential order[/cyan]")
+        if rebalance_ids:
+            console.print("[cyan]IDs rebalanced to sequential order[/cyan]")
+        else:
+            console.print("[cyan]IDs preserved (stable_ids enabled)[/cyan]")
         console.print()
 
         # If specific repo was synced, only show tasks for that repo

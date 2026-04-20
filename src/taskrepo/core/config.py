@@ -25,6 +25,7 @@ class Config:
         "default_editor": None,
         "sort_by": ["due", "priority"],
         "cluster_due_dates": False,
+        "stable_ids": True,  # Preserve display IDs across list/sync; fill gaps for new tasks
         "tui_view_mode": "repo",  # Options: "repo", "project", "assignee"
         "remember_tui_state": True,  # Remember TUI view state (view mode, tree view, etc.)
         "tui_tree_view": True,  # Tree view enabled/disabled
@@ -309,6 +310,26 @@ class Config:
             value: True to cluster tasks by countdown buckets (today, this week, etc.)
         """
         self._data["cluster_due_dates"] = bool(value)
+        self.save()
+
+    @property
+    def stable_ids(self) -> bool:
+        """Get stable IDs setting.
+
+        Returns:
+            True if display IDs should be preserved across list/sync (gaps filled for new tasks).
+            False to rebalance IDs to sequential order on unfiltered list/sync.
+        """
+        return self._data.get("stable_ids", True)
+
+    @stable_ids.setter
+    def stable_ids(self, value: bool):
+        """Set stable IDs behavior.
+
+        Args:
+            value: True to preserve existing IDs, False to rebalance on list/sync
+        """
+        self._data["stable_ids"] = bool(value)
         self.save()
 
     @property
