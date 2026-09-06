@@ -51,6 +51,26 @@ def test_task_ready_when_dependency_is_completed():
     assert is_task_blocked(task, lookup) is False
 
 
+def test_unique_eight_character_prefix_resolves_dependency():
+    dep = _make_task("12345678-completed", status="completed")
+    task = _make_task("consumer", status="pending", depends=["12345678"])
+    lookup = build_task_lookup([dep, task])
+
+    assert lookup["12345678"] is dep
+    assert is_task_ready(task, lookup) is True
+
+
+def test_ambiguous_eight_character_prefix_does_not_resolve_dependency():
+    dep1 = _make_task("12345678-first", status="completed")
+    dep2 = _make_task("12345678-second", status="completed")
+    task = _make_task("consumer", status="pending", depends=["12345678"])
+    lookup = build_task_lookup([dep1, dep2, task])
+
+    assert "12345678" not in lookup
+    assert is_task_ready(task, lookup) is False
+    assert is_task_blocked(task, lookup) is True
+
+
 def test_task_blocked_by_missing_dependency():
     task = _make_task("t1", status="pending", depends=["non-existent-id"])
     lookup = build_task_lookup([task])

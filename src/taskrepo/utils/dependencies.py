@@ -12,14 +12,21 @@ def build_task_lookup(tasks: Iterable[Task]) -> dict[str, Task]:
 
     Also indexes by short prefix (8 chars) if unique, to support short UUIDs.
     """
-    lookup: dict[str, Task] = {}
-    for task in tasks:
-        lookup[task.id] = task
+    task_list = list(tasks)
+    lookup: dict[str, Task] = {task.id: task for task in task_list}
+
+    prefix_counts: dict[str, int] = {}
+    for task in task_list:
         if len(task.id) >= 8:
             prefix = task.id[:8]
-            # If prefix collisions exist, do not alias
-            if prefix not in lookup:
+            prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+
+    for task in task_list:
+        if len(task.id) >= 8:
+            prefix = task.id[:8]
+            if prefix_counts[prefix] == 1 and prefix not in lookup:
                 lookup[prefix] = task
+
     return lookup
 
 
@@ -62,6 +69,6 @@ def filter_ready_tasks(tasks: list[Task], all_tasks: list[Task]) -> list[Task]:
 
 
 def filter_blocked_tasks(tasks: list[Task], all_tasks: list[Task]) -> list[Task]:
-    """Filter tasks to only those blocked by pending dependencies."""
+    """Filter tasks blocked by incomplete dependencies (pending, in-progress, or missing)."""
     lookup = build_task_lookup(all_tasks)
     return [t for t in tasks if is_task_ready(t, lookup) is False and is_task_blocked(t, lookup)]
