@@ -1000,7 +1000,7 @@ tsk list --priority H
 tsk list --assignee @yourhandle
 
 # List overdue tasks (use filtering after tsk list)
-tsk list --all
+tsk list
 ```
 
 ### Managing task due dates
