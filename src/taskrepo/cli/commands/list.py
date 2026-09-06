@@ -9,6 +9,7 @@ from rich.console import Console
 from taskrepo.core.repository import RepositoryManager
 from taskrepo.tui.display import display_tasks_table
 from taskrepo.utils.conflict_detection import display_conflict_warning, scan_all_repositories
+from taskrepo.utils.dependencies import filter_blocked_tasks, filter_ready_tasks
 from taskrepo.utils.id_mapping import get_cache_path
 
 
@@ -73,15 +74,25 @@ def _task_to_dict(task, uuid_to_id: dict[str, int]) -> dict:
 @click.option("--assignee", "-a", help="Filter by assignee")
 @click.option("--tag", "-t", help="Filter by tag")
 @click.option("--archived", is_flag=True, help="Show archived tasks")
+@click.option(
+    "--ready",
+    is_flag=True,
+    help="Show only ready tasks (unblocked tasks whose dependencies are completed)",
+)
+@click.option("--blocked", is_flag=True, help="Show only blocked tasks (tasks waiting on incomplete dependencies)")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON (machine-readable, no truncation)")
 @click.pass_context
-def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, json_output):
+def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, ready, blocked, json_output):
     """List tasks with optional filters.
 
     By default, shows all non-archived tasks (including completed).
     Use --archived to show archived tasks instead.
     Use --json for machine-readable output suitable for scripting or LLMs.
     """
+    if ready and blocked:
+        click.secho("Error: --ready and --blocked are mutually exclusive", fg="red", err=True)
+        ctx.exit(1)
+
     config = ctx.obj["config"]
     manager = RepositoryManager(config.parent_dir)
 
@@ -112,7 +123,7 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, js
             tasks = manager.list_all_tasks(include_archived=False)
 
     # Track if any filters are applied
-    has_filters = bool(repo or project or status or priority or assignee or tag or archived)
+    has_filters = bool(repo or project or status or priority or assignee or tag or archived or ready or blocked)
 
     # Keep reference to all tasks for effective due date calculation
     all_tasks = tasks.copy()
@@ -135,6 +146,12 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, js
 
     if tag:
         tasks = [t for t in tasks if tag in t.tags]
+
+    if ready:
+        tasks = filter_ready_tasks(tasks, all_tasks)
+
+    if blocked:
+        tasks = filter_blocked_tasks(tasks, all_tasks)
 
     # Display results
     if not tasks:
