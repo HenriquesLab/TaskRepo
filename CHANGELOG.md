@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-09-06
+
+### Added
+
+- **`tsk list --ready` and `--blocked` filters**:
+  - `--ready`: show only actionable tasks (pending or in-progress) whose dependencies are completed.
+  - `--blocked`: show tasks waiting on incomplete dependencies.
+  - Cross-repository dependency resolution: evaluates prerequisites across all discovered repositories even when output is filtered by `--repo`.
+  - Unique prefix collision resolution: safely resolves short 8-character task IDs without collision risk.
+  - Full support in human-readable table and machine-readable `--json` outputs.
+  - Mutual exclusion validation between `--ready` and `--blocked`.
+
 ## [0.11.2] - 2026-04-20
 
 ### Added
