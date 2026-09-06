@@ -147,11 +147,16 @@ def list_tasks(ctx, repo, project, status, priority, assignee, tag, archived, re
     if tag:
         tasks = [t for t in tasks if tag in t.tags]
 
+    # Dependencies may live in a different repository than the filtered output.
+    # Keep the selected repository's tasks as the result set, but resolve
+    # dependencies against every repository whenever readiness is requested.
+    lookup_reference_tasks = manager.list_all_tasks(include_archived=archived) if ready or blocked else all_tasks
+
     if ready:
-        tasks = filter_ready_tasks(tasks, all_tasks)
+        tasks = filter_ready_tasks(tasks, lookup_reference_tasks)
 
     if blocked:
-        tasks = filter_blocked_tasks(tasks, all_tasks)
+        tasks = filter_blocked_tasks(tasks, lookup_reference_tasks)
 
     # Display results
     if not tasks:
