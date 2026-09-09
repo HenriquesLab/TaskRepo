@@ -87,3 +87,24 @@ def test_tui_status_info_displays_sync_message(tui_instance):
     status_info = tui._build_status_info()
     assert "Copied 1 task link to clipboard" in status_info
     assert "green" in status_info
+
+
+def test_tui_run_finally_suppresses_background_exceptions(tui_instance, monkeypatch):
+    tui, _ = tui_instance
+
+    # Mock app.run_async to return immediately
+    async def mock_run_async():
+        return None
+
+    monkeypatch.setattr(tui.app, "run_async", mock_run_async)
+
+    # Mock background sync to raise an error
+    async def faulty_bg_sync():
+        raise RuntimeError("Simulated background error")
+
+    tui.config.auto_sync_enabled = True
+    monkeypatch.setattr(tui, "_background_sync_loop", faulty_bg_sync)
+
+    # Should exit cleanly without raising the background RuntimeError
+    result = tui.run()
+    assert result is None

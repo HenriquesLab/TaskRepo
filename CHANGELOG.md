@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-09-09
+
+### Fixed
+
+- **TUI Exit and Background Sync Stability**:
+  - Eagerly import `sync_repository_background` at module top-level to prevent deferred import failures.
+  - Catch background task exceptions during `run_with_background_tasks` exit cleanup so pressing `[q]` always exits cleanly.
+  - Guard background sync loop against unexpected runtime exceptions.
+
 ## [0.12.1] - 2026-09-09
 
 ### Fixed

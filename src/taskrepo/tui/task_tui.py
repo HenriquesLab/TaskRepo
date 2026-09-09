@@ -33,6 +33,7 @@ from taskrepo.tui.display import (
     pad_to_width,
     truncate_to_width,
 )
+from taskrepo.utils.async_sync import sync_repository_background
 from taskrepo.utils.clipboard import copy_to_clipboard, format_tasks_for_clipboard
 from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 from taskrepo.utils.sorting import sort_tasks
@@ -343,80 +344,86 @@ class TaskTUI:
             if self._should_skip_sync():
                 continue
 
-            # Start sync
-            self.sync_status = "syncing"
-            self.app.invalidate()
+            try:
+                # Start sync
+                self.sync_status = "syncing"
+                self.app.invalidate()
 
-            # Sync each repository and track results
-            success_count = 0
-            error_count = 0
-            conflict_count = 0
-            repos_synced = []
-            repos_failed = []
-            error_messages = []
+                # Sync each repository and track results
+                success_count = 0
+                error_count = 0
+                conflict_count = 0
+                repos_synced = []
+                repos_failed = []
+                error_messages = []
 
-            for repo in self.repositories:
-                # Skip repos already marked as conflicted
-                if repo.name in self.conflicted_repos:
-                    continue
+                for repo in self.repositories:
+                    # Skip repos already marked as conflicted
+                    if repo.name in self.conflicted_repos:
+                        continue
 
-                success, error_msg, has_conflicts = await self._sync_repository_async(repo)
+                    success, error_msg, has_conflicts = await self._sync_repository_async(repo)
 
-                if success:
-                    success_count += 1
-                    repos_synced.append(repo.name)
-                elif has_conflicts:
-                    conflict_count += 1
-                    self.conflicted_repos.add(repo.name)
-                    repos_failed.append(repo.name)
-                    error_messages.append(f"{repo.name}: {error_msg}")
+                    if success:
+                        success_count += 1
+                        repos_synced.append(repo.name)
+                    elif has_conflicts:
+                        conflict_count += 1
+                        self.conflicted_repos.add(repo.name)
+                        repos_failed.append(repo.name)
+                        error_messages.append(f"{repo.name}: {error_msg}")
+                    else:
+                        error_count += 1
+                        repos_failed.append(repo.name)
+                        error_messages.append(f"{repo.name}: {error_msg}")
+
+                # Record sync to history
+                sync_history = SyncHistory()
+                overall_success = error_count == 0 and conflict_count == 0
+                error_summary = "; ".join(error_messages) if error_messages else None
+
+                sync_history.add_entry(
+                    success=overall_success,
+                    repos_synced=repos_synced,
+                    repos_failed=repos_failed,
+                    error_message=error_summary,
+                )
+
+                # Update sync status and message
+                self.next_sync_time = time.time() + self.config.auto_sync_interval
+
+                if error_count > 0 or conflict_count > 0:
+                    self.sync_status = "error"
+                    # Don't update last_sync_time when there are errors
+                    if conflict_count > 0:
+                        self._set_sync_message(f"⚠ {conflict_count} repo(s) need manual sync")
+                    else:
+                        self._set_sync_message(f"⚠ Sync failed for {error_count} repo(s)")
                 else:
-                    error_count += 1
-                    repos_failed.append(repo.name)
-                    error_messages.append(f"{repo.name}: {error_msg}")
+                    # Only set last_sync_time when sync fully succeeds
+                    self.last_sync_time = time.time()
+                    self.sync_status = "success"
+                    self.has_unsaved_changes = False  # Clear unsaved flag after successful sync
+                    if success_count > 0:
+                        self._set_sync_message(f"✓ Synced {success_count} repo(s)")
 
-            # Record sync to history
-            sync_history = SyncHistory()
-            overall_success = error_count == 0 and conflict_count == 0
-            error_summary = "; ".join(error_messages) if error_messages else None
-
-            sync_history.add_entry(
-                success=overall_success,
-                repos_synced=repos_synced,
-                repos_failed=repos_failed,
-                error_message=error_summary,
-            )
-
-            # Update sync status and message
-            self.next_sync_time = time.time() + self.config.auto_sync_interval
-
-            if error_count > 0 or conflict_count > 0:
-                self.sync_status = "error"
-                # Don't update last_sync_time when there are errors
-                if conflict_count > 0:
-                    self._set_sync_message(f"⚠ {conflict_count} repo(s) need manual sync")
-                else:
-                    self._set_sync_message(f"⚠ Sync failed for {error_count} repo(s)")
-            else:
-                # Only set last_sync_time when sync fully succeeds
-                self.last_sync_time = time.time()
-                self.sync_status = "success"
-                self.has_unsaved_changes = False  # Clear unsaved flag after successful sync
+                # Reload repositories after sync
                 if success_count > 0:
-                    self._set_sync_message(f"✓ Synced {success_count} repo(s)")
+                    manager = RepositoryManager(self.config.parent_dir)
+                    self.repositories = manager.discover_repositories()
+                    self.view_items = self._build_view_items()
 
-            # Reload repositories after sync
-            if success_count > 0:
-                manager = RepositoryManager(self.config.parent_dir)
-                self.repositories = manager.discover_repositories()
-                self.view_items = self._build_view_items()
+                    # Update ID cache
+                    all_tasks = manager.list_all_tasks(include_archived=False)
+                    sorted_tasks = sort_tasks(all_tasks, self.config, all_tasks=all_tasks)
+                    save_id_cache(sorted_tasks)
 
-                # Update ID cache
-                all_tasks = manager.list_all_tasks(include_archived=False)
-                sorted_tasks = sort_tasks(all_tasks, self.config, all_tasks=all_tasks)
-                save_id_cache(sorted_tasks)
-
-            self.app.invalidate()
+                self.app.invalidate()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.sync_status = "error"
+                self.app.invalidate()
 
     async def _sync_repository_async(self, repository) -> tuple[bool, str, bool]:
         """Async wrapper for repository sync.
@@ -427,8 +434,6 @@ class TaskTUI:
         Returns:
             Tuple of (success, error_message, has_conflicts)
         """
-        from taskrepo.utils.async_sync import sync_repository_background
-
         # Run sync in executor to avoid blocking
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -1627,19 +1632,13 @@ class TaskTUI:
                 return await self.app.run_async()
             finally:
                 # Cancel background tasks when exiting
-                if self.auto_reload_task:
-                    self.auto_reload_task.cancel()
-                    try:
-                        await self.auto_reload_task
-                    except asyncio.CancelledError:
-                        pass
-
-                if self.background_sync_task:
-                    self.background_sync_task.cancel()
-                    try:
-                        await self.background_sync_task
-                    except asyncio.CancelledError:
-                        pass
+                for task in (self.auto_reload_task, self.background_sync_task):
+                    if task:
+                        task.cancel()
+                        try:
+                            await task
+                        except (asyncio.CancelledError, Exception):
+                            pass
 
         # Run the async function
         return asyncio.run(run_with_background_tasks())
