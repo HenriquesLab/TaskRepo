@@ -79,3 +79,11 @@ def test_tui_shortcuts_help_text(tui_instance):
     assert "cancel[x]" in shortcuts_text or "[x]cancel" in shortcuts_text
     assert "[c]opy" in shortcuts_text
     assert "[c]ancelled" not in shortcuts_text
+
+
+def test_tui_status_info_displays_sync_message(tui_instance):
+    tui, _ = tui_instance
+    tui._set_sync_message("✓ Copied 1 task link to clipboard")
+    status_info = tui._build_status_info()
+    assert "Copied 1 task link to clipboard" in status_info
+    assert "green" in status_info

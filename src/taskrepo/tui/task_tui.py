@@ -3,6 +3,7 @@
 import asyncio
 import html
 import os
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -451,8 +452,6 @@ class TaskTUI:
         Args:
             message: Message to display
         """
-        import time
-
         self.sync_message = message
         self.sync_message_time = time.time()
 
@@ -484,6 +483,21 @@ class TaskTUI:
 
         if event and hasattr(event, "app") and event.app:
             event.app.invalidate()
+
+        try:
+            loop = asyncio.get_running_loop()
+
+            async def _clear_after_delay():
+                await asyncio.sleep(3.0)
+                if self.sync_message_time and time.time() - self.sync_message_time >= 3.0:
+                    self.sync_message = None
+                    self.sync_message_time = None
+                    if event and hasattr(event, "app") and event.app:
+                        event.app.invalidate()
+
+            loop.create_task(_clear_after_delay())
+        except RuntimeError:
+            pass
 
     def _get_sync_indicator(self) -> str:
         """Get sync status indicator for header.
@@ -561,8 +575,8 @@ class TaskTUI:
         # Build status info to check if we have any
         status_info = self._build_status_info()
 
-        # For narrow terminals, allow shortcuts to wrap
-        allow_multiline = terminal_width < 120
+        # Allow shortcuts to wrap to match _get_status_bar_text
+        allow_multiline = True
         shortcuts = self._get_shortcuts_text(terminal_width, allow_multiline=allow_multiline)
 
         # Count actual newlines in shortcuts text (smart-wrapped lines)
@@ -962,6 +976,20 @@ class TaskTUI:
         from taskrepo.utils.time_format import format_interval, format_time_ago
 
         parts = []
+
+        # Priority 0: Temporary flash message (e.g. copied to clipboard)
+        if self.sync_message and self.sync_message_time:
+            if time.time() - self.sync_message_time < 3.0:
+                msg = html.escape(self.sync_message)
+                if "✓" in self.sync_message or "Copied" in self.sync_message:
+                    parts.append(f"<b><green>{msg}</green></b>")
+                elif "⚠" in self.sync_message:
+                    parts.append(f"<b><yellow>{msg}</yellow></b>")
+                else:
+                    parts.append(f"<b><cyan>{msg}</cyan></b>")
+            else:
+                self.sync_message = None
+                self.sync_message_time = None
 
         # Priority 1: Conflict warnings (highest priority)
         if self.conflicted_repos:

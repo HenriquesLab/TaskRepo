@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-09
+
+### Fixed
+
+- **TUI Clipboard Status Confirmation**:
+  - Render confirmation message (e.g. `✓ Copied 1 task link to clipboard`) in the status bar upon pressing `[c]`.
+  - Auto-clears after 3 seconds via background async timer.
+
 ## [0.12.0] - 2026-09-09
 
 ### Added
