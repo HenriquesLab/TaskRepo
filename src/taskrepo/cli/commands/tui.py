@@ -135,7 +135,8 @@ def tui(ctx, repo, no_sync):
         e - Edit task
         d - Mark as done
         p - Toggle in-progress/pending
-        c - Mark as cancelled
+        x - Mark as cancelled
+        c - Copy task link to clipboard
         H - Set priority to High
         M - Set priority to Medium
         L - Set priority to Low

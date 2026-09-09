@@ -32,6 +32,7 @@ from taskrepo.tui.display import (
     pad_to_width,
     truncate_to_width,
 )
+from taskrepo.utils.clipboard import copy_to_clipboard, format_tasks_for_clipboard
 from taskrepo.utils.id_mapping import get_display_id_from_uuid, save_id_cache
 from taskrepo.utils.sorting import sort_tasks
 
@@ -455,6 +456,35 @@ class TaskTUI:
         self.sync_message = message
         self.sync_message_time = time.time()
 
+    def _copy_selected_to_clipboard(self, event=None):
+        """Copy selected task(s) markdown link to system clipboard."""
+        tasks = self._get_filtered_tasks()
+        if not tasks or self.selected_row < 0 or self.selected_row >= len(tasks):
+            self._set_sync_message("⚠ No task selected")
+            if event and hasattr(event, "app") and event.app:
+                event.app.invalidate()
+            return
+
+        # Check for multi-selection
+        if self.multi_selected:
+            selected_tasks = [t for t in tasks if t.id in self.multi_selected]
+            if not selected_tasks:
+                selected_tasks = [tasks[self.selected_row]]
+        else:
+            selected_tasks = [tasks[self.selected_row]]
+
+        text = format_tasks_for_clipboard(selected_tasks, get_display_id=get_display_id_from_uuid)
+        success = copy_to_clipboard(text)
+        count = len(selected_tasks)
+        if success:
+            task_word = "task link" if count == 1 else "task links"
+            self._set_sync_message(f"✓ Copied {count} {task_word} to clipboard")
+        else:
+            self._set_sync_message("⚠ Failed to copy to clipboard")
+
+        if event and hasattr(event, "app") and event.app:
+            event.app.invalidate()
+
     def _get_sync_indicator(self) -> str:
         """Get sync status indicator for header.
 
@@ -740,10 +770,15 @@ class TaskTUI:
             """Mark task(s) as in-progress."""
             event.app.exit(result="in-progress")
 
-        @kb.add("c", filter=Condition(lambda: not self.filter_active))
+        @kb.add("x", filter=Condition(lambda: not self.filter_active))
         def _(event):
             """Mark task(s) as cancelled."""
             event.app.exit(result="cancelled")
+
+        @kb.add("c", filter=Condition(lambda: not self.filter_active))
+        def _(event):
+            """Copy selected task(s) markdown link to clipboard."""
+            self._copy_selected_to_clipboard(event)
 
         @kb.add("l", filter=Condition(lambda: not self.filter_active))
         def _(event):
@@ -1001,8 +1036,8 @@ class TaskTUI:
         # ==================================================================================
         # ALWAYS use letters FROM WITHIN the word itself (not before it) when possible.
         #
-        # ✅ GOOD:    [c]ancelled    ar[v]hive    de[l]ete    [p]rogress    t[r]ee
-        # ❌ BAD:     [c]cancelled   [v]archive   [l]delete   [p]rogress    [r]tree
+        # ✅ GOOD:    cancel[x]    [c]opy    ar[v]hive    de[l]ete    [p]rogress    t[r]ee
+        # ❌ BAD:     [x]cancelled   [v]archive   [l]delete   [p]rogress    [r]tree
         #
         # Why? It's more intuitive and memorable - users see the letter highlighted
         # within the actual word they're reading. Exceptions only when:
@@ -1020,7 +1055,8 @@ class TaskTUI:
                 "[e]dit",
                 "[d]one",
                 "[p]rogress",
-                "[c]ancelled",
+                "cancel[x]",
+                "[c]opy",
                 "[H][M][L]",
                 "ar[v]hive",
                 "[m]ove",
@@ -1057,11 +1093,11 @@ class TaskTUI:
 
         # Medium width (120-160 cols): Standard shortcuts on one line
         if terminal_width < 160:
-            return "[a]dd [e]dit [d]one [p]rogress [c]ancelled [H][M][L] ar[v]hive [m]ove de[l]ete s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit"
+            return "[a]dd [e]dit [d]one [p]rogress cancel[x] [c]opy [H][M][L] ar[v]hive [m]ove de[l]ete s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit"
 
         # Wide (>=160 cols): Full shortcuts with multi-select hint
         return (
-            "[a]dd [e]dit [d]one [p]rogress [c]ancelled [H][M][L] ar[v]hive [m]ove de[l]ete "
+            "[a]dd [e]dit [d]one [p]rogress cancel[x] [c]opy [H][M][L] ar[v]hive [m]ove de[l]ete "
             "s[u]btask ex[t]end [s]ync [/]filter t[r]ee [q]uit | Multi-select: Space"
         )
 
