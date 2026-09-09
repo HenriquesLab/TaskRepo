@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-09
+
+### Added
+
+- **TUI Clipboard Copy Shortcut `[c]`**:
+  - Press `[c]` to copy the selected task markdown link `[001 - Title](task-UUID)` to the system clipboard in-place without exiting or redrawing the TUI.
+  - Multi-select support: when multiple tasks are selected with Space, copies all selected links newline-separated.
+  - Cross-platform clipboard support using native system tools (`pbcopy` on macOS, `wl-copy`/`xclip`/`xsel` on Linux, `clip` on Windows) with instant status feedback.
+
+### Changed
+
+- **TUI Cancelled Shortcut Reassigned to `[x]`**:
+  - Remapped task cancellation from `[c]` to `[x]` (`cancel[x]`) to make room for `[c]opy`.
+  - Preserved `[l]` for `de[l]ete`.
+
 ## [0.11.3] - 2026-09-06
 
 ### Added
